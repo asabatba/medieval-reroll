@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEDIEVAL REROLL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">MEDIEVAL <b>✠</b> REROLL</div>
+    <div class="controls">
+      <input class="seedbox" id="seedbox" placeholder="record locator" aria-label="Record locator" title="worldseed:region:village:person">
+      <button class="ghost" id="replay" title="Open this exact record">Open record</button>
+      <button class="roll" id="roll">Roll a life</button>
+    </div>
+  </header>
+  <p class="intro">Every soul in this world already exists at a fixed address — <b>world · region · village · person</b> — waiting to be decoded. Roll to open one register at random, then follow the connections: every spouse, sibling, parent, and child is a real entry in the same records, and every path through them agrees. The odds are the historical ones; the ink was dry before you arrived.</p>
+  <main id="out" aria-live="polite"></main>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

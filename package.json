@@ -1,0 +1,15 @@
+{
+  "name": "medieval-reroll",
+  "version": "1.0.0",
+  "description": "A deterministic history engine that resolves a whole medieval village genealogy from a single address, and lets you browse any life in it.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.1.5"
+  }
+}
