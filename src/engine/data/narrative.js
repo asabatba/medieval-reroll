@@ -14,7 +14,7 @@ export const DEATH_DETAIL = {
 export const CAUSE_LABEL = { plague: "Plague", famine: "Famine", war: "War", infancy: "Infancy", childhood: "Childhood disease", childbirth: "Childbirth", disease: "Disease", oldage: "Old age" };
 
 export const FATHER_OCC = {
-  serf: ["held {land} of the lord by servile tenure, owing week-work and boon-work", "ploughed the lord's demesne three days a week as a bound tenant", "held a toft and croft in villeinage, and paid merchet when his daughters married"],
+  serf: ["held {land} of {lord} by servile tenure, owing week-work and boon-work", "ploughed the demesne of {lord} three days a week as a bound tenant", "held a toft and croft in villeinage under {lord}, and paid merchet when his daughters married"],
   freePeasant: ["farmed {land} at money rent as a free tenant", "kept his own plough-team as a yeoman", "held {land} and served his turn in the village offices"],
   artisan: ["worked as the village {craft}, his forge-mark known through the parish", "kept the {craft}'s shop by the church", "was the parish {craft}, and trained his sons to it"],
   merchant: ["traded cloth and small wares to the market towns", "kept a stall at the weekly market and lent money quietly"],

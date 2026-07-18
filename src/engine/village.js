@@ -1,15 +1,38 @@
 // =====================================================================
 // TIER 1 — the envelope. One constraint solve per village address.
+//
+// Migration (§11): a person's origin address is fixed for life at
+// creation — it never changes, and it's what genealogy/parentage decode
+// from. Whether they end their days resident in that same village or
+// somewhere else is a separate fact (`emigrated`/`emigrateTo`), decided
+// once, unilaterally, by their OWN village's own solve — never by the
+// destination reaching back to mutate them. That one-directional design is
+// what keeps this acyclic: a village's solve may read another village's
+// already-resolved envelope (to find real immigrants who named it as their
+// destination), but a village never needs its own future destination to
+// resolve itself, so there is nothing for the dependency graph to cycle on.
+//
+// To keep that dependency bounded no matter how large a villageIdx is,
+// local migration only flows within a small, fixed-size cluster of
+// neighbouring villages (rank.js) — so resolving any one village never
+// triggers more than a handful of neighbour solves, not a chain back to
+// village zero. Long-distance migration (§11) is deliberately looser: it
+// still produces a real, resolvable destination address, but — since the
+// address space is unbounded — the destination doesn't scan the world
+// looking for who might have arrived, so it's narrated on the origin side
+// only, the same way a medieval parish register usually knows a daughter
+// "married out" without knowing much more.
 // =====================================================================
 import { mix, addrHash, makeRng } from "./hash.js";
 import { REGIONS } from "./data/regions.js";
 import { CLASSES, CLASS_INFO } from "./data/classes.js";
-import { rollDeath } from "./mortality.js";
+import { rollDeath, famineAt, warAt } from "./mortality.js";
+import { clusterBase, clusterOffset, LOCAL_CLUSTER, higherRankRegions } from "./rank.js";
 
 const _envelopeCache = new Map();
 
 export function resolveVillage(worldSeed, regionKey, villageIdx) {
-  const key = worldSeed + "/" + regionKey + "/" + villageIdx;
+  const key = `${worldSeed}/${regionKey}/${villageIdx}`;
   if (_envelopeCache.has(key)) return _envelopeCache.get(key);
   const env = solveVillage(worldSeed, regionKey, villageIdx);
   _envelopeCache.set(key, env);
@@ -20,12 +43,13 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
   const region = REGIONS[regionKey];
   const vHash = addrHash(worldSeed, [regionKey, "village", villageIdx]);
   const rng = makeRng(vHash);
+  const origin = { regionKey, villageIdx };
 
   const place = region.places[villageIdx % region.places.length];
   const persons = [];   // id-indexed
   const couples = [];   // {husband, wife, year, children:[]}
 
-  function addPerson(p) { p.id = persons.length; persons.push(p); return p; }
+  function addPerson(p) { p.id = persons.length; if (p.origin === undefined) p.origin = origin; persons.push(p); return p; }
 
   // Founders: G0 couples born 1235–1275, already married. Their pre-history
   // is outside the register ("the register begins in 1290").
@@ -38,7 +62,7 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
     const hb = rng.int(1235, 1272);
     const wb = hb + rng.int(1, 6);
     const H = addPerson({ name: rng.pick(region.maleNames), surname, sex: "M", birth: hb, cls, father: -1, mother: -1, founder: true });
-    const W = addPerson({ name: rng.pick(region.femaleNames), surname: rng.pick(region.surnames), sex: "F", birth: wb, cls, father: -1, mother: -1, founder: true, incomer: true });
+    const W = addPerson({ name: rng.pick(region.femaleNames), surname: rng.pick(region.surnames), sex: "F", birth: wb, cls, father: -1, mother: -1, founder: true, incomer: true, origin: null });
     H.death = rollDeath(makeRng(mix(vHash, 7001 + H.id)), hb, "M", wealth, region);
     W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", wealth, region);
     // founders are guaranteed to reach marriage (they existed to found the line)
@@ -55,6 +79,32 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
     H.marriageYear = year; W.marriageYear = year;
     couples.push(c);
     return c;
+  }
+
+  // Real immigrant lookup for exogamous marriages: reads (never mutates)
+  // already-resolved lower-rank cluster-mates' envelopes for a native woman
+  // who named THIS village as her emigration destination. Bounded to the
+  // local cluster, so this can only ever trigger up to LOCAL_CLUSTER-1
+  // neighbour solves, never an unbounded chain.
+  const immigrantTaken = new Set();
+  function pullImmigrantBride(wantYear, ageLo, ageHi) {
+    const base = clusterBase(villageIdx);
+    for (let srcIdx = base; srcIdx < villageIdx; srcIdx++) {
+      if (srcIdx < 0) continue;
+      const srcEnv = resolveVillage(worldSeed, regionKey, srcIdx); // strictly lower rank: safe, terminates
+      for (const cand of srcEnv.persons) {
+        if (cand.sex !== "F" || !cand.emigrated || !cand.emigrateTo) continue;
+        if (cand.emigrateTo.regionKey !== regionKey || cand.emigrateTo.villageIdx !== villageIdx) continue;
+        const key = `${srcIdx}:${cand.id}`;
+        if (immigrantTaken.has(key)) continue;
+        const ageAt = wantYear - cand.birth;
+        if (ageAt < ageLo || ageAt > ageHi) continue;
+        if (cand.death.year <= wantYear) continue;
+        immigrantTaken.add(key);
+        return { srcIdx, cand };
+      }
+    }
+    return null;
   }
 
   // Generate children for every couple (in couple-creation order — this is a
@@ -98,7 +148,7 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
   while (guard++ < 20) {
   const eligible = persons.filter(p => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
   if (!eligible.length) break;
-  eligible.forEach(p => processed.add(p.id));
+  eligible.forEach(p => { processed.add(p.id); });
   eligible.sort((a, b) => a.birth - b.birth || a.id - b.id);
   const men = eligible.filter(p => p.sex === "M");
   const women = persons.filter(p => p.sex === "F" && !p.founder && p.death.age >= 16 && p.spouse == null && !p.marriedOut)
@@ -127,23 +177,60 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
       const c = marry(M, best, wantYear);
       if (c) genChildrenLate(c);
     } else {
-      // exogamy: an incomer spouse from the next parish (addressable here,
-      // her natal kin recorded as "of another register")
+      // exogamy: prefer a REAL emigrant already recorded in a lower-rank
+      // cluster-mate's own envelope (a genuine cross-village pointer, never
+      // a new decode) — only fabricate an unaddressable incomer if the
+      // local cluster has nobody to offer.
       if (M.death.year <= wantYear || rng.chance(0.25)) continue;
-      const wb = wantYear - rng.int(region.marriageF[0], region.marriageF[1]);
-      const W = addPerson({ name: rng.pick(region.femaleNames), surname: rng.pick(region.surnames), sex: "F", birth: wb, cls: M.cls, father: -1, mother: -1, incomer: true });
-      W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region);
-      if (W.death.year <= wantYear) W.death = { year: wantYear + 1 + rng.int(0, 25), age: wantYear + 1 + rng.int(0, 25) - wb, cause: "disease" };
+      const pulled = pullImmigrantBride(wantYear, region.marriageF[0] - 1, region.marriageF[1] + 6);
+      let W;
+      if (pulled) {
+        const { srcIdx, cand } = pulled;
+        W = addPerson({
+          name: cand.name, surname: cand.surname, sex: "F", birth: cand.birth, cls: M.cls,
+          father: -1, mother: -1, incomer: true,
+          origin: { regionKey, villageIdx: srcIdx }, originId: cand.id
+        });
+        W.death = { ...cand.death }; // clone: her destination life must not retroactively rewrite the origin's cached record
+      } else {
+        const wb = wantYear - rng.int(region.marriageF[0], region.marriageF[1]);
+        W = addPerson({ name: rng.pick(region.femaleNames), surname: rng.pick(region.surnames), sex: "F", birth: wb, cls: M.cls, father: -1, mother: -1, incomer: true, origin: null });
+        W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region);
+        if (W.death.year <= wantYear) W.death = { year: wantYear + 1 + rng.int(0, 25), age: wantYear + 1 + rng.int(0, 25) - wb, cause: "disease" };
+      }
       const c = marry(M, W, wantYear);
       if (c) genChildrenLate(c);
     }
   }
   } // end matching rounds
 
-  // women unmatched after all rounds: some marry out of the village
+  // Women unmatched after all rounds: emigration (§11), decided entirely by
+  // this village's own solve — never by a destination reaching back in.
+  // Mostly a short hop to a higher-offset cluster-mate (a real, later
+  // pull-able destination); occasionally a long jump to another region
+  // (still a real address, just not one anybody will scan back for).
+  // A famine or war year raises the chance, so a bad harvest here and a
+  // swollen neighbour there stay consistent with each other for free.
   for (const W of persons) {
-    if (W.sex !== "F" || W.founder || W.spouse != null || W.marriedOut || W.death.age < region.marriageF[1]) continue;
-    if (rng.chance(0.5)) W.marriedOut = true;
+    if (W.sex !== "F" || W.founder || W.spouse != null || W.emigrated || W.death.age < region.marriageF[1]) continue;
+    const atYear = W.birth + region.marriageF[1];
+    const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
+    if (!rng.chance(pressured ? 0.68 : 0.5)) continue;
+    W.emigrated = true;
+    W.marriedOut = true;
+    const offset = clusterOffset(villageIdx);
+    if (offset < LOCAL_CLUSTER - 1 && rng.chance(0.8)) {
+      W.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + rng.int(offset + 1, LOCAL_CLUSTER - 1) };
+    } else {
+      const higher = higherRankRegions(regionKey);
+      if (higher.length && rng.chance(0.6)) {
+        W.emigrateTo = { regionKey: rng.pick(higher), villageIdx: rng.int(0, 200) };
+        W.longDistance = true;
+      } else {
+        W.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + LOCAL_CLUSTER + rng.int(0, LOCAL_CLUSTER - 1) };
+        W.longDistance = true; // outside this cluster's own scan range: narrated, not pulled
+      }
+    }
   }
 
   function genChildrenLate(c) {

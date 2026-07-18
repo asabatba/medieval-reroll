@@ -25,3 +25,7 @@ export { CAUSE_LABEL } from "./data/narrative.js";
 export { resolveVillage } from "./village.js";
 export { decodePerson, fatherOccupation } from "./biography.js";
 export { roster, randomCitizen } from "./roster.js";
+// Overlapping hierarchies (§10): independent trees over the same village
+// addresses, joined by a deterministic assignment table.
+export { parishOf, manorOf } from "./hierarchy.js";
+export { citeDocument } from "./documents.js";

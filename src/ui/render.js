@@ -10,6 +10,10 @@ export function fateStr(d, birth) {
   return birth + "–" + d.year;
 }
 
+function addrStr(addr, id) {
+  return `${addr.regionKey}:${addr.villageIdx}:${id}`;
+}
+
 function relCard(who, person, addr, opts) {
   opts = opts || {};
   const cls = (person.death.age < 16 ? "dead-young " : "") + (opts.self ? "self " : "") + (opts.nolink ? "nolink " : "");
@@ -60,16 +64,29 @@ export function buildRecordHTML(E, worldSeed, stack) {
   </article>
   <p class="villhead reveal">All persons below are entries in the same register — <b>every link agrees from both sides.</b></p>`;
 
+  // Jurisdictions — the ecclesiastical and feudal trees, independent of the
+  // civil region/village tree and of each other; a parish boundary rarely
+  // lines up with a manor's, and neither lines up with the county's.
+  html += `<div class="sect reveal"><h2>Jurisdictions</h2></div>
+  <div class="vitals reveal">
+    <div class="vital"><div class="k">Parish</div><div class="v">${esc(bio.jurisdiction.parish)}</div></div>
+    <div class="vital"><div class="k">Deanery</div><div class="v">${esc(bio.jurisdiction.deanery)}</div></div>
+    <div class="vital"><div class="k">Diocese</div><div class="v">${esc(bio.jurisdiction.diocese)}</div></div>
+    <div class="vital"><div class="k">Manor</div><div class="v">${esc(bio.fief.manor)}</div></div>
+    <div class="vital"><div class="k">Honour</div><div class="v">${esc(bio.fief.honour)}</div></div>
+    <div class="vital"><div class="k">Lord</div><div class="v">${esc(bio.fief.lord)}</div></div>
+  </div>`;
+
   // Parentage
   html += `<div class="sect reveal"><h2>Parentage</h2></div><div class="parents reveal">`;
   if (bio.father) {
-    const fOcc = E.fatherOccupation(env, bio.father.id);
-    html += `<div class="parent"><div class="who">Father</div><div class="pname">${esc(bio.father.name)}</div><p>${esc(fOcc ? fOcc.charAt(0).toUpperCase() + fOcc.slice(1) : "")}.</p><button class="openrel plink" data-goto="${node.regionKey}:${node.villageIdx}:${bio.father.id}">Open his record →</button></div>`;
+    const fOcc = bio.fatherOccupation;
+    html += `<div class="parent"><div class="who">Father${bio.father.foreign ? " · of " + esc(bio.originPlace) : ""}</div><div class="pname">${esc(bio.father.name)}</div><p>${esc(fOcc ? fOcc.charAt(0).toUpperCase() + fOcc.slice(1) : "")}.</p><button class="openrel plink" data-goto="${addrStr(bio.father.addr, bio.father.id)}">Open his record →</button></div>`;
   } else {
     html += `<div class="parent"><div class="who">Father</div><div class="pname">${bio.incomer ? "Of another parish" : "Before the register"}</div><p>${bio.incomer ? "Her people are entered in the register of the next parish, which does not survive." : "The register begins after his time; only the name of the line remains."}</p></div>`;
   }
   if (bio.mother) {
-    html += `<div class="parent"><div class="who">Mother</div><div class="pname">${esc(bio.mother.name)}</div><p>${bio.mother.dead.cause === "childbirth" ? "Died in childbed — the register marks her burial in the same week as a baptism." : "Bore and raised the children of the house through the years the register records."}</p><button class="openrel plink" data-goto="${node.regionKey}:${node.villageIdx}:${bio.mother.id}">Open her record →</button></div>`;
+    html += `<div class="parent"><div class="who">Mother${bio.mother.foreign ? " · of " + esc(bio.originPlace) : ""}</div><div class="pname">${esc(bio.mother.name)}</div><p>${bio.mother.dead.cause === "childbirth" ? "Died in childbed — the register marks her burial in the same week as a baptism." : "Bore and raised the children of the house through the years the register records."}</p><button class="openrel plink" data-goto="${addrStr(bio.mother.addr, bio.mother.id)}">Open her record →</button></div>`;
   } else {
     html += `<div class="parent"><div class="who">Mother</div><div class="pname">${bio.incomer ? "Of another parish" : "Before the register"}</div><p>Nothing more is written of her here.</p></div>`;
   }
@@ -79,7 +96,7 @@ export function buildRecordHTML(E, worldSeed, stack) {
   if (bio.siblings.length) {
     html += `<div class="sect reveal"><h2>Siblings — ${bio.siblings.length}${sibsDead ? ", of whom " + sibsDead + " died young" : ""}</h2></div>
     <div class="relgrid reveal">` + bio.siblings.map(s =>
-      relCard(s.sex === "M" ? "Brother" : "Sister", s, `${node.regionKey}:${node.villageIdx}:${s.id}`)
+      relCard(s.sex === "M" ? "Brother" : "Sister", s, addrStr(s.addr, s.id))
     ).join("") + `</div>`;
   }
 
@@ -97,8 +114,11 @@ export function buildRecordHTML(E, worldSeed, stack) {
   // Marriage & children
   if (bio.spouse || bio.children.length) {
     html += `<div class="sect reveal"><h2>Marriage & issue</h2></div><div class="relgrid reveal">`;
-    if (bio.spouse) html += relCard(bio.sex === "M" ? "Wife" : "Husband", { name: bio.spouse.name, surname: "", birth: bio.spouse.birth, death: bio.spouse.death }, `${node.regionKey}:${node.villageIdx}:${bio.spouse.id}`, { note: "m. " + bio.marriageYear });
-    html += bio.children.map(c => relCard(c.sex === "M" ? "Son" : "Daughter", c, `${node.regionKey}:${node.villageIdx}:${c.id}`)).join("");
+    if (bio.spouse) {
+      const note = "m. " + bio.marriageYear + (bio.spouse.originPlace ? ` · from ${bio.spouse.originPlace}` : "");
+      html += relCard(bio.sex === "M" ? "Wife" : "Husband", { name: bio.spouse.name, surname: "", birth: bio.spouse.birth, death: bio.spouse.death }, addrStr(bio.spouse.addr, bio.spouse.id), { note });
+    }
+    html += bio.children.map(c => relCard(c.sex === "M" ? "Son" : "Daughter", c, addrStr(c.addr, c.id))).join("");
     html += `</div>`;
   }
 
@@ -106,7 +126,7 @@ export function buildRecordHTML(E, worldSeed, stack) {
   const roster = E.roster(env).slice().sort((a, b) => a.birth - b.birth);
   html += `<details class="register reveal"><summary>The full parish register — ${roster.length} souls, ${esc(bio.place)}</summary><div class="register-list">` +
     roster.map(r => `<button class="regrow${r.id === node.personId ? " current" : ""}" data-goto="${node.regionKey}:${node.villageIdx}:${r.id}">
-      <span class="rr-name">${esc(r.name)} ${esc(r.surname)}${r.founder ? " <i>(founder)</i>" : r.incomer ? " <i>(incomer)</i>" : ""}</span>
+      <span class="rr-name">${esc(r.name)} ${esc(r.surname)}${r.founder ? " <i>(founder)</i>" : r.incomer ? " <i>(incomer)</i>" : r.emigrated ? " <i>(removed elsewhere)</i>" : ""}</span>
       <span class="rr-dates">${r.birth}–${r.death.year}</span>
       <span class="rr-cause${r.death.cause === "plague" ? " plague" : ""}">${esc(E.CAUSE_LABEL[r.death.cause])}</span>
     </button>`).join("") + `</div></details>`;
