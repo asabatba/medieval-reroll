@@ -11,29 +11,29 @@
 // how large its villageIdx is.
 import { REGIONS } from "./data/regions.js";
 
-export const REGION_ORDER = Object.keys(REGIONS);
+export const REGION_ORDER: string[] = Object.keys(REGIONS);
 
-export function regionRank(regionKey) {
+export function regionRank(regionKey: string): number {
   return REGION_ORDER.indexOf(regionKey);
 }
 
 const RANK_SCALE = 1e7;
 
-export function globalRank(regionKey, villageIdx) {
+export function globalRank(regionKey: string, villageIdx: number): number {
   return regionRank(regionKey) * RANK_SCALE + villageIdx;
 }
 
 export const LOCAL_CLUSTER = 6;
 
-export function clusterBase(villageIdx) {
+export function clusterBase(villageIdx: number): number {
   return villageIdx - (villageIdx % LOCAL_CLUSTER);
 }
 
-export function clusterOffset(villageIdx) {
+export function clusterOffset(villageIdx: number): number {
   return villageIdx % LOCAL_CLUSTER;
 }
 
-export function higherRankRegions(regionKey) {
+export function higherRankRegions(regionKey: string): string[] {
   const r = regionRank(regionKey);
   return REGION_ORDER.filter(rk => regionRank(rk) > r);
 }

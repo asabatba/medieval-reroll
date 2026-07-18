@@ -1,4 +1,6 @@
-export const PLAGUES = [
+import type { Plague } from "../types.js";
+
+export const PLAGUES: Plague[] = [
   [1347, 1351, 14, "the Great Mortality — the Black Death", 0],
   [1361, 1363, 6, "the second pestilence, which they called the children's plague", 1.6],
   [1369, 1370, 4, "the third pestilence", 1.2],
@@ -16,7 +18,7 @@ export const PLAGUES = [
   [1485, 1486, 2, "the sweating sickness", 0.5],
 ];
 
-export function plagueAt(year) {
+export function plagueAt(year: number): Plague | null {
   for (const p of PLAGUES) if (year >= p[0] && year <= p[1]) return p;
   return null;
 }

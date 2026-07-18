@@ -1,20 +1,39 @@
 import { esc, KIND_LABEL } from "./dom.js";
+import type * as Engine from "../engine/index.js";
+import type { Address, Death, PersonAddress } from "../engine/index.js";
 
-export function locator(worldSeed, addr) {
+export interface StackNode extends PersonAddress {
+  crumb?: string;
+}
+
+export function locator(worldSeed: number, addr: PersonAddress): string {
   return worldSeed + ":" + addr.regionKey + ":" + addr.villageIdx + ":" + addr.personId;
 }
 
-export function fateStr(d, birth) {
+export function fateStr(d: Death, birth: number): string {
   if (d.age === 0) return "† inf. " + d.year;
   if (d.age < 16) return "† " + d.year + " aet. " + d.age;
   return birth + "–" + d.year;
 }
 
-function addrStr(addr, id) {
+function addrStr(addr: Address, id: number): string {
   return `${addr.regionKey}:${addr.villageIdx}:${id}`;
 }
 
-function relCard(who, person, addr, opts) {
+interface RelCardPerson {
+  name: string;
+  surname?: string;
+  birth: number;
+  death: Death;
+}
+
+interface RelCardOpts {
+  self?: boolean;
+  nolink?: boolean;
+  note?: string;
+}
+
+function relCard(who: string, person: RelCardPerson, addr: string, opts?: RelCardOpts): string {
   opts = opts || {};
   const cls = (person.death.age < 16 ? "dead-young " : "") + (opts.self ? "self " : "") + (opts.nolink ? "nolink " : "");
   const dates = fateStr(person.death, person.birth);
@@ -24,7 +43,7 @@ function relCard(who, person, addr, opts) {
   return `<button class="rel ${cls}" data-goto="${addr}">${inner}</button>`;
 }
 
-function renderLineageBar(stack) {
+function renderLineageBar(stack: StackNode[]): string {
   if (stack.length <= 1) return "";
   let h = '<nav class="lineage reveal" aria-label="Trail">';
   stack.forEach((n, i) => {
@@ -38,14 +57,15 @@ function renderLineageBar(stack) {
 
 // Builds the full record view for the current top of the navigation stack.
 // Mutates `node.crumb` (as the original did) so the lineage bar can label it.
-export function buildRecordHTML(E, worldSeed, stack) {
+export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: StackNode[]): string {
   const node = stack[stack.length - 1];
   const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
   const bio = E.decodePerson(env, node.personId);
+  if (!bio) return "";
   node.crumb = bio.name + " " + bio.surname;
 
   const sibsDead = bio.siblings.filter(s => s.death.age < 16).length;
-  const vitals = [
+  const vitals: [string, string, string][] = [
     ["Born", bio.birth + "", ""],
     ["Died", bio.death.year + " · aged " + bio.death.age, "red"],
     ["Cause of death", bio.causeLabel, "red"],
@@ -123,9 +143,9 @@ export function buildRecordHTML(E, worldSeed, stack) {
   }
 
   // Parish register browser
-  const roster = E.roster(env).slice().sort((a, b) => a.birth - b.birth);
-  html += `<details class="register reveal"><summary>The full parish register — ${roster.length} souls, ${esc(bio.place)}</summary><div class="register-list">` +
-    roster.map(r => `<button class="regrow${r.id === node.personId ? " current" : ""}" data-goto="${node.regionKey}:${node.villageIdx}:${r.id}">
+  const reg = E.roster(env).slice().sort((a, b) => a.birth - b.birth);
+  html += `<details class="register reveal"><summary>The full parish register — ${reg.length} souls, ${esc(bio.place)}</summary><div class="register-list">` +
+    reg.map(r => `<button class="regrow${r.id === node.personId ? " current" : ""}" data-goto="${node.regionKey}:${node.villageIdx}:${r.id}">
       <span class="rr-name">${esc(r.name)} ${esc(r.surname)}${r.founder ? " <i>(founder)</i>" : r.incomer ? " <i>(incomer)</i>" : r.emigrated ? " <i>(removed elsewhere)</i>" : ""}</span>
       <span class="rr-dates">${r.birth}–${r.death.year}</span>
       <span class="rr-cause${r.death.cause === "plague" ? " plague" : ""}">${esc(E.CAUSE_LABEL[r.death.cause])}</span>

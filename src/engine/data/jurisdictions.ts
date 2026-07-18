@@ -1,7 +1,9 @@
+import type { JurisdictionData } from "../types.js";
+
 // Ecclesiastical and feudal geography, independent of the civil region/village
 // tree they overlay. Names only — the actual tree shape (province > diocese >
-// deanery > parish, earldom > honour > manor) is resolved in hierarchy.js.
-export const JURISDICTIONS = {
+// deanery > parish, earldom > honour > manor) is resolved in hierarchy.ts.
+export const JURISDICTIONS: Record<string, JurisdictionData> = {
   england: {
     province: "the province of Canterbury",
     dioceses: ["Canterbury", "Rochester", "London", "Ely", "Worcester", "Lincoln"],
@@ -34,4 +36,4 @@ export const JURISDICTIONS = {
   }
 };
 
-export const SAINTS = ["St Mary", "St Peter", "St John the Baptist", "All Saints", "St Andrew", "St Nicholas", "Holy Trinity", "St Michael", "St Margaret", "St Giles", "St Leonard", "Our Lady", "St Botolph", "St Swithun", "St Lawrence"];
+export const SAINTS: string[] = ["St Mary", "St Peter", "St John the Baptist", "All Saints", "St Andrew", "St Nicholas", "Holy Trinity", "St Michael", "St Margaret", "St Giles", "St Leonard", "Our Lady", "St Botolph", "St Swithun", "St Lawrence"];

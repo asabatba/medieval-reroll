@@ -1,6 +1,7 @@
 import { plagueAt } from "./data/plagues.js";
+import type { Death, DeathCause, Region, Rng, Sex } from "./types.js";
 
-export function baseHazard(age) {
+export function baseHazard(age: number): number {
   if (age === 0) return 0.19;
   if (age <= 4) return 0.038;
   if (age <= 9) return 0.011;
@@ -15,16 +16,16 @@ export function baseHazard(age) {
   return 0.30;
 }
 
-export function famineAt(year, region) { return year >= region.famine[0] && year <= region.famine[1]; }
+export function famineAt(year: number, region: Region): boolean { return year >= region.famine[0] && year <= region.famine[1]; }
 
-export function warAt(year, region) {
+export function warAt(year: number, region: Region): string | null {
   for (const [a, b] of region.warYears) if (year >= a && year <= b) return region.warNames[a] || "the wars";
   return null;
 }
 
 // Pure per-person mortality walk. Returns {year, age, cause} where cause is
 // a coarse category; narrative detail is decoded at Tier 2.
-export function rollDeath(rng, birth, sex, wealth, region) {
+export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, region: Region): Death {
   let age = 0;
   while (age <= 95) {
     const year = birth + age;
@@ -32,7 +33,7 @@ export function rollDeath(rng, birth, sex, wealth, region) {
     const famine = famineAt(year, region) && wealth <= 2;
     const warName = warAt(year, region);
     let h = baseHazard(age);
-    let cause = null;
+    let cause: DeathCause | null = null;
     if (plague) {
       let mult = plague[2];
       if (plague[4] && age < 15) mult *= plague[4];

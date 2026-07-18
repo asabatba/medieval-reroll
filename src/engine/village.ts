@@ -14,7 +14,7 @@
 //
 // To keep that dependency bounded no matter how large a villageIdx is,
 // local migration only flows within a small, fixed-size cluster of
-// neighbouring villages (rank.js) — so resolving any one village never
+// neighbouring villages (rank.ts) — so resolving any one village never
 // triggers more than a handful of neighbour solves, not a chain back to
 // village zero. Long-distance migration (§11) is deliberately looser: it
 // still produces a real, resolvable destination address, but — since the
@@ -23,33 +23,46 @@
 // only, the same way a medieval parish register usually knows a daughter
 // "married out" without knowing much more.
 // =====================================================================
-import { mix, addrHash, makeRng } from "./hash.js";
+import { addrHash, mix, makeRng } from "./hash.js";
 import { REGIONS } from "./data/regions.js";
 import { CLASSES, CLASS_INFO } from "./data/classes.js";
 import { rollDeath, famineAt, warAt } from "./mortality.js";
 import { clusterBase, clusterOffset, LOCAL_CLUSTER, higherRankRegions } from "./rank.js";
+import type { Address, Couple, Death, Envelope, Person, Sex } from "./types.js";
 
-const _envelopeCache = new Map();
+const _envelopeCache = new Map<string, Envelope>();
 
-export function resolveVillage(worldSeed, regionKey, villageIdx) {
+export function resolveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
   const key = `${worldSeed}/${regionKey}/${villageIdx}`;
-  if (_envelopeCache.has(key)) return _envelopeCache.get(key);
+  const cached = _envelopeCache.get(key);
+  if (cached) return cached;
   const env = solveVillage(worldSeed, regionKey, villageIdx);
   _envelopeCache.set(key, env);
   return env;
 }
 
-function solveVillage(worldSeed, regionKey, villageIdx) {
+// Persons are constructed in two steps at every call site: addPerson()
+// assigns the id (and, unless overridden, the origin), then the caller
+// immediately rolls and assigns `.death` — rollDeath's own seed depends on
+// the id, so id must exist first. The placeholder below is never read.
+type NewPersonInput = Omit<Person, "id" | "death" | "origin"> & { origin?: Address | null };
+const PLACEHOLDER_DEATH: Death = { year: 0, age: 0, cause: "infancy" };
+
+function solveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
   const region = REGIONS[regionKey];
   const vHash = addrHash(worldSeed, [regionKey, "village", villageIdx]);
   const rng = makeRng(vHash);
-  const origin = { regionKey, villageIdx };
+  const origin: Address = { regionKey, villageIdx };
 
   const place = region.places[villageIdx % region.places.length];
-  const persons = [];   // id-indexed
-  const couples = [];   // {husband, wife, year, children:[]}
+  const persons: Person[] = [];   // id-indexed
+  const couples: Couple[] = [];
 
-  function addPerson(p) { p.id = persons.length; if (p.origin === undefined) p.origin = origin; persons.push(p); return p; }
+  function addPerson(p: NewPersonInput): Person {
+    const full: Person = { ...p, id: persons.length, origin: p.origin !== undefined ? p.origin : origin, death: PLACEHOLDER_DEATH };
+    persons.push(full);
+    return full;
+  }
 
   // Founders: G0 couples born 1235–1275, already married. Their pre-history
   // is outside the register ("the register begins in 1290").
@@ -71,10 +84,10 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
     marry(H, W, Math.max(hb + rng.int(22, 26), wb + rng.int(17, 20)));
   }
 
-  function marry(H, W, year) {
+  function marry(H: Person, W: Person, year: number): Couple | null {
     // marriage cannot outlive either spouse
     if (year >= H.death.year || year >= W.death.year) return null;
-    const c = { husband: H.id, wife: W.id, year, children: [] };
+    const c: Couple = { husband: H.id, wife: W.id, year, children: [] };
     H.spouse = W.id; W.spouse = H.id;
     H.marriageYear = year; W.marriageYear = year;
     couples.push(c);
@@ -86,8 +99,8 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
   // who named THIS village as her emigration destination. Bounded to the
   // local cluster, so this can only ever trigger up to LOCAL_CLUSTER-1
   // neighbour solves, never an unbounded chain.
-  const immigrantTaken = new Set();
-  function pullImmigrantBride(wantYear, ageLo, ageHi) {
+  const immigrantTaken = new Set<string>();
+  function pullImmigrantBride(wantYear: number, ageLo: number, ageHi: number): { srcIdx: number; cand: Person } | null {
     const base = clusterBase(villageIdx);
     for (let srcIdx = base; srcIdx < villageIdx; srcIdx++) {
       if (srcIdx < 0) continue;
@@ -116,7 +129,7 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
     const endYear = Math.min(H.death.year, W.death.year, W.birth + 42);
     let y = c.year + rng.int(1, 2);
     while (y < endYear && y <= 1490 && c.children.length < 11) {
-      const sex = rng.chance(0.5) ? "M" : "F";
+      const sex: Sex = rng.chance(0.5) ? "M" : "F";
       const child = addPerson({
         name: sex === "M" ? rng.pick(region.maleNames) : rng.pick(region.femaleNames),
         surname: H.surname, sex, birth: y, cls: H.cls,
@@ -143,7 +156,7 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
   // each round's marriages produce the next generation, which is then
   // matched in the following round, until the genealogy closes (no new
   // eligible persons). Deterministic: rounds process in birth order.
-  const processed = new Set();
+  const processed = new Set<number>();
   let guard = 0;
   while (guard++ < 20) {
   const eligible = persons.filter(p => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
@@ -153,7 +166,7 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
   const men = eligible.filter(p => p.sex === "M");
   const women = persons.filter(p => p.sex === "F" && !p.founder && p.death.age >= 16 && p.spouse == null && !p.marriedOut)
     .sort((a, b) => a.birth - b.birth || a.id - b.id);
-  const takenW = new Set();
+  const takenW = new Set<number>();
 
   for (const M of men) {
     if (rng.chance(0.14)) continue;                    // never marries
@@ -162,7 +175,7 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
     const mAge = rng.int(region.marriageM[0], region.marriageM[1]);
     const wantYear = M.birth + mAge;
     // best local candidate: right age window, different household, alive at wantYear
-    let best = null, bestScore = 1e9;
+    let best: Person | null = null, bestScore = 1e9;
     for (const W of women) {
       if (takenW.has(W.id)) continue;
       if (W.father === M.father && M.father !== -1) continue;      // no siblings
@@ -183,7 +196,7 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
       // local cluster has nobody to offer.
       if (M.death.year <= wantYear || rng.chance(0.25)) continue;
       const pulled = pullImmigrantBride(wantYear, region.marriageF[0] - 1, region.marriageF[1] + 6);
-      let W;
+      let W: Person;
       if (pulled) {
         const { srcIdx, cand } = pulled;
         W = addPerson({
@@ -233,13 +246,13 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
     }
   }
 
-  function genChildrenLate(c) {
+  function genChildrenLate(c: Couple): void {
     const H = persons[c.husband], W = persons[c.wife];
     const wealth = CLASS_INFO[H.cls].wealth;
     const endYear = Math.min(H.death.year, W.death.year, W.birth + 42);
     let y = c.year + rng.int(1, 2);
     while (y < endYear && y <= 1495 && c.children.length < 11) {
-      const sex = rng.chance(0.5) ? "M" : "F";
+      const sex: Sex = rng.chance(0.5) ? "M" : "F";
       const child = addPerson({
         name: sex === "M" ? rng.pick(region.maleNames) : rng.pick(region.femaleNames),
         surname: H.surname, sex, birth: y, cls: H.cls, father: H.id, mother: W.id
@@ -252,9 +265,8 @@ function solveVillage(worldSeed, regionKey, villageIdx) {
   }
 
   // index couples on persons for O(1) family lookup
-  const coupleOf = {};
+  const coupleOf: Record<number, number> = {};
   couples.forEach((c, i) => { coupleOf[c.husband] = i; coupleOf[c.wife] = i; });
 
-  const env = { worldSeed, regionKey, villageIdx, vHash, place, region, persons, couples, coupleOf };
-  return env;
+  return { worldSeed, regionKey, villageIdx, vHash, place, region, persons, couples, coupleOf };
 }

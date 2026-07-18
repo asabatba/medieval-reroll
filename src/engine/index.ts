@@ -29,3 +29,8 @@ export { roster, randomCitizen } from "./roster.js";
 // addresses, joined by a deterministic assignment table.
 export { parishOf, manorOf } from "./hierarchy.js";
 export { citeDocument } from "./documents.js";
+
+export type {
+  Address, Bio, BioEvent, Couple, Death, DeathCause, Envelope, Fief, Jurisdiction,
+  Person, PersonAddress, Region, RelativeRef, Rng, RosterRow, Sex, SocialClass
+} from "./types.js";

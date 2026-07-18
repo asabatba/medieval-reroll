@@ -1,3 +1,5 @@
+import type { DocumentContext, DocumentKind } from "./types.js";
+
 // decode_document(kind, ctx) -> citation string
 //
 // Documents follow whichever hierarchy generated them: a parish register
@@ -6,13 +8,13 @@
 // civil tree. All of them ultimately reference the same underlying
 // person/village addresses — that's what lets biography() cite a specific
 // register without the hierarchies needing to know about each other.
-const FALLBACK = {
+const FALLBACK: Record<DocumentKind, string> = {
   reg: "Parish register", court: "Manor court roll", coroner: "Coroner's roll",
   will: "Register of wills", chron: "Town chronicle", account: "Manorial account"
 };
 
-export function citeDocument(kind, ctx) {
-  const j = ctx && ctx.jurisdiction, f = ctx && ctx.fief, place = ctx && ctx.place;
+export function citeDocument(kind: DocumentKind, ctx: DocumentContext): string {
+  const j = ctx.jurisdiction, f = ctx.fief, place = ctx.place;
   switch (kind) {
     case "reg": return j ? `Register of ${j.parish}` : FALLBACK.reg;
     case "court": return f ? `Court roll of ${f.manor}` : FALLBACK.court;

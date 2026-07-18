@@ -1,5 +1,7 @@
+import type { Region } from "../types.js";
+
 // ---------- world data ----------
-export const REGIONS = {
+export const REGIONS: Record<string, Region> = {
   england: {
     name: "England", places: ["the village of Elmleigh, Kent", "the manor of Elton, Huntingdonshire", "the vill of Netherstoke, Yorkshire", "the parish of Halesowen, Worcestershire", "the fenland vill of Merewick, near Ely"],
     maleNames: ["John", "William", "Robert", "Thomas", "Richard", "Henry", "Walter", "Geoffrey", "Adam", "Simon", "Nicholas", "Roger", "Hugh", "Gilbert", "Ralph", "Stephen", "Peter"],

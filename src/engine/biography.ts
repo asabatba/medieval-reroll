@@ -10,7 +10,7 @@
 // person's adult life (their residence), and reaches DOWN into a lower-rank
 // origin envelope only to read — never resolve or invent — her parents.
 // That one-directional read is safe by the same rank argument as
-// pullImmigrantBride in village.js: an origin village is never asked to
+// pullImmigrantBride in village.ts: an origin village is never asked to
 // know about a destination it hasn't been told about.
 // =====================================================================
 import { mix, makeRng } from "./hash.js";
@@ -25,19 +25,20 @@ import {
   ADULT_EVENTS, CAUSE_LABEL, CHILD_EVENTS, COURT_CAUSES, DEATH_DETAIL, FATHER_OCC,
   FEMALE_EVENTS, OLD_EVENTS, WORLD_EVENTS, YOUTH_EVENTS
 } from "./data/narrative.js";
+import type { Address, Bio, BioEvent, DocumentKind, Envelope, Person, SocialClass } from "./types.js";
 
 // Cheap, non-recursive: just the deterministic place-name formula, never a
 // full village solve. Safe to call for a destination address regardless of
 // rank, which is what lets the origin side name where someone went without
 // depending on that village ever being resolved.
-function placeNameOf(addr) {
+function placeNameOf(addr: Address | null | undefined): string | null {
   if (!addr) return null;
   const region = REGIONS[addr.regionKey];
   if (!region) return null;
   return region.places[addr.villageIdx % region.places.length];
 }
 
-export function decodePerson(env, id) {
+export function decodePerson(env: Envelope, id: number): Bio | null {
   const p = env.persons[id];
   if (!p) return null;
   const region = env.region;
@@ -46,19 +47,20 @@ export function decodePerson(env, id) {
   const wealth = CLASS_INFO[p.cls].wealth;
   const pos = p.sex === "M" ? "his" : "her";
   const obj = p.sex === "M" ? "him" : "her";
-  const selfAddr = { regionKey: env.regionKey, villageIdx: env.villageIdx };
+  const selfAddr: Address = { regionKey: env.regionKey, villageIdx: env.villageIdx };
 
   // Overlapping hierarchies (§10): independent of the civil village tree,
   // resolved fresh here — cheap, non-recursive, no memo needed.
   const jurisdiction = parishOf(env.worldSeed, env.regionKey, env.villageIdx);
   const fief = manorOf(env.worldSeed, env.regionKey, env.villageIdx);
-  const cite = (kind) => citeDocument(kind, { jurisdiction, fief, place: env.place });
+  const cite = (kind: DocumentKind) => citeDocument(kind, { jurisdiction, fief, place: env.place });
 
   // --- family lookups (all from the envelope; symmetric by construction) ---
-  let father = p.father >= 0 ? env.persons[p.father] : null;
-  let mother = p.mother >= 0 ? env.persons[p.mother] : null;
+  let father: Person | null = p.father >= 0 ? env.persons[p.father] : null;
+  let mother: Person | null = p.mother >= 0 ? env.persons[p.mother] : null;
   let fatherAddr = selfAddr, motherAddr = selfAddr;
-  let fatherEnvForOcc = father ? env : null, fatherIdForOcc = father ? father.id : null;
+  let fatherEnvForOcc: Envelope | null = father ? env : null;
+  let fatherIdForOcc: number | null = father ? father.id : null;
 
   // An immigrant's local record has no local parents (father/mother = -1),
   // but a real originAddr points at the lower-rank village that DOES —
@@ -79,8 +81,8 @@ export function decodePerson(env, id) {
   const spouse = p.spouse != null ? env.persons[p.spouse] : null;
   const children = own ? own.children.map(cid => env.persons[cid]) : [];
 
-  const events = [];
-  const ev = (year, text, kind, src) => { if (year <= p.death.year) events.push({ year, age: year - p.birth, text, kind, src: src || cite("reg") }); };
+  const events: BioEvent[] = [];
+  const ev = (year: number, text: string, kind: string, src?: string) => { if (year <= p.death.year) events.push({ year, age: year - p.birth, text, kind, src: src || cite("reg") }); };
 
   // Birth
   const bornPlague = plagueAt(p.birth);
@@ -92,7 +94,9 @@ export function decodePerson(env, id) {
   } else if (p.founder) {
     ev(p.birth, `Born before this register begins; ${p.name} appears in its first folios already grown, one of the founding households of ${env.place}.`, "birth", cite("reg"));
   } else {
-    ev(p.birth, `Born in ${env.place}, ${region.name}, ${p.sex === "M" ? "son" : "daughter"} of ${father.name} ${father.surname} and ${mother.name}${bNote}.`, "birth", cite("reg"));
+    // Native-born, non-founder: both parents are guaranteed present by
+    // construction (only founders/fabricated incomers have father/mother -1).
+    ev(p.birth, `Born in ${env.place}, ${region.name}, ${p.sex === "M" ? "son" : "daughter"} of ${father!.name} ${father!.surname} and ${mother!.name}${bNote}.`, "birth", cite("reg"));
   }
 
   // Plague passages: family losses read from ACTUAL envelope deaths
@@ -104,14 +108,14 @@ export function decodePerson(env, id) {
       if (p.death.year < pl[0]) continue;
       if (ageAt < 3) continue;
       // did this plague actually take kin? — read the record, don't invent
-      const kin = [];
+      const kin: string[] = [];
       if (father && father.death.cause === "plague" && father.death.year >= pl[0] && father.death.year <= pl[1]) kin.push(pos + " father");
       if (mother && mother.death.cause === "plague" && mother.death.year >= pl[0] && mother.death.year <= pl[1]) kin.push(pos + " mother");
       const sibsLost = siblings.filter(s => s.death.cause === "plague" && s.death.year >= pl[0] && s.death.year <= pl[1]).length;
       if (sibsLost) kin.push(sibsLost === 1 ? "a sibling" : sibsLost + " siblings");
       const kidsLost = children.filter(c => c.death.cause === "plague" && c.death.year >= pl[0] && c.death.year <= pl[1]).length;
       if (kidsLost) kin.push(kidsLost === 1 ? "a child" : kidsLost + " children");
-      const spouseLost = spouse && spouse.death.cause === "plague" && spouse.death.year >= pl[0] && spouse.death.year <= pl[1];
+      const spouseLost = !!(spouse && spouse.death.cause === "plague" && spouse.death.year >= pl[0] && spouse.death.year <= pl[1]);
       if (p.death.year <= pl[1] && p.death.cause === "plague") continue; // their own death entry covers it
       if (kin.length || spouseLost || mentionedPlagues === 0 || rng.chance(0.3)) {
         let t = `Lived through ${pl[3]}.`;
@@ -140,7 +144,7 @@ export function decodePerson(env, id) {
 
   // Occupation
   if (p.death.age >= 12 && !p.inOrders) {
-    const occs = {
+    const occs: Record<SocialClass, string[]> = {
       serf: p.sex === "M" ? ["worked " + pos + " father's servile holding, and inherited its bondage with its land", "laboured on the lord's demesne as a ploughman", "kept the lord's sheep as a shepherd"] : ["worked the holding, the dairy, and the harvest alongside the family", "went into service at the manor house at twelve"],
       freePeasant: p.sex === "M" ? ["farmed the family holding", "worked as the village " + rng.pick(["thatcher", "wheelwright", "miller's man"]), "leased extra strips and prospered as a yeoman"] : ["ran the dairy, the poultry, the garden, and the brewing", "went into service in a townhouse at fourteen"],
       artisan: p.sex === "M" ? ["was apprenticed to the family trade of " + rng.pick(CRAFTS) + " and in time kept the shop", "became a journeyman " + rng.pick(CRAFTS)] : ["worked in the family workshop, minding the shop and the accounts", "carried on the workshop in widowhood, with journeymen under her"],
@@ -159,7 +163,7 @@ export function decodePerson(env, id) {
   }
 
   // Marriage — real spouse from the matching
-  if (own) {
+  if (own && spouse) {
     const sName = spouse.name + " " + spouse.surname;
     let extra = "";
     if (p.cls === "serf" && p.sex === "F") extra = ` Her father paid merchet to ${fief.lord} for licence to marry.`;
@@ -170,8 +174,9 @@ export function decodePerson(env, id) {
     }
     ev(own.year, `Married ${sName}${p.sex === "F" && spouse.birth < p.birth - 3 ? ", a man some years older, as was usual" : ""}.${extra}`, "marriage");
   } else if (p.marriedOut) {
-    const destPlace = placeNameOf(p.emigrateTo);
-    const destText = destPlace ? (p.longDistance ? ` to ${destPlace}, in ${REGIONS[p.emigrateTo.regionKey].name}` : ` to ${destPlace}`) : "";
+    const dest = p.emigrateTo;
+    const destPlace = placeNameOf(dest);
+    const destText = destPlace && dest ? (p.longDistance ? ` to ${destPlace}, in ${REGIONS[dest.regionKey].name}` : ` to ${destPlace}`) : "";
     ev(p.birth + region.marriageF[1], `Married out of the parish${destText}; her name leaves this register for another, and the rest of her life is written there.`, "marriage");
   } else if (p.death.age >= 30 && !p.inOrders && rng.chance(0.7)) {
     ev(p.birth + 30, `Never married — the register shows ${obj} in the same household year after year, ${p.sex === "F" ? "spinning and keeping house for kin" : "labouring on the family land"}.`, "life");
@@ -223,7 +228,7 @@ export function decodePerson(env, id) {
   }
 
   // Personal texture events
-  function texture(pool, lo, hi, n) {
+  function texture(pool: readonly [string, number, string | null][], lo: number, hi: number, n: number) {
     const span = Math.min(hi, p.death.age) - lo;
     if (span <= 0) return;
     let count = 0;
@@ -257,7 +262,7 @@ export function decodePerson(env, id) {
 
   // Death — real cause from envelope, decoded detail
   const dd = rng.pick(DEATH_DETAIL[p.death.cause]);
-  let burialTxt;
+  let burialTxt: string;
   if (p.death.cause === "plague") burialTxt = "Buried in haste, in a grave shared with others of that dying time.";
   else if (p.death.age === 0) burialTxt = "";
   else if (p.death.age < 12) burialTxt = "Buried in the churchyard beside the other children of the family.";
@@ -281,8 +286,8 @@ export function decodePerson(env, id) {
     incomer: !!p.incomer, founder: !!p.founder, marriedOut: !!p.marriedOut,
     originPlace: p.incomer && p.origin ? placeNameOf(p.origin) : null,
     jurisdiction, fief,
-    father: father ? { id: father.id, name: father.name + " " + father.surname, dead: father.death, addr: fatherAddr, foreign: fatherAddr !== selfAddr } : null,
-    mother: mother ? { id: mother.id, name: mother.name + " " + mother.surname, dead: mother.death, addr: motherAddr, foreign: motherAddr !== selfAddr } : null,
+    father: father ? { id: father.id, name: father.name + " " + father.surname, dead: father.death, birth: father.birth, death: father.death, addr: fatherAddr, foreign: fatherAddr !== selfAddr } : null,
+    mother: mother ? { id: mother.id, name: mother.name + " " + mother.surname, dead: mother.death, birth: mother.birth, death: mother.death, addr: motherAddr, foreign: motherAddr !== selfAddr } : null,
     fatherOccupation: fatherOccText,
     siblings: siblings.map(s => ({ id: s.id, name: s.name, sex: s.sex, birth: s.birth, death: s.death, addr: selfAddr })),
     spouse: spouse ? { id: spouse.id, name: spouse.name + " " + spouse.surname, birth: spouse.birth, death: spouse.death, incomer: !!spouse.incomer, addr: selfAddr, originPlace: spouse.incomer && spouse.origin ? placeNameOf(spouse.origin) : null } : null,
@@ -298,7 +303,7 @@ export function decodePerson(env, id) {
 // siblings agree on it (upward dependency only) — and, for an immigrant,
 // from her ORIGIN envelope, since that's the manor her father actually held
 // land of, not the destination's.
-export function fatherOccupation(env, fatherId) {
+export function fatherOccupation(env: Envelope, fatherId: number): string | null {
   if (fatherId < 0) return null;
   const f = env.persons[fatherId];
   const rng = makeRng(mix(env.vHash, 60000 + fatherId));

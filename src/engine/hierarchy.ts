@@ -11,12 +11,13 @@
 // address, no memo required for correctness), but deliberately cheap and
 // non-recursive: unlike resolveVillage, they never depend on another
 // village's envelope, so they can be called freely from anywhere —
-// including across the rank boundary that migration (migration.js) has to
+// including across the rank boundary that migration (village.ts) has to
 // respect — without any risk of a resolution cycle.
 // =====================================================================
 import { addrHash, makeRng } from "./hash.js";
 import { REGIONS } from "./data/regions.js";
 import { JURISDICTIONS, SAINTS } from "./data/jurisdictions.js";
+import type { Fief, Jurisdiction, Region } from "./types.js";
 
 // ---- ecclesiastical tree: province > diocese > deanery > parish ----
 // Villages are grouped into small blocks; most blocks are one parish per
@@ -25,7 +26,7 @@ import { JURISDICTIONS, SAINTS } from "./data/jurisdictions.js";
 // resolved once per block, deterministically).
 const PARISH_CLUSTER = 5;
 
-export function parishOf(worldSeed, regionKey, villageIdx) {
+export function parishOf(worldSeed: number, regionKey: string, villageIdx: number): Jurisdiction {
   const j = JURISDICTIONS[regionKey];
   const block = Math.floor(villageIdx / PARISH_CLUSTER);
   const blockRng = makeRng(addrHash(worldSeed, [regionKey, "parish-block", block]));
@@ -51,14 +52,14 @@ export function parishOf(worldSeed, regionKey, villageIdx) {
 // where parish boundaries fall — the whole point of the exercise.
 const HONOUR_CLUSTER = 9;
 
-function placeShortName(region, villageIdx) {
+function placeShortName(region: Region, villageIdx: number): string {
   const raw = region.places[villageIdx % region.places.length];
   const ofMatch = raw.match(/\bof\s+([^,]+)/);
   if (ofMatch) return ofMatch[1].trim();
   return raw.replace(/^(the|a)\s+/i, "").split(",")[0].trim();
 }
 
-export function manorOf(worldSeed, regionKey, villageIdx) {
+export function manorOf(worldSeed: number, regionKey: string, villageIdx: number): Fief {
   const region = REGIONS[regionKey];
   const j = JURISDICTIONS[regionKey];
   const block = Math.floor(villageIdx / HONOUR_CLUSTER);
