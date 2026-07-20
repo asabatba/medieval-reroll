@@ -1,3 +1,4 @@
+import type { Locale } from "../i18n/locale.js";
 import type { DocumentContext, DocumentKind } from "./types.js";
 
 // decode_document(kind, ctx) -> citation string
@@ -8,20 +9,62 @@ import type { DocumentContext, DocumentKind } from "./types.js";
 // civil tree. All of them ultimately reference the same underlying
 // person/village addresses — that's what lets biography() cite a specific
 // register without the hierarchies needing to know about each other.
-const FALLBACK: Record<DocumentKind, string> = {
-  reg: "Parish register", court: "Manor court roll", coroner: "Coroner's roll",
-  will: "Register of wills", chron: "Town chronicle", account: "Manorial account"
+const FALLBACK: Record<Locale, Record<DocumentKind, string>> = {
+  en: {
+    reg: "Parish register",
+    court: "Manor court roll",
+    coroner: "Coroner's roll",
+    will: "Register of wills",
+    chron: "Town chronicle",
+    account: "Manorial account",
+  },
+  ca: {
+    reg: "Registre parroquial",
+    court: "Rotlle de la cort del senyor",
+    coroner: "Rotlle del forense",
+    will: "Registre de testaments",
+    chron: "Crònica de la vila",
+    account: "Compte senyorial",
+  },
 };
 
-export function citeDocument(kind: DocumentKind, ctx: DocumentContext): string {
-  const j = ctx.jurisdiction, f = ctx.fief, place = ctx.place;
+export function citeDocument(kind: DocumentKind, ctx: DocumentContext, locale: Locale): string {
+  const j = ctx.jurisdiction,
+    f = ctx.fief,
+    place = ctx.place;
+  const fb = FALLBACK[locale];
+  if (locale === "ca") {
+    switch (kind) {
+      case "reg":
+        return j ? `Registre de ${j.parish}` : fb.reg;
+      case "court":
+        return f ? `Rotlle de la cort de ${f.manor}` : fb.court;
+      case "account":
+        return f ? `Compte de ${f.manor}` : fb.account;
+      case "will":
+        return j ? `Registre de testaments, ${j.diocese}` : fb.will;
+      case "chron":
+        return j ? `Crònica de ${j.province}` : fb.chron;
+      case "coroner":
+        return place ? `Rotlle del forense, ${place}` : fb.coroner;
+      default:
+        return fb.reg;
+    }
+  }
   switch (kind) {
-    case "reg": return j ? `Register of ${j.parish}` : FALLBACK.reg;
-    case "court": return f ? `Court roll of ${f.manor}` : FALLBACK.court;
-    case "account": return f ? `Account roll of ${f.manor}` : FALLBACK.account;
-    case "will": return j ? `Register of wills, ${j.diocese}` : FALLBACK.will;
-    case "chron": return j ? `Chronicle of ${j.province}` : FALLBACK.chron;
-    case "coroner": return place ? `Coroner's roll, ${place}` : FALLBACK.coroner;
-    default: return FALLBACK.reg;
+    case "reg":
+      return j ? `Register of ${j.parish}` : fb.reg;
+    case "court":
+      return f ? `Court roll of ${f.manor}` : fb.court;
+    case "account":
+      return f ? `Account roll of ${f.manor}` : fb.account;
+    case "will":
+      return j ? `Register of wills, ${j.diocese}` : fb.will;
+    case "chron":
+      return j ? `Chronicle of ${j.province}` : fb.chron;
+    case "coroner":
+      return place ? `Coroner's roll, ${place}` : fb.coroner;
+    default:
+      return fb.reg;
   }
 }

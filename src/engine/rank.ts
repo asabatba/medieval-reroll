@@ -35,5 +35,5 @@ export function clusterOffset(villageIdx: number): number {
 
 export function higherRankRegions(regionKey: string): string[] {
   const r = regionRank(regionKey);
-  return REGION_ORDER.filter(rk => regionRank(rk) > r);
+  return REGION_ORDER.filter((rk) => regionRank(rk) > r);
 }

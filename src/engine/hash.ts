@@ -13,26 +13,31 @@ export function hashStr(h: number, s: string): number {
 
 // addr_hash: depends on parent hash + local segment (spec §2)
 export function addrHash(worldSeed: number, segments: readonly (string | number)[]): number {
-  let h = mix(0x9E3779B9, worldSeed >>> 0);
+  let h = mix(0x9e3779b9, worldSeed >>> 0);
   for (const seg of segments) h = typeof seg === "number" ? mix(h, seg) : hashStr(h, String(seg));
   return h >>> 0;
 }
 
 export function makeRng(seed: number): Rng {
   let a = seed >>> 0;
-  const r = function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
+  const r = (() => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  } as Rng;
+  }) as Rng;
   r.int = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
   r.pick = (arr) => arr[Math.floor(r() * arr.length)];
   r.chance = (p) => r() < p;
   r.weighted = (pairs) => {
-    let total = 0; for (const p of pairs) total += p[1];
+    let total = 0;
+    for (const p of pairs) total += p[1];
     let x = r() * total;
-    for (const p of pairs) { x -= p[1]; if (x <= 0) return p[0]; }
+    for (const p of pairs) {
+      x -= p[1];
+      if (x <= 0) return p[0];
+    }
     return pairs[pairs.length - 1][0];
   };
   return r;

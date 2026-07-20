@@ -17,20 +17,35 @@
    Historical grounding unchanged: Russell's life tables, plague chronology
    1347–1500, Great Famine, EMP marriage ages, ~1.3% maternal mortality/birth.
 */
-export { addrHash, makeRng } from "./hash.js";
-export { REGIONS } from "./data/regions.js";
-export { PLAGUES } from "./data/plagues.js";
+
+export { decodePerson, fatherOccupation } from "./biography.js";
 export { CLASS_INFO } from "./data/classes.js";
 export { CAUSE_LABEL } from "./data/narrative.js";
-export { resolveVillage } from "./village.js";
-export { decodePerson, fatherOccupation } from "./biography.js";
-export { roster, randomCitizen } from "./roster.js";
+export { PLAGUES } from "./data/plagues.js";
+export { REGIONS } from "./data/regions.js";
+export { citeDocument } from "./documents.js";
+export { addrHash, makeRng } from "./hash.js";
 // Overlapping hierarchies (§10): independent trees over the same village
 // addresses, joined by a deterministic assignment table.
-export { parishOf, manorOf } from "./hierarchy.js";
-export { citeDocument } from "./documents.js";
-
+export { manorOf, parishOf } from "./hierarchy.js";
+export { randomCitizen, roster } from "./roster.js";
 export type {
-  Address, Bio, BioEvent, Couple, Death, DeathCause, Envelope, Fief, Jurisdiction,
-  Person, PersonAddress, Region, RelativeRef, Rng, RosterRow, Sex, SocialClass
+  Address,
+  Bio,
+  BioEvent,
+  Couple,
+  Death,
+  DeathCause,
+  Envelope,
+  Fief,
+  Jurisdiction,
+  Person,
+  PersonAddress,
+  Region,
+  RelativeRef,
+  Rng,
+  RosterRow,
+  Sex,
+  SocialClass,
 } from "./types.js";
+export { resolveVillage } from "./village.js";

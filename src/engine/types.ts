@@ -2,6 +2,10 @@
 // Tier-1 envelope (village.js) and Tier-2 decoder (biography.js) share the
 // same underlying Person/Envelope shapes by construction — that symmetry is
 // the whole point of the architecture (see engine/index.ts).
+import type { Locale } from "../i18n/locale.js";
+
+/** A string with an entry for every supported locale — narrative text is generated once per locale, never translated after the fact. */
+export type LocalText = Record<Locale, string>;
 
 export type Sex = "M" | "F";
 
@@ -73,21 +77,21 @@ export interface Couple {
 }
 
 export interface Region {
-  name: string;
-  places: string[];
+  name: LocalText;
+  places: LocalText[];
   maleNames: string[];
   femaleNames: string[];
   surnames: string[];
   marriageF: [number, number];
   marriageM: [number, number];
   famine: [number, number];
-  famineName: string;
+  famineName: LocalText;
   warYears: [number, number][];
-  warNames: Record<number, string>;
-  revolt: { year: number; name: string; desc: string } | null;
-  pilgrim: string[];
+  warNames: Record<number, LocalText>;
+  revolt: { year: number; name: LocalText; desc: LocalText } | null;
+  pilgrim: LocalText[];
   currency: string;
-  landUnit: string;
+  landUnit: LocalText;
   routiers?: boolean;
 }
 
@@ -96,7 +100,7 @@ export interface Envelope {
   regionKey: string;
   villageIdx: number;
   vHash: number;
-  place: string;
+  place: LocalText;
   region: Region;
   persons: Person[];
   couples: Couple[];
@@ -104,15 +108,15 @@ export interface Envelope {
 }
 
 // [startYear, endYear, severityMultiplier, name, childMultiplier]
-export type Plague = [number, number, number, string, number];
+export type Plague = [number, number, number, LocalText, number];
 
 export interface ClassInfo {
-  label: string;
+  label: LocalText;
   wealth: number;
 }
 
-// [startYear, endYear, regionFilter (null = all), ageOffset, chance, kind, src, textFn]
-export type WorldEvent = [number, number, string[] | null, number, number, string, string, (p: Person) => string];
+// [startYear, endYear, regionFilter (null = all), ageOffset, chance, kind, srcKind, textFn]
+export type WorldEvent = [number, number, string[] | null, number, number, string, DocumentKind, (p: Person, locale: Locale) => string];
 
 // [template, weight, flag]
 export type TextureEvent = [string, number, string | null];

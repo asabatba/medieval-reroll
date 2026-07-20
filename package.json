@@ -8,9 +8,13 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
+    "lint": "biome lint ."
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.4",
     "typescript": "^7.0.2",
     "vite": "^8.1.5"
   }

@@ -23,11 +23,12 @@
 // only, the same way a medieval parish register usually knows a daughter
 // "married out" without knowing much more.
 // =====================================================================
-import { addrHash, mix, makeRng } from "./hash.js";
+
+import { CLASS_INFO, CLASSES } from "./data/classes.js";
 import { REGIONS } from "./data/regions.js";
-import { CLASSES, CLASS_INFO } from "./data/classes.js";
-import { rollDeath, famineAt, warAt } from "./mortality.js";
-import { clusterBase, clusterOffset, LOCAL_CLUSTER, higherRankRegions } from "./rank.js";
+import { addrHash, makeRng, mix } from "./hash.js";
+import { famineAt, rollDeath, warAt } from "./mortality.js";
+import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
 import type { Address, Couple, Death, Envelope, Person, Sex } from "./types.js";
 
 const _envelopeCache = new Map<string, Envelope>();
@@ -55,7 +56,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   const origin: Address = { regionKey, villageIdx };
 
   const place = region.places[villageIdx % region.places.length];
-  const persons: Person[] = [];   // id-indexed
+  const persons: Person[] = []; // id-indexed
   const couples: Couple[] = [];
 
   function addPerson(p: NewPersonInput): Person {
@@ -75,7 +76,18 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const hb = rng.int(1235, 1272);
     const wb = hb + rng.int(1, 6);
     const H = addPerson({ name: rng.pick(region.maleNames), surname, sex: "M", birth: hb, cls, father: -1, mother: -1, founder: true });
-    const W = addPerson({ name: rng.pick(region.femaleNames), surname: rng.pick(region.surnames), sex: "F", birth: wb, cls, father: -1, mother: -1, founder: true, incomer: true, origin: null });
+    const W = addPerson({
+      name: rng.pick(region.femaleNames),
+      surname: rng.pick(region.surnames),
+      sex: "F",
+      birth: wb,
+      cls,
+      father: -1,
+      mother: -1,
+      founder: true,
+      incomer: true,
+      origin: null,
+    });
     H.death = rollDeath(makeRng(mix(vHash, 7001 + H.id)), hb, "M", wealth, region);
     W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", wealth, region);
     // founders are guaranteed to reach marriage (they existed to found the line)
@@ -88,8 +100,10 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // marriage cannot outlive either spouse
     if (year >= H.death.year || year >= W.death.year) return null;
     const c: Couple = { husband: H.id, wife: W.id, year, children: [] };
-    H.spouse = W.id; W.spouse = H.id;
-    H.marriageYear = year; W.marriageYear = year;
+    H.spouse = W.id;
+    W.spouse = H.id;
+    H.marriageYear = year;
+    W.marriageYear = year;
     couples.push(c);
     return c;
   }
@@ -124,7 +138,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // work queue, so children of later marriages get processed too).
   for (let ci = 0; ci < couples.length; ci++) {
     const c = couples[ci];
-    const H = persons[c.husband], W = persons[c.wife];
+    const H = persons[c.husband],
+      W = persons[c.wife];
     const wealth = CLASS_INFO[H.cls].wealth;
     const endYear = Math.min(H.death.year, W.death.year, W.birth + 42);
     let y = c.year + rng.int(1, 2);
@@ -132,8 +147,12 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       const sex: Sex = rng.chance(0.5) ? "M" : "F";
       const child = addPerson({
         name: sex === "M" ? rng.pick(region.maleNames) : rng.pick(region.femaleNames),
-        surname: H.surname, sex, birth: y, cls: H.cls,
-        father: H.id, mother: W.id
+        surname: H.surname,
+        sex,
+        birth: y,
+        cls: H.cls,
+        father: H.id,
+        mother: W.id,
       });
       child.death = rollDeath(makeRng(mix(vHash, 7001 + child.id)), y, sex, wealth, region);
       c.children.push(child.id);
@@ -142,9 +161,9 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       if (W.death.year === y && W.death.age <= 43) W.death.cause = "childbirth";
       y += rng.int(2, 4);
     }
-    if (W.death.cause !== "childbirth" && rng.chance(0.012 * c.children.length) && W.death.year > c.year && (W.death.year - W.birth) <= 43) {
+    if (W.death.cause !== "childbirth" && rng.chance(0.012 * c.children.length) && W.death.year > c.year && W.death.year - W.birth <= 43) {
       // occasionally reassign a plausible near-birth death to childbed
-      const nearest = c.children.map(id => persons[id].birth).find(b => Math.abs(b - W.death.year) <= 1);
+      const nearest = c.children.map((id) => persons[id].birth).find((b) => Math.abs(b - W.death.year) <= 1);
       if (nearest != null) W.death.cause = "childbirth";
     }
 
@@ -159,62 +178,89 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   const processed = new Set<number>();
   let guard = 0;
   while (guard++ < 20) {
-  const eligible = persons.filter(p => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
-  if (!eligible.length) break;
-  eligible.forEach(p => { processed.add(p.id); });
-  eligible.sort((a, b) => a.birth - b.birth || a.id - b.id);
-  const men = eligible.filter(p => p.sex === "M");
-  const women = persons.filter(p => p.sex === "F" && !p.founder && p.death.age >= 16 && p.spouse == null && !p.marriedOut)
-    .sort((a, b) => a.birth - b.birth || a.id - b.id);
-  const takenW = new Set<number>();
+    const eligible = persons.filter((p) => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
+    if (!eligible.length) break;
+    eligible.forEach((p) => {
+      processed.add(p.id);
+    });
+    eligible.sort((a, b) => a.birth - b.birth || a.id - b.id);
+    const men = eligible.filter((p) => p.sex === "M");
+    const women = persons
+      .filter((p) => p.sex === "F" && !p.founder && p.death.age >= 16 && p.spouse == null && !p.marriedOut)
+      .sort((a, b) => a.birth - b.birth || a.id - b.id);
+    const takenW = new Set<number>();
 
-  for (const M of men) {
-    if (rng.chance(0.14)) continue;                    // never marries
-    if (M.cls === "clergyFamily" && rng.chance(0.35)) { M.inOrders = true; continue; }
-    const targetGap = rng.int(1, region.marriageM[0] - region.marriageF[0] + 3);
-    const mAge = rng.int(region.marriageM[0], region.marriageM[1]);
-    const wantYear = M.birth + mAge;
-    // best local candidate: right age window, different household, alive at wantYear
-    let best: Person | null = null, bestScore = 1e9;
-    for (const W of women) {
-      if (takenW.has(W.id)) continue;
-      if (W.father === M.father && M.father !== -1) continue;      // no siblings
-      const wAgeAt = wantYear - W.birth;
-      if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6) continue;
-      if (W.death.year <= wantYear || M.death.year <= wantYear) continue;
-      const score = Math.abs(wAgeAt - (mAge - targetGap));
-      if (score < bestScore) { bestScore = score; best = W; }
-    }
-    if (best && rng.chance(0.8)) {
-      takenW.add(best.id);
-      const c = marry(M, best, wantYear);
-      if (c) genChildrenLate(c);
-    } else {
-      // exogamy: prefer a REAL emigrant already recorded in a lower-rank
-      // cluster-mate's own envelope (a genuine cross-village pointer, never
-      // a new decode) — only fabricate an unaddressable incomer if the
-      // local cluster has nobody to offer.
-      if (M.death.year <= wantYear || rng.chance(0.25)) continue;
-      const pulled = pullImmigrantBride(wantYear, region.marriageF[0] - 1, region.marriageF[1] + 6);
-      let W: Person;
-      if (pulled) {
-        const { srcIdx, cand } = pulled;
-        W = addPerson({
-          name: cand.name, surname: cand.surname, sex: "F", birth: cand.birth, cls: M.cls,
-          father: -1, mother: -1, incomer: true,
-          origin: { regionKey, villageIdx: srcIdx }, originId: cand.id
-        });
-        W.death = { ...cand.death }; // clone: her destination life must not retroactively rewrite the origin's cached record
-      } else {
-        const wb = wantYear - rng.int(region.marriageF[0], region.marriageF[1]);
-        W = addPerson({ name: rng.pick(region.femaleNames), surname: rng.pick(region.surnames), sex: "F", birth: wb, cls: M.cls, father: -1, mother: -1, incomer: true, origin: null });
-        W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region);
-        if (W.death.year <= wantYear) W.death = { year: wantYear + 1 + rng.int(0, 25), age: wantYear + 1 + rng.int(0, 25) - wb, cause: "disease" };
+    for (const M of men) {
+      if (rng.chance(0.14)) continue; // never marries
+      if (M.cls === "clergyFamily" && rng.chance(0.35)) {
+        M.inOrders = true;
+        continue;
       }
-      const c = marry(M, W, wantYear);
-      if (c) genChildrenLate(c);
+      const targetGap = rng.int(1, region.marriageM[0] - region.marriageF[0] + 3);
+      const mAge = rng.int(region.marriageM[0], region.marriageM[1]);
+      const wantYear = M.birth + mAge;
+      // best local candidate: right age window, different household, alive at wantYear
+      let best: Person | null = null,
+        bestScore = 1e9;
+      for (const W of women) {
+        if (takenW.has(W.id)) continue;
+        if (W.father === M.father && M.father !== -1) continue; // no siblings
+        const wAgeAt = wantYear - W.birth;
+        if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6) continue;
+        if (W.death.year <= wantYear || M.death.year <= wantYear) continue;
+        const score = Math.abs(wAgeAt - (mAge - targetGap));
+        if (score < bestScore) {
+          bestScore = score;
+          best = W;
+        }
+      }
+      if (best && rng.chance(0.8)) {
+        takenW.add(best.id);
+        const c = marry(M, best, wantYear);
+        if (c) genChildrenLate(c);
+      } else {
+        // exogamy: prefer a REAL emigrant already recorded in a lower-rank
+        // cluster-mate's own envelope (a genuine cross-village pointer, never
+        // a new decode) — only fabricate an unaddressable incomer if the
+        // local cluster has nobody to offer.
+        if (M.death.year <= wantYear || rng.chance(0.25)) continue;
+        const pulled = pullImmigrantBride(wantYear, region.marriageF[0] - 1, region.marriageF[1] + 6);
+        let W: Person;
+        if (pulled) {
+          const { srcIdx, cand } = pulled;
+          W = addPerson({
+            name: cand.name,
+            surname: cand.surname,
+            sex: "F",
+            birth: cand.birth,
+            cls: M.cls,
+            father: -1,
+            mother: -1,
+            incomer: true,
+            origin: { regionKey, villageIdx: srcIdx },
+            originId: cand.id,
+          });
+          W.death = { ...cand.death }; // clone: her destination life must not retroactively rewrite the origin's cached record
+        } else {
+          const wb = wantYear - rng.int(region.marriageF[0], region.marriageF[1]);
+          W = addPerson({
+            name: rng.pick(region.femaleNames),
+            surname: rng.pick(region.surnames),
+            sex: "F",
+            birth: wb,
+            cls: M.cls,
+            father: -1,
+            mother: -1,
+            incomer: true,
+            origin: null,
+          });
+          W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region);
+          if (W.death.year <= wantYear) W.death = { year: wantYear + 1 + rng.int(0, 25), age: wantYear + 1 + rng.int(0, 25) - wb, cause: "disease" };
+        }
+        const c = marry(M, W, wantYear);
+        if (c) genChildrenLate(c);
+      }
     }
-  }
   } // end matching rounds
 
   // Women unmatched after all rounds: emigration (§11), decided entirely by
@@ -247,7 +293,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   }
 
   function genChildrenLate(c: Couple): void {
-    const H = persons[c.husband], W = persons[c.wife];
+    const H = persons[c.husband],
+      W = persons[c.wife];
     const wealth = CLASS_INFO[H.cls].wealth;
     const endYear = Math.min(H.death.year, W.death.year, W.birth + 42);
     let y = c.year + rng.int(1, 2);
@@ -255,18 +302,26 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       const sex: Sex = rng.chance(0.5) ? "M" : "F";
       const child = addPerson({
         name: sex === "M" ? rng.pick(region.maleNames) : rng.pick(region.femaleNames),
-        surname: H.surname, sex, birth: y, cls: H.cls, father: H.id, mother: W.id
+        surname: H.surname,
+        sex,
+        birth: y,
+        cls: H.cls,
+        father: H.id,
+        mother: W.id,
       });
       child.death = rollDeath(makeRng(mix(vHash, 7001 + child.id)), y, sex, wealth, region);
       c.children.push(child.id);
-      if (W.death.year === y && (W.death.age <= 43)) W.death.cause = "childbirth";
+      if (W.death.year === y && W.death.age <= 43) W.death.cause = "childbirth";
       y += rng.int(2, 4);
     }
   }
 
   // index couples on persons for O(1) family lookup
   const coupleOf: Record<number, number> = {};
-  couples.forEach((c, i) => { coupleOf[c.husband] = i; coupleOf[c.wife] = i; });
+  couples.forEach((c, i) => {
+    coupleOf[c.husband] = i;
+    coupleOf[c.wife] = i;
+  });
 
   return { worldSeed, regionKey, villageIdx, vHash, place, region, persons, couples, coupleOf };
 }

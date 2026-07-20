@@ -14,9 +14,11 @@
 // including across the rank boundary that migration (village.ts) has to
 // respect — without any risk of a resolution cycle.
 // =====================================================================
-import { addrHash, makeRng } from "./hash.js";
-import { REGIONS } from "./data/regions.js";
+
+import type { Locale } from "../i18n/locale.js";
 import { JURISDICTIONS, SAINTS } from "./data/jurisdictions.js";
+import { REGIONS } from "./data/regions.js";
+import { addrHash, makeRng } from "./hash.js";
 import type { Fief, Jurisdiction, Region } from "./types.js";
 
 // ---- ecclesiastical tree: province > diocese > deanery > parish ----
@@ -26,24 +28,32 @@ import type { Fief, Jurisdiction, Region } from "./types.js";
 // resolved once per block, deterministically).
 const PARISH_CLUSTER = 5;
 
-export function parishOf(worldSeed: number, regionKey: string, villageIdx: number): Jurisdiction {
+export function parishOf(worldSeed: number, regionKey: string, villageIdx: number, locale: Locale): Jurisdiction {
   const j = JURISDICTIONS[regionKey];
   const block = Math.floor(villageIdx / PARISH_CLUSTER);
   const blockRng = makeRng(addrHash(worldSeed, [regionKey, "parish-block", block]));
   const shared = blockRng.chance(0.3);
   const parishSlot = shared ? 0 : villageIdx % PARISH_CLUSTER;
   const pRng = makeRng(addrHash(worldSeed, [regionKey, "parish", block, parishSlot]));
-  const saint = pRng.pick(SAINTS);
+  const saint = pRng.pick(SAINTS[locale]);
   const deanery = pRng.pick(j.deaneries);
   const dRng = makeRng(addrHash(worldSeed, [regionKey, "deanery-diocese", deanery]));
   const diocese = dRng.pick(j.dioceses);
-  return {
-    parish: `the parish of ${saint}`,
-    shared,
-    deanery: `the deanery of ${deanery}`,
-    diocese: `the diocese of ${diocese}`,
-    province: j.province
-  };
+  return locale === "ca"
+    ? {
+        parish: `la parròquia de ${saint}`,
+        shared,
+        deanery: `el deganat de ${deanery}`,
+        diocese: `el bisbat de ${diocese}`,
+        province: `la província de ${j.province}`,
+      }
+    : {
+        parish: `the parish of ${saint}`,
+        shared,
+        deanery: `the deanery of ${deanery}`,
+        diocese: `the diocese of ${diocese}`,
+        province: `the province of ${j.province}`,
+      };
 }
 
 // ---- feudal tree: earldom > honour > manor ----
@@ -52,14 +62,18 @@ export function parishOf(worldSeed: number, regionKey: string, villageIdx: numbe
 // where parish boundaries fall — the whole point of the exercise.
 const HONOUR_CLUSTER = 9;
 
-function placeShortName(region: Region, villageIdx: number): string {
-  const raw = region.places[villageIdx % region.places.length];
-  const ofMatch = raw.match(/\bof\s+([^,]+)/);
+function placeShortName(region: Region, villageIdx: number, locale: Locale): string {
+  const raw = region.places[villageIdx % region.places.length][locale];
+  // English: "the village of X, ..." / "a parish in Y" — Catalan: "el poble de X, ..." / "una parròquia de Y"
+  const ofMatch = locale === "ca" ? raw.match(/\bd(?:e|')\s*([^,]+)/i) : raw.match(/\bof\s+([^,]+)/i);
   if (ofMatch) return ofMatch[1].trim();
-  return raw.replace(/^(the|a)\s+/i, "").split(",")[0].trim();
+  return raw
+    .replace(locale === "ca" ? /^(el|la|els|les|un|una)\s+/i : /^(the|a)\s+/i, "")
+    .split(",")[0]
+    .trim();
 }
 
-export function manorOf(worldSeed: number, regionKey: string, villageIdx: number): Fief {
+export function manorOf(worldSeed: number, regionKey: string, villageIdx: number, locale: Locale): Fief {
   const region = REGIONS[regionKey];
   const j = JURISDICTIONS[regionKey];
   const block = Math.floor(villageIdx / HONOUR_CLUSTER);
@@ -69,10 +83,9 @@ export function manorOf(worldSeed: number, regionKey: string, villageIdx: number
   const mRng = makeRng(addrHash(worldSeed, [regionKey, "manor", villageIdx]));
   const lordFirst = mRng.pick(region.maleNames);
   const lordSurname = mRng.chance(0.5) ? honourLord : mRng.pick(region.surnames);
-  return {
-    manor: `the manor of ${placeShortName(region, villageIdx)}`,
-    honour: `the honour of ${honourLord}`,
-    earldom: `the earldom of ${earldom}`,
-    lord: `${lordFirst} ${lordSurname}`
-  };
+  const lord = `${lordFirst} ${lordSurname}`;
+  const place = placeShortName(region, villageIdx, locale);
+  return locale === "ca"
+    ? { manor: `la senyoria de ${place}`, honour: `l'honor de ${honourLord}`, earldom: `el comtat de ${earldom}`, lord }
+    : { manor: `the manor of ${place}`, honour: `the honour of ${honourLord}`, earldom: `the earldom of ${earldom}`, lord };
 }

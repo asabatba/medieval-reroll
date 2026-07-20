@@ -1,5 +1,8 @@
+import type { Locale } from "../i18n/locale.js";
 import { plagueAt } from "./data/plagues.js";
 import type { Death, DeathCause, Region, Rng, Sex } from "./types.js";
+
+const FALLBACK_WAR: Record<Locale, string> = { en: "the wars", ca: "les guerres" };
 
 export function baseHazard(age: number): number {
   if (age === 0) return 0.19;
@@ -13,13 +16,15 @@ export function baseHazard(age: number): number {
   if (age <= 59) return 0.045;
   if (age <= 69) return 0.085;
   if (age <= 79) return 0.16;
-  return 0.30;
+  return 0.3;
 }
 
-export function famineAt(year: number, region: Region): boolean { return year >= region.famine[0] && year <= region.famine[1]; }
+export function famineAt(year: number, region: Region): boolean {
+  return year >= region.famine[0] && year <= region.famine[1];
+}
 
-export function warAt(year: number, region: Region): string | null {
-  for (const [a, b] of region.warYears) if (year >= a && year <= b) return region.warNames[a] || "the wars";
+export function warAt(year: number, region: Region, locale: Locale = "en"): string | null {
+  for (const [a, b] of region.warYears) if (year >= a && year <= b) return region.warNames[a]?.[locale] || FALLBACK_WAR[locale];
   return null;
 }
 
@@ -40,7 +45,7 @@ export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, reg
       if (wealth >= 4) mult *= 0.75;
       h = Math.min(0.9, h * mult + (plague[2] >= 10 ? 0.15 : 0.025));
     }
-    if (famine) h += (age < 5 || age > 55 ? 0.10 : 0.03);
+    if (famine) h += age < 5 || age > 55 ? 0.1 : 0.03;
     let warRisk = 0;
     if (warName && sex === "M" && age >= 16 && age <= 45) {
       warRisk = wealth >= 4 ? 0.012 : 0.005;
