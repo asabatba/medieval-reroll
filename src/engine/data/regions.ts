@@ -96,6 +96,7 @@ export const REGIONS: Record<string, Region> = {
     ],
     currency: "shillings",
     landUnit: { en: "acres", ca: "acres" },
+    inheritance: "impartible",
   },
   france: {
     name: { en: "France", ca: "França" },
@@ -151,6 +152,11 @@ export const REGIONS: Record<string, Region> = {
     currency: "sous",
     landUnit: { en: "arpents", ca: "arpents" },
     routiers: true,
+    // Much of customary France (the pays de droit écrit south, and many
+    // coutumes elsewhere) divided a holding among the sons rather than
+    // passing it whole to one — unlike the strict primogeniture of
+    // Catalonia's hereu or England's copyhold custom.
+    inheritance: "partible",
   },
   catalonia: {
     name: { en: "the Crown of Aragon", ca: "la Corona d'Aragó" },
@@ -190,6 +196,10 @@ export const REGIONS: Record<string, Region> = {
     ],
     currency: "sous",
     landUnit: { en: "quarteres", ca: "quarteres" },
+    // The Catalan hereu system: strict impartible succession, famously
+    // rigid — a single heir took the mas whole, and the rest inherited
+    // only a dowry or a cash legacy (the legítima).
+    inheritance: "impartible",
   },
   italy: {
     name: { en: "Tuscany", ca: "la Toscana" },
@@ -245,6 +255,10 @@ export const REGIONS: Record<string, Region> = {
     ],
     currency: "soldi",
     landUnit: { en: "staiora", ca: "staiora" },
+    // Tuscan customary practice widely favoured partible succession among
+    // sons (often held for a time as an undivided fraterna before actually
+    // splitting) — daughters received a dowry instead of a land share.
+    inheritance: "partible",
   },
   germany: {
     name: { en: "the Holy Roman Empire", ca: "el Sacre Imperi Romanogermànic" },
@@ -277,5 +291,6 @@ export const REGIONS: Record<string, Region> = {
     ],
     currency: "pfennige",
     landUnit: { en: "morgen", ca: "morgen" },
+    inheritance: "impartible",
   },
 };

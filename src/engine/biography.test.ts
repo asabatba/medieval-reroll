@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Locale } from "../i18n/locale.js";
 import { decodePerson } from "./biography.js";
+import { CLASS_INFO } from "./data/classes.js";
 import { REGIONS } from "./data/regions.js";
+import { isFirstBornSon } from "./succession.js";
 import { resolveVillage } from "./village.js";
 
 const REGION_KEYS = Object.keys(REGIONS);
@@ -200,5 +202,154 @@ describe("occupational-risk narrative consistency", () => {
     }
     expect(sawHazardDeath).toBeGreaterThan(0);
     expect(sawMaritimeDeath).toBeGreaterThan(0);
+  });
+});
+
+describe("§ godparents", () => {
+  it("some native births are attended by two named godparents, at the birth year, with parents on record", () => {
+    // NB: names are drawn from small per-region pools (village.ts), so a
+    // godparent can share a name with someone else entirely by chance —
+    // exclusion from the parents is by id in the engine (which this can't
+    // see through Bio's text-only event), not by string comparison here.
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      const env = resolveVillage(1444, regionKey, 4);
+      for (const p of env.persons) {
+        if (p.founder) continue;
+        const bio = decodePerson(env, p.id, "en")!;
+        const gp = bio.events.find((e) => e.year === p.birth && e.text.includes("stood godparents"));
+        if (!gp) continue;
+        seen++;
+        expect(bio.father).not.toBeNull();
+        expect(bio.mother).not.toBeNull();
+        expect(gp.text).toMatch(/^At the font, .+ and .+ stood godparents/);
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("never fires for a founder (baptism predates the register)", () => {
+    for (const regionKey of REGION_KEYS) {
+      const env = resolveVillage(1444, regionKey, 4);
+      for (const p of env.persons.filter((p) => p.founder)) {
+        const bio = decodePerson(env, p.id, "en")!;
+        expect(bio.events.some((e) => e.text.includes("stood godparents"))).toBe(false);
+      }
+    }
+  });
+});
+
+describe("§ manorial accounts (rent/tax narrative)", () => {
+  it("only ever appears for serfs and free peasants, never the other classes", () => {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 4; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const acct = bio.events.find((e) => e.text.includes("reeve's roll"));
+          if (!acct) continue;
+          seen++;
+          expect(p.cls === "serf" || p.cls === "freePeasant").toBe(true);
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("an arrears entry only lands in a famine or war year", () => {
+    let sawArrears = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 8; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const arrears = bio.events.find((e) => e.text.includes("in arrears that year"));
+          if (!arrears) continue;
+          sawArrears++;
+          const region = REGIONS[regionKey];
+          const inFamine = arrears.year >= region.famine[0] && arrears.year <= region.famine[1];
+          const inWar = region.warYears.some(([a, b]) => arrears.year >= a && arrears.year <= b);
+          expect(inFamine || inWar).toBe(true);
+        }
+      }
+    }
+    expect(sawArrears).toBeGreaterThan(0);
+  });
+});
+
+describe("§ downward mobility narrative", () => {
+  it("a downward class move (village.ts) is narrated distinctly from an upward one, and dated to age 16", () => {
+    let sawDown = 0;
+    for (const regionKey of ["england", "germany", "catalonia"]) {
+      for (let villageIdx = 0; villageIdx < 12; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          if (!p.clsOrigin || p.death.age < 16 || CLASS_INFO[p.cls].wealth >= CLASS_INFO[p.clsOrigin].wealth) continue;
+          sawDown++;
+          const bio = decodePerson(env, p.id, "en")!;
+          // same year as the class-move guard (p.birth + 16); other
+          // same-year events (e.g. a plague passage) can also land there,
+          // so match by the marker text, not by year alone.
+          const e = bio.events.find((e) => e.text.includes("not a merchant") || e.text.includes("not an artisan"));
+          expect(e).toBeDefined();
+          expect(e!.year).toBe(p.birth + 16);
+          expect(e!.kind).toBe("hardship");
+        }
+      }
+    }
+    expect(sawDown).toBeGreaterThan(0);
+  });
+
+  it("an upward class move is still narrated as a fortune, never a hardship", () => {
+    let sawUp = 0;
+    const env = resolveVillage(1444, "england", 20);
+    for (const p of env.persons) {
+      if (!p.clsOrigin || p.death.age < 16 || CLASS_INFO[p.cls].wealth <= CLASS_INFO[p.clsOrigin].wealth) continue;
+      sawUp++;
+      const bio = decodePerson(env, p.id, "en")!;
+      const e = bio.events.find(
+        (e) => e.text.includes("secured a free tenancy") || e.text.includes("place among the village artisans") || e.text.includes("live by dealing"),
+      );
+      expect(e).toBeDefined();
+      expect(e!.year).toBe(p.birth + 16);
+      expect(e!.kind).toBe("fortune");
+    }
+    expect(sawUp).toBeGreaterThan(0);
+  });
+});
+
+describe("§ regional inheritance customs narrative", () => {
+  it("a partible-region non-eldest son who stayed receives a divided-share event, distinct from sole-heir text", () => {
+    let seen = 0;
+    for (const regionKey of ["france", "italy"]) {
+      for (let villageIdx = 0; villageIdx < 15 && seen < 3; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          if (p.sex !== "M" || p.founder || p.father < 0 || p.emigrated || p.inOrders) continue;
+          if (isFirstBornSon(env, p.id)) continue; // the sole-heir case is covered elsewhere
+          const father = env.persons[p.father];
+          if (!(father.death.year > p.birth + 12 && father.death.year <= p.death.year)) continue;
+          const bio = decodePerson(env, p.id, "en")!;
+          const e = bio.events.find((e) => e.year === father.death.year && e.text.includes("divided among the sons"));
+          if (!e) continue;
+          seen++;
+          expect(e.text).not.toContain("entered the holding as heir");
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("never fires in an impartible region", () => {
+    for (const regionKey of ["england", "germany", "catalonia"]) {
+      for (let villageIdx = 0; villageIdx < 6; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          expect(bio.events.some((e) => e.text.includes("divided among the sons"))).toBe(false);
+        }
+      }
+    }
   });
 });

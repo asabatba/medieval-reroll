@@ -32,6 +32,9 @@ export { manorOf, parishOf } from "./hierarchy.js";
 // Canonical cross-village identity (§ canonical identity): resolve either of
 // a migrant's records (natal / residence) to the other.
 export { canonicalRef, findResidenceRecord, residenceRef } from "./identity.js";
+export type { AncestorNode, DescendantNode, ParentRecord } from "./lineage.js";
+// Lineage traversal (§ family tree): multi-generation ancestors/descendants.
+export { ancestorsOf, descendantsOf, parentsOf } from "./lineage.js";
 export { famineAt, warAt } from "./mortality.js";
 export { randomCitizen, roster } from "./roster.js";
 export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";

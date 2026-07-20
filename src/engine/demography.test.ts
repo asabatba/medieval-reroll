@@ -13,7 +13,7 @@ import type { Envelope } from "./types.js";
 import { resolveVillage } from "./village.js";
 
 const SEED = 1444;
-const VILLAGES_PER_REGION = 10;
+const VILLAGES_PER_REGION = 24;
 
 interface RegionStats {
   infantRate: number;
@@ -146,10 +146,15 @@ describe("aggregate demographic statistics stay within historical bands", () => 
   it.each(Object.keys(REGIONS))("%s: female first-marriage age lands inside the region's own window", (rk) => {
     // the matcher tolerates brides up to marriageF[1]+6, and a widower's
     // remarriage search (village.ts) reaches a bit further still, so the
-    // sample mean can sit somewhat above the nominal window
+    // sample mean can sit somewhat above the nominal window. Under partible
+    // custom (France, Tuscany — regions.ts), § regional inheritance customs
+    // also lets far more sons attempt a local match instead of leaving,
+    // which pushes the mean up a little further still by sheer competition
+    // for the same pool of local brides — most visible in Italy, whose
+    // marriageM/marriageF gap is already the widest of the four regions.
     const [lo, hi] = REGIONS[rk].marriageF;
     expect(STATS[rk].femaleMarriageAge).toBeGreaterThan(lo - 1);
-    expect(STATS[rk].femaleMarriageAge).toBeLessThan(hi + 5);
+    expect(STATS[rk].femaleMarriageAge).toBeLessThan(hi + 6);
   });
 
   it.each(Object.keys(REGIONS))("%s: completed families bear 3.5–8 children", (rk) => {

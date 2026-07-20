@@ -106,6 +106,13 @@ export interface Region {
   currency: string;
   landUnit: LocalText;
   routiers?: boolean;
+  /** § regional inheritance customs: "impartible" (male primogeniture — the
+   * eldest surviving son takes the whole holding, succession.ts's heirOf)
+   * or "partible" (the holding divided among the sons). Read by village.ts
+   * to decide whether the various "non-heir" mechanical penalties (heavier
+   * service, out-migration, downward mobility) apply at all — under
+   * partible custom every son had a real stake, so none of them do. */
+  inheritance: "impartible" | "partible";
 }
 
 /** Diagnostics recorded by the Tier-1 solve (§ hardening): how the marriage

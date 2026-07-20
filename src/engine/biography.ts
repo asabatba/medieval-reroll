@@ -39,6 +39,7 @@ import { citeDocument } from "./documents.js";
 import { makeRng, mix } from "./hash.js";
 import { manorOf, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
+import { parentsOf } from "./lineage.js";
 import { famineAt, warAt } from "./mortality.js";
 import { inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
@@ -266,32 +267,18 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const cite = (kind: DocumentKind) => citeDocument(kind, { jurisdiction, fief, place: env.place[locale] }, locale);
 
   // --- family lookups (all from the envelope; symmetric by construction) ---
-  let father: Person | null = p.father >= 0 ? env.persons[p.father] : null;
-  let mother: Person | null = p.mother >= 0 ? env.persons[p.mother] : null;
-  let fatherAddr = selfAddr,
-    motherAddr = selfAddr;
-  let fatherEnvForOcc: Envelope | null = father ? env : null;
-  let fatherIdForOcc: number | null = father ? father.id : null;
-
   // An immigrant's local record has no local parents (father/mother = -1),
-  // but a real originAddr points at the lower-rank village that DOES —
-  // read it, don't invent it.
-  if (!father && p.incomer && p.origin && p.originId != null) {
-    const originEnv = resolveVillage(env.worldSeed, p.origin.regionKey, p.origin.villageIdx); // lower rank: safe
-    const originPerson = originEnv.persons[p.originId];
-    if (originPerson) {
-      if (originPerson.father >= 0) {
-        father = originEnv.persons[originPerson.father];
-        fatherAddr = p.origin;
-        fatherEnvForOcc = originEnv;
-        fatherIdForOcc = originPerson.father;
-      }
-      if (originPerson.mother >= 0) {
-        mother = originEnv.persons[originPerson.mother];
-        motherAddr = p.origin;
-      }
-    }
-  }
+  // but a real origin pointer resolves to the lower-rank village that DOES —
+  // read it, don't invent it. parentsOf (lineage.ts) does this same
+  // resolution for the multi-generation ancestorsOf/descendantsOf traversal,
+  // so it lives there rather than being duplicated here.
+  const { father: fatherRec, mother: motherRec } = parentsOf(env, id);
+  const father: Person | null = fatherRec?.person ?? null;
+  const mother: Person | null = motherRec?.person ?? null;
+  const fatherAddr = fatherRec && fatherRec.env !== env ? addrOnly(fatherRec.env) : selfAddr;
+  const motherAddr = motherRec && motherRec.env !== env ? addrOnly(motherRec.env) : selfAddr;
+  const fatherEnvForOcc: Envelope | null = fatherRec ? fatherRec.env : null;
+  const fatherIdForOcc: number | null = fatherRec ? fatherRec.person.id : null;
   const fatherOccText = fatherEnvForOcc && fatherIdForOcc != null ? fatherOccupation(fatherEnvForOcc, fatherIdForOcc, locale) : null;
 
   // Natal couple: with remarriage a father can head several couples, so
@@ -378,6 +365,32 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       "birth",
       cite("reg"),
     );
+  }
+
+  // § godparents: baptismal sponsors, drawn from other adults already on
+  // record in the SAME register the birth itself belongs to — the person's
+  // own envelope for a native, or the real origin envelope for an immigrant
+  // (the same one parentsOf resolved father/mother from above) — never
+  // invented out of thin air, and skipped for a founder (whose baptism
+  // predates the register) or a fabricated incomer with no addressable origin.
+  if (fatherEnvForOcc) {
+    const baptSelfId = fatherEnvForOcc !== env && p.originId != null ? p.originId : id;
+    const pool = fatherEnvForOcc.persons.filter(
+      (q) => q.id !== baptSelfId && q.id !== father?.id && q.id !== mother?.id && q.birth + 16 <= p.birth && q.death.year > p.birth,
+    );
+    const godfathers = pool.filter((q) => q.sex === "M");
+    const godmothers = pool.filter((q) => q.sex === "F");
+    if (godfathers.length && godmothers.length) {
+      const gf = rng.pick(godfathers);
+      const gm = rng.pick(godmothers);
+      ev(
+        p.birth,
+        ca
+          ? `Als peus de la pica, ${gf.name} ${gf.surname} i ${gm.name} ${gm.surname} en van ser els padrins, i van respondre per {{ell/ella}} davant el capellà.`
+          : `At the font, ${gf.name} ${gf.surname} and ${gm.name} ${gm.surname} stood godparents, and answered for ${obj} before the priest.`,
+        "life",
+      );
+    }
   }
 
   // Plague passages: family losses read from ACTUAL envelope deaths
@@ -554,23 +567,58 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // § mobility: the person left their natal class on coming of age
+  // § mobility: the person left their natal class on coming of age — either
+  // up (serfToFree/freeToArtisan/artisanToMerchant, village.ts rollMobility)
+  // or, for a non-heir son under impartible custom, down (§ downward
+  // mobility, rollDownwardMobility). Direction is read off the wealth
+  // grades themselves, not stored separately on the Person.
   if (p.clsOrigin && p.death.age >= 16) {
     const y = p.birth + 16;
+    const rose = CLASS_INFO[p.cls].wealth > CLASS_INFO[p.clsOrigin].wealth;
     let t: string;
-    if (p.clsOrigin === "serf")
+    if (rose) {
+      if (p.clsOrigin === "serf")
+        t = ca
+          ? `Va sortir de la servitud: en el camp despoblat va aconseguir una tinença lliure, i el registre {{el/la}} comença a anomenar pagès{{/a}} lliure.`
+          : `Rose out of servitude: in the emptied countryside ${p.sex === "M" ? "he" : "she"} secured a free tenancy, and the rolls begin to style ${obj} a free tenant.`;
+      else if (p.clsOrigin === "freePeasant")
+        t = ca
+          ? `Va deixar la terra per un ofici: aprenentatge a un taller, i amb els anys un lloc propi entre l'artesanat del poble.`
+          : `Left the land for a trade: an apprenticeship in a workshop, and in time a place among the village artisans.`;
+      else
+        t = ca
+          ? `Va arriscar els estalvis del taller en el comerç, i li va anar bé: la casa va passar a viure dels tractes i no de les mans.`
+          : `Ventured the workshop's savings in trade, and prospered: the household came to live by dealing rather than by its hands.`;
+    } else if (p.clsOrigin === "merchant")
       t = ca
-        ? `Va sortir de la servitud: en el camp despoblat va aconseguir una tinença lliure, i el registre {{el/la}} comença a anomenar pagès{{/a}} lliure.`
-        : `Rose out of servitude: in the emptied countryside ${p.sex === "M" ? "he" : "she"} secured a free tenancy, and the rolls begin to style ${obj} a free tenant.`;
-    else if (p.clsOrigin === "freePeasant")
-      t = ca
-        ? `Va deixar la terra per un ofici: aprenentatge a un taller, i amb els anys un lloc propi entre l'artesanat del poble.`
-        : `Left the land for a trade: an apprenticeship in a workshop, and in time a place among the village artisans.`;
+        ? `Sense taller ni crèdit que heretar, només li va quedar l'ofici de les mans: el registre {{el/la}} comença a anomenar simplement artesà{{/na}}, no mercader.`
+        : `With no shop or its credit to inherit, ${p.sex === "M" ? "he" : "she"} kept only the trade of the hands: the rolls begin to style ${obj} a plain artisan, not a merchant.`;
     else
       t = ca
-        ? `Va arriscar els estalvis del taller en el comerç, i li va anar bé: la casa va passar a viure dels tractes i no de les mans.`
-        : `Ventured the workshop's savings in trade, and prospered: the household came to live by dealing rather than by its hands.`;
-    ev(y, t, "fortune", cite("court"));
+        ? `Sense taller propi que heretar, va tornar a treballar la terra: el registre {{el/la}} comença a anomenar pagès{{/a}}, no artesà{{/na}}.`
+        : `With no workshop of his own to inherit, ${p.sex === "M" ? "he" : "she"} went back to working the land: the rolls begin to style ${obj} a peasant, not an artisan.`;
+    ev(y, t, rose ? "fortune" : "hardship", cite("court"));
+  }
+
+  // § manorial accounts: a periodic entry in the reeve's roll — the rent
+  // and boon-works owed for the holding, sometimes in arrears after a bad
+  // harvest — for the tenant classes who actually rendered such dues in
+  // this model (artisans/merchants/gentry/clergy held by other tenures).
+  if ((p.cls === "serf" || p.cls === "freePeasant") && p.death.age >= 20 && rng.chance(0.3)) {
+    const y = p.birth + rng.int(20, Math.min(50, p.death.age));
+    const badYear = famineAt(y, region) || !!warAt(y, region);
+    ev(
+      y,
+      badYear
+        ? ca
+          ? `El rotlle del batlle {{el/la}} anota en deute aquell any — la renda i les prestacions no pagades, ajornades contra la collita següent.`
+          : `The reeve's roll notes ${obj} in arrears that year — rent and boon-works owed and not yet paid, carried forward against next year's harvest.`
+        : ca
+          ? `El rotlle del batlle registra ${p.name} rendint la renda i les prestacions acostumades de la tinença, en diners i en espècie, com cada any.`
+          : `The reeve's roll records ${p.name} rendering the customary rent and boon-works for the holding, in coin and kind, as every year.`,
+      badYear ? "hardship" : "life",
+      cite("account"),
+    );
   }
 
   // § inheritance: succession to the father's holding, from succession.ts —
@@ -583,6 +631,23 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         ca
           ? `A la mort del seu pare va entrar a la tinença com a hereu{{/va}}, pagant al senyor el lluïsme acostumat — la millor bèstia de la casa.`
           : `At ${pos} father's death entered the holding as heir, paying the lord the customary relief — the best beast of the house.`,
+        "fortune",
+        cite("court"),
+      );
+    }
+  } else if (p.father >= 0 && region.inheritance === "partible" && p.sex === "M" && !p.emigrated && !p.inOrders) {
+    // § regional inheritance customs: under partible custom (France,
+    // Tuscany — regions.ts) land was divided among the sons instead of
+    // passing whole to one — a surviving, non-departing son who wasn't the
+    // customary household heir still took a real share, narrated distinctly
+    // from both the sole-heir text above and plain silence.
+    const father = env.persons[p.father];
+    if (father.death.year > p.birth + 12 && father.death.year <= p.death.year) {
+      ev(
+        father.death.year,
+        ca
+          ? `A la mort del seu pare va rebre la seva part de la terra, partida entre els fills com era costum aquí, no passada sencera a un de sol.`
+          : `At ${pos} father's death received ${pos} share of the land, divided among the sons as was the custom here, not passed whole to one.`,
         "fortune",
         cite("court"),
       );
@@ -682,7 +747,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         "marriage",
       );
     } else {
-      const heir = isFirstBornSon(env, id);
+      const heir = region.inheritance === "partible" || isFirstBornSon(env, id);
       const reasons = ca
         ? [
             `Sense terra pròpia que esperar, va marxar${destText} a provar sort en un ofici.`,

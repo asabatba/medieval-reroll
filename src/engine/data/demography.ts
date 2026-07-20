@@ -52,6 +52,17 @@ export interface RegionDemography {
     serfToFree: { base: number; postPlague: number };
     freeToArtisan: { base: number; postPlague: number };
     artisanToMerchant: { base: number; postPlague: number };
+    /** § downward mobility: the mirror of the upward rates above, for a
+     * non-heir son of an artisan/merchant house under IMPARTIBLE custom —
+     * no shop or trade capital of his own to inherit, so no rung to defend
+     * either. Unlike the upward rates, these are HIGHER before 1349 (land
+     * hunger gave a non-heir fewer real alternatives) and lower after (the
+     * post-plague glut gave him somewhere else to go instead of sliding
+     * down). Never exercised in a "partible" region — see Region.inheritance. */
+    nonHeirDowngrade: {
+      merchantToArtisan: { base: number; postPlague: number };
+      artisanToFree: { base: number; postPlague: number };
+    };
   };
   /** § maternal mortality: calibrated so the RESULTING per-registered-birth death rate lands
    * near the historical ~1–1.5%, not the raw target itself — rollDeath applies the derived
@@ -96,6 +107,10 @@ const NW_DEFAULT: RegionDemography = {
     serfToFree: { base: 0.03, postPlague: 0.12 },
     freeToArtisan: { base: 0.04, postPlague: 0.07 },
     artisanToMerchant: { base: 0.02, postPlague: 0.04 },
+    nonHeirDowngrade: {
+      merchantToArtisan: { base: 0.16, postPlague: 0.06 },
+      artisanToFree: { base: 0.14, postPlague: 0.05 },
+    },
   },
   maternalMortalityPerBirth: 0.012,
   maleOutMigration: { nonHeirBase: 0.42, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.3 },
@@ -131,6 +146,12 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
       serfToFree: { base: 0.02, postPlague: 0.08 }, // remença servitude was sticky until 1486
       freeToArtisan: { base: 0.04, postPlague: 0.07 },
       artisanToMerchant: { base: 0.03, postPlague: 0.05 },
+      // the hereu system's flip side: a non-heir who stayed rather than
+      // emigrating had markedly less to fall back on than in NW Europe
+      nonHeirDowngrade: {
+        merchantToArtisan: { base: 0.22, postPlague: 0.1 },
+        artisanToFree: { base: 0.2, postPlague: 0.09 },
+      },
     },
     maternalMortalityPerBirth: 0.0052,
     maleOutMigration: { nonHeirBase: 0.32, heirBase: 0.05, pressured: 0.5, groomPullChance: 0.22 }, // stronger land ties, less rural out-migration
@@ -148,6 +169,13 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
       serfToFree: { base: 0.04, postPlague: 0.1 },
       freeToArtisan: { base: 0.05, postPlague: 0.08 },
       artisanToMerchant: { base: 0.03, postPlague: 0.05 },
+      // inert here: Tuscany is a "partible" region (regions.ts), so
+      // village.ts's isHeir() never treats a son as a non-heir to begin
+      // with — these values exist only so every region's shape agrees.
+      nonHeirDowngrade: {
+        merchantToArtisan: { base: 0.16, postPlague: 0.06 },
+        artisanToFree: { base: 0.14, postPlague: 0.05 },
+      },
     },
     maternalMortalityPerBirth: 0.0068,
     maleOutMigration: { nonHeirBase: 0.3, heirBase: 0.05, pressured: 0.48, groomPullChance: 0.2 }, // urban guild apprenticeship more local than rural flight

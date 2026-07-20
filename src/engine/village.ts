@@ -39,7 +39,7 @@ import { REGIONS } from "./data/regions.js";
 import { addrHash, makeRng, personStream } from "./hash.js";
 import { famineAt, rollDeath, warAt } from "./mortality.js";
 import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
-import type { Address, Couple, Death, Envelope, Person, RiskTrade, Sex, SocialClass } from "./types.js";
+import type { Address, Couple, Death, Envelope, Person, Region, RiskTrade, Sex, SocialClass } from "./types.js";
 
 // § hardening: the envelope cache is a bounded LRU, not an unbounded map —
 // a long-running session that browses thousands of addresses stays flat in
@@ -133,6 +133,17 @@ function eldestSonOf(persons: readonly Person[], p: Person): boolean {
   return true;
 }
 
+// § regional inheritance customs: under partible custom (France, Tuscany —
+// see regions.ts) land was divided among the sons instead of passing whole
+// to one, so every son had a real stake worth staying for. The various
+// "non-heir" mechanical penalties below (heavier service, out-migration,
+// downward mobility) read THIS, not eldestSonOf directly, so they simply
+// never apply in a partible region rather than needing a separate flag at
+// every call site.
+function isHeir(persons: readonly Person[], region: Region, p: Person): boolean {
+  return region.inheritance === "partible" || eldestSonOf(persons, p);
+}
+
 function solveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
   const region = REGIONS[regionKey];
   const demo = demographyOf(regionKey);
@@ -169,6 +180,44 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     }
   }
 
+  // § downward mobility: the mirror of rollMobility, for a non-heir son of
+  // an artisan/merchant house who has no shop or trade capital of his own
+  // to inherit — no rung to defend either. Never fires under partible
+  // custom (isHeir already reads every son as a stakeholder there, so
+  // nonHeirSon is always false) or if rollMobility already moved this
+  // person up — one class transition at birth, not two.
+  function rollDownwardMobility(p: Person, nonHeirSon: boolean): void {
+    if (!nonHeirSon || p.clsOrigin) return;
+    const r = makeRng(personStream(vHash, 960000, p.id));
+    const post = p.birth + 16 >= 1350;
+    const d = demo.mobility.nonHeirDowngrade;
+    let next: SocialClass | null = null;
+    if (p.cls === "merchant" && r.chance(post ? d.merchantToArtisan.postPlague : d.merchantToArtisan.base)) next = "artisan";
+    else if (p.cls === "artisan" && r.chance(post ? d.artisanToFree.postPlague : d.artisanToFree.base)) next = "freePeasant";
+    if (next) {
+      p.clsOrigin = p.cls;
+      p.cls = next;
+    }
+  }
+
+  // § dual surnames (Catalonia): the Iberian convention of a compound
+  // surname — the father's own FIRST surname plus the mother's own FIRST
+  // surname — fixed at birth and never replaced at marriage. `surnameLine`
+  // strips a compound surname back down to the one component that is
+  // actually transmissible; `drawSurname`/`childSurname` are single-name
+  // elsewhere, compound only here.
+  function surnameLine(s: string): string {
+    const i = s.indexOf(" i ");
+    return i < 0 ? s : s.slice(0, i);
+  }
+  function drawSurname(pool?: string[]): string {
+    const one = () => (pool?.length ? pool.splice(rng.int(0, pool.length - 1), 1)[0] : rng.pick(region.surnames));
+    return regionKey === "catalonia" ? `${one()} i ${one()}` : one();
+  }
+  function childSurname(H: Person, W: Person): string {
+    return regionKey === "catalonia" ? `${surnameLine(H.surname)} i ${surnameLine(W.surname)}` : H.surname;
+  }
+
   // § service: low-wealth children commonly spent adolescence in service or
   // apprenticeship in another household (the NW-European life-cycle-service
   // pattern; rarer in the Mediterranean — rates come from demography.ts).
@@ -191,13 +240,13 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   for (let i = 0; i < founderCouples; i++) {
     const cls = rng.weighted(CLASSES);
     const wealth = CLASS_INFO[cls].wealth;
-    const surname = surnamePool.length ? surnamePool.splice(rng.int(0, surnamePool.length - 1), 1)[0] : rng.pick(region.surnames);
+    const surname = drawSurname(surnamePool);
     const hb = rng.int(1235, 1272);
     const wb = hb + rng.int(1, 6);
     const H = addPerson({ name: rng.pick(region.maleNames), surname, sex: "M", birth: hb, cls, father: -1, mother: -1, founder: true });
     const W = addPerson({
       name: rng.pick(region.femaleNames),
-      surname: rng.pick(region.surnames),
+      surname: drawSurname(),
       sex: "F",
       birth: wb,
       cls,
@@ -250,7 +299,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const sex: Sex = rng.chance(0.5) ? "M" : "F";
     const child = addPerson({
       name: sex === "M" ? rng.pick(region.maleNames) : rng.pick(region.femaleNames),
-      surname: H.surname,
+      surname: childSurname(H, W),
       sex,
       birth: y,
       cls: H.cls,
@@ -258,12 +307,19 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       mother: W.id,
     });
     rollMobility(child);
+    // § male out-migration / § downward mobility: both class-transition
+    // rolls happen BEFORE riskTradeOf, so the trade-hazard tag it derives
+    // always reflects the child's FINAL class, never a stale pre-transition
+    // one (occupation narrative in biography.ts reads p.cls fresh anyway,
+    // but riskTrade is rolled once here and must agree with it).
+    const nonHeirSon = child.sex === "M" && !isHeir(persons, region, child);
+    rollDownwardMobility(child, nonHeirSon);
     child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
     child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
     // § male out-migration: a non-heir son — of ANY wealth grade, not just
     // the low-wealth default rollService already covers — is likelier to be
     // sent into service or apprenticeship elsewhere, since he won't inherit.
-    rollService(child, child.sex === "M" && !eldestSonOf(persons, child));
+    rollService(child, nonHeirSon);
     c.children.push(child.id);
   }
 
@@ -346,7 +402,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         // ~10% of real villages deserted by 1500).
         // § male out-migration: an heir had a tenement to offer a bride and
         // marries reliably; a non-heir is a somewhat less attractive match.
-        const heir = eldestSonOf(persons, M);
+        const heir = isHeir(persons, region, M);
         if (rng.chance(heir ? 0.07 : 0.12)) continue; // never marries
         if (M.cls === "clergyFamily" && rng.chance(0.35)) {
           M.inOrders = true;
@@ -402,7 +458,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
             const wb = wantYear - rng.int(region.marriageF[0], region.marriageF[1]);
             W = addPerson({
               name: rng.pick(region.femaleNames),
-              surname: rng.pick(region.surnames),
+              surname: drawSurname(),
               sex: "F",
               birth: wb,
               cls: M.cls,
@@ -510,7 +566,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   for (const M of persons) {
     if (M.sex !== "M" || M.founder || M.spouse != null || M.emigrated || M.inOrders) continue;
     if (M.death.age < region.marriageM[1]) continue;
-    const heir = eldestSonOf(persons, M);
+    const heir = isHeir(persons, region, M);
     const atYear = M.birth + region.marriageM[1];
     const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
     const chance = pressured ? demo.maleOutMigration.pressured : heir ? demo.maleOutMigration.heirBase : demo.maleOutMigration.nonHeirBase;
