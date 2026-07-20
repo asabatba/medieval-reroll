@@ -935,31 +935,136 @@ details.village {
   color: #6d6046;
 }
 
-/* ---- Family tree (§ one-step tree) ---- */
-.famtree {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+/* ---- Family tree (§ one-step tree) ----
+   A genealogical outline, not a card grid: a tree is naturally a nested
+   list, so indentation + branch lines convey the structure directly and
+   need no computed alignment between generations. */
+.fam-tree {
+  font-size: 15px;
 }
-.ft-tier {
+.fam-parents {
   display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  width: 100%;
+  gap: 4px 2px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(58, 50, 32, 0.6);
 }
-.ft-tier .rel {
-  flex: 0 1 170px;
-  min-width: 140px;
-  max-width: 220px;
+.fam-knot {
+  color: var(--gilt);
+  font-size: 12px;
+  margin: 0 6px;
 }
-.ft-link {
+
+/* one tier of the tree: a vertical guide line down the left edge of each
+   entry, trimmed short on the last so the trunk doesn't overrun it, with
+   a horizontal tick per entry marking its branch point. */
+.fam-branch {
+  margin-left: 6px;
+}
+.fam-leaf {
+  position: relative;
+  padding: 6px 0 6px 20px;
+}
+.fam-leaf::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 1px;
-  height: 20px;
   background: var(--line);
 }
-.ft-self-row .rel.self {
-  flex-basis: 180px;
+.fam-leaf:last-child::before {
+  bottom: auto;
+  height: 19px;
+}
+.fam-leaf::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 19px;
+  width: 16px;
+  height: 1px;
+  background: var(--line);
+}
+
+.fam-node {
+  font-family: "Fraunces", serif;
+  color: var(--bone);
+  background: none;
+  border: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  text-align: left;
+}
+button.fam-node {
+  cursor: pointer;
+}
+button.fam-node:hover {
+  color: var(--gilt);
+}
+button.fam-node:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 2px;
+}
+.fam-node.dead-young {
+  color: var(--bone-dim);
+}
+.fam-node.self {
+  color: var(--gilt);
+  font-weight: 600;
+}
+.fam-dates {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--bone-dim);
+  white-space: nowrap;
+}
+.fam-dates .fam-dagger {
+  color: var(--rubric);
+}
+
+.fam-self-leaf {
+  padding-left: 20px;
+}
+.fam-self-leaf.fam-leaf {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.fam-self-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.fam-tag {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+}
+.fam-unions {
+  margin-top: 6px;
+}
+.fam-union {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.fam-union .fam-knot {
+  margin: 0;
+  font-size: 11px;
+}
+.fam-self-leaf > .fam-branch {
+  margin-top: 6px;
+}
+.fam-root {
+  padding-left: 0;
 }
 
 /* ---- Mobile / narrow viewports ---- */

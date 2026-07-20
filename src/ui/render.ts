@@ -74,35 +74,73 @@ function relCard(who: string, person: RelCardPerson, addr: string, opts?: RelCar
   return `<button class="rel ${cls}" data-goto="${addr}">${inner}</button>`;
 }
 
+interface FamNodePerson {
+  name: string;
+  birth: number;
+  death: Death;
+}
+
+// A single clickable name+dates entry in the tree. `addr` null renders a
+// non-interactive node (self — already the open record, nowhere to go).
+function famNode(name: string, person: FamNodePerson, addr: string | null, opts?: { self?: boolean }): string {
+  const dates = fateStr(person.death, person.birth);
+  const cls = "fam-node" + (person.death.age < 16 ? " dead-young" : "") + (opts?.self ? " self" : "");
+  const inner = `${esc(name)}<span class="fam-dates">${person.death.age < 16 ? '<span class="fam-dagger">' + dates + "</span>" : dates}</span>`;
+  if (!addr) return `<span class="${cls}">${inner}</span>`;
+  return `<button class="${cls}" data-goto="${addr}">${inner}</button>`;
+}
+
 // § one-step family tree: parents, then this generation (siblings, self,
 // spouse(s)), then children — the compact diagram counterpart to the
 // separate Parentage/Siblings/Marriage-&-issue list sections above, all
 // drawn from the same Bio facts (never a new resolve). "One step" means
 // exactly one generation each direction from self; it intentionally does
 // NOT reach into grandparents/grandchildren or a sibling's own spouse.
+//
+// Rendered as a genealogical outline (parents line, then a branch list of
+// siblings with self inserted in birth order and its own spouse/children
+// nested underneath) rather than a card grid — a tree is naturally a
+// nested list, so this needs no computed alignment between tiers, stays
+// legible at any family size, and reads as an actual tree instead of a
+// stack of same-sized boxes.
 function renderFamilyTree(t: (typeof UI)[Locale], bio: Bio): string {
-  const parentCards =
-    (bio.father ? relCard(t.father, bio.father, addrStr(bio.father.addr, bio.father.id)) : "") +
-    (bio.mother ? relCard(t.mother, bio.mother, addrStr(bio.mother.addr, bio.mother.id)) : "");
+  const parentsHtml =
+    bio.father || bio.mother
+      ? `<div class="fam-parents">${bio.father ? famNode(bio.father.name, bio.father, addrStr(bio.father.addr, bio.father.id)) : ""}${
+          bio.father && bio.mother ? '<span class="fam-knot" aria-hidden="true">⚭</span>' : ""
+        }${bio.mother ? famNode(bio.mother.name, bio.mother, addrStr(bio.mother.addr, bio.mother.id)) : ""}</div>`
+      : "";
 
-  const selfCard = relCard(t.self(bio.sex), bio, "", { self: true });
-  const siblingCards = bio.siblings.map((s) => relCard(s.sex === "M" ? t.brother : t.sister, s, addrStr(s.addr, s.id))).join("");
-  const spouseCards = bio.unions
-    .map((u) =>
-      relCard(
-        bio.sex === "M" ? t.wife : t.husband,
-        { name: u.spouse.name, surname: "", birth: u.spouse.birth, death: u.spouse.death },
-        addrStr(u.spouse.addr, u.spouse.id),
-      ),
-    )
+  const selfName = bio.name + (bio.surname ? " " + bio.surname : "");
+  const unionsHtml = bio.unions.length
+    ? `<div class="fam-unions">${bio.unions
+        .map(
+          (u) =>
+            `<div class="fam-union"><span class="fam-knot" aria-hidden="true">⚭</span>${famNode(u.spouse.name, u.spouse, addrStr(u.spouse.addr, u.spouse.id))}</div>`,
+        )
+        .join("")}</div>`
+    : "";
+  const childrenHtml = bio.children.length
+    ? `<div class="fam-branch">${bio.children.map((c) => `<div class="fam-leaf">${famNode(c.name, c, addrStr(c.addr, c.id))}</div>`).join("")}</div>`
+    : "";
+
+  const selfInner = `<div class="fam-self-row">${famNode(selfName, bio, null, { self: true })}<span class="fam-tag">${esc(t.self(bio.sex))}</span></div>${unionsHtml}${childrenHtml}`;
+
+  const sibLeaf = (s: (typeof bio.siblings)[number]) => `<div class="fam-leaf">${famNode(s.name, s, addrStr(s.addr, s.id))}</div>`;
+  const elderHtml = bio.siblings
+    .filter((s) => s.birth <= bio.birth)
+    .map(sibLeaf)
+    .join("");
+  const youngerHtml = bio.siblings
+    .filter((s) => s.birth > bio.birth)
+    .map(sibLeaf)
     .join("");
 
-  const childCards = bio.children.map((c) => relCard(c.sex === "M" ? t.son : t.daughter, c, addrStr(c.addr, c.id))).join("");
-
-  let html = `<div class="sect reveal"><h2>${esc(t.familyTree)}</h2></div><div class="famtree reveal">`;
-  if (parentCards) html += `<div class="ft-tier ft-parents">${parentCards}</div><div class="ft-link"></div>`;
-  html += `<div class="ft-tier ft-self-row">${siblingCards}${selfCard}${spouseCards}</div>`;
-  if (childCards) html += `<div class="ft-link"></div><div class="ft-tier ft-children">${childCards}</div>`;
+  let html = `<div class="sect reveal"><h2>${esc(t.familyTree)}</h2></div><div class="fam-tree reveal">${parentsHtml}`;
+  html +=
+    parentsHtml || bio.siblings.length
+      ? `<div class="fam-branch">${elderHtml}<div class="fam-leaf fam-self-leaf">${selfInner}</div>${youngerHtml}</div>`
+      : `<div class="fam-self-leaf fam-root">${selfInner}</div>`;
   html += `</div>`;
   return html;
 }
