@@ -254,7 +254,10 @@ h1.name .init {
   text-transform: uppercase;
   font-weight: 500;
   color: var(--gilt);
-  white-space: nowrap;
+  /* a dynamic header ("Siblings — 9, of whom 6 died young") can run long —
+     let it wrap instead of forcing the flex row (and the whole page) wider */
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 .sect::after {
   content: "";
