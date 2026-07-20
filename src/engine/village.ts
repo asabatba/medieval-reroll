@@ -91,8 +91,14 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     H.death = rollDeath(makeRng(mix(vHash, 7001 + H.id)), hb, "M", wealth, region);
     W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", wealth, region);
     // founders are guaranteed to reach marriage (they existed to found the line)
-    if (H.death.age < 24) H.death = { year: hb + 24 + rng.int(0, 30), age: 24 + rng.int(0, 30), cause: "disease" };
-    if (W.death.age < 20) W.death = { year: wb + 20 + rng.int(0, 30), age: 20 + rng.int(0, 30), cause: "disease" };
+    if (H.death.age < 24) {
+      const extra = rng.int(0, 30);
+      H.death = { year: hb + 24 + extra, age: 24 + extra, cause: "disease" };
+    }
+    if (W.death.age < 20) {
+      const extra = rng.int(0, 30);
+      W.death = { year: wb + 20 + extra, age: 20 + extra, cause: "disease" };
+    }
     marry(H, W, Math.max(hb + rng.int(22, 26), wb + rng.int(17, 20)));
   }
 
@@ -255,7 +261,10 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
             origin: null,
           });
           W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region);
-          if (W.death.year <= wantYear) W.death = { year: wantYear + 1 + rng.int(0, 25), age: wantYear + 1 + rng.int(0, 25) - wb, cause: "disease" };
+          if (W.death.year <= wantYear) {
+            const deathYear = wantYear + 1 + rng.int(0, 25);
+            W.death = { year: deathYear, age: deathYear - wb, cause: "disease" };
+          }
         }
         const c = marry(M, W, wantYear);
         if (c) genChildrenLate(c);
