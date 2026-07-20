@@ -25,23 +25,29 @@ function addrStr(addr: Address, id: number): string {
 // § name links: an event's own text is plain prose (biography.ts never
 // emits markup) — `refs` names exactly which substrings are other people,
 // so this is the one place that turns them into clickable goto buttons,
-// escaping everything else. Overlapping/unfound refs are simply skipped.
+// escaping everything else. A ref is consumed once, so equal names can link
+// to distinct people when they occur more than once in the same event.
 export function linkifyEventText(text: string, refs: EventRef[] | undefined): string {
   if (!refs?.length) return esc(text);
-  const matches = refs
-    .map((r) => ({ start: text.indexOf(r.name), ref: r }))
-    .filter((m) => m.start !== -1)
-    .sort((a, b) => a.start - b.start);
+  const remaining = refs.filter((r) => r.name.length > 0);
   let out = "";
   let cursor = 0;
-  for (const m of matches) {
-    if (m.start < cursor) continue; // overlapping with a previous match — skip
-    const end = m.start + m.ref.name.length;
-    out += esc(text.slice(cursor, m.start));
-    out += `<button class="namelink" data-goto="${addrStr(m.ref.addr, m.ref.id)}">${esc(text.slice(m.start, end))}</button>`;
+  while (cursor < text.length) {
+    const matches = remaining
+      .map((ref, index) => ({ ref, index }))
+      .filter(({ ref }) => text.startsWith(ref.name, cursor))
+      .sort((a, b) => b.ref.name.length - a.ref.name.length || a.index - b.index);
+    const match = matches[0];
+    if (!match) {
+      out += esc(text[cursor]);
+      cursor++;
+      continue;
+    }
+    remaining.splice(match.index, 1);
+    const end = cursor + match.ref.name.length;
+    out += `<button class="namelink" data-goto="${addrStr(match.ref.addr, match.ref.id)}">${esc(text.slice(cursor, end))}</button>`;
     cursor = end;
   }
-  out += esc(text.slice(cursor));
   return out;
 }
 

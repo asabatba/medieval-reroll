@@ -71,7 +71,6 @@ export function initApp(): void {
   function render(pushUrl = true, announce = true): void {
     const node = stack[stack.length - 1];
     const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
-    node.personId = Math.min(node.personId, env.persons.length - 1);
     const html = buildRecordHTML(E, worldSeed, stack, locale);
     const loc = locator(worldSeed, node);
     seedbox.value = loc;
@@ -100,11 +99,16 @@ export function initApp(): void {
     const yearOut = out.querySelector<HTMLOutputElement>("#vyearout");
     const vbody = out.querySelector<HTMLElement>("#vbody");
     if (slider && yearOut && vbody) {
+      let frame: number | null = null;
       slider.addEventListener("input", () => {
         const year = +slider.value;
         yearOut.textContent = String(year);
-        vbody.innerHTML = renderVillageBody(E, env, year, locale, node.personId);
-        bindGoto(vbody);
+        if (frame != null) cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          frame = null;
+          vbody.innerHTML = renderVillageBody(E, env, year, locale, node.personId);
+          bindGoto(vbody);
+        });
       });
     }
   }
@@ -112,6 +116,13 @@ export function initApp(): void {
   function openLocator(raw: string, pushUrl = true): boolean {
     const parsed = parseLocator(raw);
     if (!parsed) {
+      locatorError.textContent = UI[locale].locatorError;
+      seedbox.setAttribute("aria-invalid", "true");
+      seedbox.focus();
+      return false;
+    }
+    const env = E.resolveVillage(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx);
+    if (!env.persons[parsed.node.personId]) {
       locatorError.textContent = UI[locale].locatorError;
       seedbox.setAttribute("aria-invalid", "true");
       seedbox.focus();
@@ -125,10 +136,10 @@ export function initApp(): void {
     return true;
   }
 
-  function roll(): void {
+  function roll(pushUrl = true): void {
     const a = E.randomCitizen(worldSeed, Math.random);
     stack = [a];
-    render();
+    render(pushUrl);
   }
 
   function newWorld(): void {
@@ -148,7 +159,7 @@ export function initApp(): void {
     });
   });
 
-  rollBtn.addEventListener("click", roll);
+  rollBtn.addEventListener("click", () => roll());
   newWorldBtn.addEventListener("click", newWorld);
   replayBtn.addEventListener("click", () => {
     openLocator(seedbox.value);
@@ -165,9 +176,13 @@ export function initApp(): void {
   window.addEventListener("hashchange", () => {
     const cur = stack[stack.length - 1];
     if (cur && location.hash.slice(1) === locator(worldSeed, cur)) return; // our own push
-    openLocator(location.hash, false);
+    if (!openLocator(location.hash, false) && stack.length) render(false, false);
   });
 
   applyChrome();
-  if (!openLocator(location.hash, false)) roll();
+  if (location.hash) {
+    if (!openLocator(location.hash, false)) roll(false);
+  } else {
+    roll(false);
+  }
 }

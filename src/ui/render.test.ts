@@ -42,6 +42,13 @@ describe("linkifyEventText", () => {
     expect(out).toBe('<button class="namelink" data-goto="england:3:7">Agnes Carter</button> married.');
   });
 
+  it("links repeated names to their distinct references in text order", () => {
+    const out = linkifyEventText("Agnes Carter and Agnes Carter stood godparents.", [ref(2, "Agnes Carter"), ref(7, "Agnes Carter")]);
+    expect(out).toBe(
+      '<button class="namelink" data-goto="england:3:2">Agnes Carter</button> and <button class="namelink" data-goto="england:3:7">Agnes Carter</button> stood godparents.',
+    );
+  });
+
   it("escapes HTML-significant characters in both the linked name and the surrounding text", () => {
     const out = linkifyEventText("A & B married C <D>.", [ref(1, "C <D>")]);
     expect(out).toBe('A &amp; B married <button class="namelink" data-goto="england:3:1">C &lt;D></button>.');
