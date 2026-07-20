@@ -9,11 +9,11 @@ import { buildRecordHTML, locator, renderVillageBody, type StackNode } from "./r
 function parseLocator(s: string): { worldSeed: number; node: StackNode } | null {
   const parts = s.trim().replace(/^#/, "").split(":");
   if (parts.length !== 4) return null;
-  const worldSeed = Number.parseInt(parts[0], 10);
-  const villageIdx = Number.parseInt(parts[2], 10);
-  const personId = Number.parseInt(parts[3], 10);
-  if (Number.isNaN(worldSeed) || !E.REGIONS[parts[1]] || Number.isNaN(villageIdx) || Number.isNaN(personId)) return null;
-  if (villageIdx < 0 || personId < 0) return null;
+  const worldSeed = Number(parts[0]);
+  const villageIdx = Number(parts[2]);
+  const personId = Number(parts[3]);
+  if (!Number.isSafeInteger(worldSeed) || !E.REGIONS[parts[1]] || !Number.isSafeInteger(villageIdx) || !Number.isSafeInteger(personId)) return null;
+  if (worldSeed < 0 || villageIdx < 0 || personId < 0) return null;
   return { worldSeed, node: { regionKey: parts[1], villageIdx, personId } };
 }
 
@@ -21,8 +21,12 @@ export function initApp(): void {
   const out = document.getElementById("out") as HTMLElement;
   const seedbox = document.getElementById("seedbox") as HTMLInputElement;
   const intro = document.getElementById("intro") as HTMLElement;
+  const worldseed = document.getElementById("worldseed") as HTMLElement;
+  const locatorError = document.getElementById("locator-error") as HTMLElement;
+  const status = document.getElementById("status") as HTMLElement;
   const replayBtn = document.getElementById("replay") as HTMLButtonElement;
   const rollBtn = document.getElementById("roll") as HTMLButtonElement;
+  const newWorldBtn = document.getElementById("new-world") as HTMLButtonElement;
   const langsw = document.getElementById("langsw") as HTMLElement;
 
   let locale: Locale = getLocale();
@@ -38,9 +42,15 @@ export function initApp(): void {
     replayBtn.textContent = t.openRecord;
     replayBtn.title = t.openRecordTitle;
     rollBtn.textContent = t.rollALife;
+    rollBtn.title = t.rollALife;
+    newWorldBtn.textContent = t.newWorld;
+    newWorldBtn.title = t.newWorldTitle;
+    worldseed.textContent = t.worldSeed(worldSeed);
     intro.innerHTML = t.intro;
     langsw.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
-      b.classList.toggle("active", b.dataset.lang === locale);
+      const active = b.dataset.lang === locale;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-pressed", String(active));
     });
   }
 
@@ -58,13 +68,14 @@ export function initApp(): void {
     });
   }
 
-  function render(pushUrl = true): void {
+  function render(pushUrl = true, announce = true): void {
     const node = stack[stack.length - 1];
     const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
     node.personId = Math.min(node.personId, env.persons.length - 1);
     const html = buildRecordHTML(E, worldSeed, stack, locale);
     const loc = locator(worldSeed, node);
     seedbox.value = loc;
+    worldseed.textContent = UI[locale].worldSeed(worldSeed);
 
     // fixed URL for this life: push so back/forward retrace the trail
     if (location.hash.slice(1) !== loc) {
@@ -73,6 +84,7 @@ export function initApp(): void {
     }
 
     out.innerHTML = html;
+    if (announce) status.textContent = UI[locale].recordOpened(node.crumb || "");
     window.scrollTo(0, 0);
 
     bindGoto(out);
@@ -99,7 +111,14 @@ export function initApp(): void {
 
   function openLocator(raw: string, pushUrl = true): boolean {
     const parsed = parseLocator(raw);
-    if (!parsed) return false;
+    if (!parsed) {
+      locatorError.textContent = UI[locale].locatorError;
+      seedbox.setAttribute("aria-invalid", "true");
+      seedbox.focus();
+      return false;
+    }
+    locatorError.textContent = "";
+    seedbox.removeAttribute("aria-invalid");
     worldSeed = parsed.worldSeed;
     stack = [parsed.node];
     render(pushUrl);
@@ -112,6 +131,11 @@ export function initApp(): void {
     render();
   }
 
+  function newWorld(): void {
+    worldSeed = Math.floor(Math.random() * 2_147_483_647) + 1;
+    roll();
+  }
+
   langsw.innerHTML = '<button type="button" data-lang="en">EN</button><button type="button" data-lang="ca">CA</button>';
   langsw.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
     b.addEventListener("click", () => {
@@ -120,16 +144,21 @@ export function initApp(): void {
       locale = next;
       setLocale(locale);
       applyChrome();
-      if (stack.length) render(false);
+      if (stack.length) render(false, false);
     });
   });
 
   rollBtn.addEventListener("click", roll);
+  newWorldBtn.addEventListener("click", newWorld);
   replayBtn.addEventListener("click", () => {
     openLocator(seedbox.value);
   });
   seedbox.addEventListener("keydown", (e) => {
     if (e.key === "Enter") replayBtn.click();
+  });
+  seedbox.addEventListener("input", () => {
+    locatorError.textContent = "";
+    seedbox.removeAttribute("aria-invalid");
   });
 
   // back/forward between visited records, and hand-edited/pasted hashes

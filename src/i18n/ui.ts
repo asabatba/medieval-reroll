@@ -8,6 +8,11 @@ interface UiStrings {
   openRecord: string;
   openRecordTitle: string;
   rollALife: string;
+  newWorld: string;
+  newWorldTitle: string;
+  worldSeed: (seed: number) => string;
+  locatorError: string;
+  recordOpened: (name: string) => string;
   intro: string;
   trail: string;
   record: string;
@@ -83,7 +88,12 @@ export const UI: Record<Locale, UiStrings> = {
     seedboxTitle: "worldseed:region:village:person",
     openRecord: "Open record",
     openRecordTitle: "Open this exact record",
-    rollALife: "Roll a life",
+    rollALife: "Another life",
+    newWorld: "New world",
+    newWorldTitle: "Generate a new world, then open a life within it",
+    worldSeed: (seed) => `World ${seed}`,
+    locatorError: "Enter a locator in the form worldseed:region:village:person.",
+    recordOpened: (name) => `Opened the record of ${name}.`,
     intro:
       "Every soul in this world already exists at a fixed address — <b>world · region · village · person</b> — waiting to be decoded. Roll to open one register at random, then follow the connections: every spouse, sibling, parent, and child is a real entry in the same records, and every path through them agrees. The odds are the historical ones; the ink was dry before you arrived.",
     trail: "Trail",
@@ -158,7 +168,12 @@ export const UI: Record<Locale, UiStrings> = {
     seedboxTitle: "llavordelmón:regió:poble:persona",
     openRecord: "Obre el registre",
     openRecordTitle: "Obre exactament aquest registre",
-    rollALife: "Tira una vida",
+    rollALife: "Una altra vida",
+    newWorld: "Món nou",
+    newWorldTitle: "Genera un món nou i obre-hi una vida",
+    worldSeed: (seed) => `Món ${seed}`,
+    locatorError: "Introdueix un localitzador amb el format llavordelmón:regió:poble:persona.",
+    recordOpened: (name) => `S'ha obert el registre de ${name}.`,
     intro:
       "Cada ànima d'aquest món ja existeix en una adreça fixa — <b>món · regió · poble · persona</b> — a l'espera de ser desxifrada. Tira els daus per obrir un registre a l'atzar, i després segueix les connexions: cada cònjuge, germà, pare i fill és una entrada real en els mateixos registres, i qualsevol camí entre ells hi concorda. Les probabilitats són les històriques; la tinta ja era seca abans que hi arribessis.",
     trail: "Camí",

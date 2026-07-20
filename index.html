@@ -12,13 +12,17 @@
     <div class="brand">MEDIEVAL <b>✠</b> REROLL</div>
     <div class="controls">
       <div class="langsw" id="langsw"></div>
-      <input class="seedbox" id="seedbox" aria-label="Record locator">
+      <div class="worldseed" id="worldseed"></div>
+      <input class="seedbox" id="seedbox" aria-label="Record locator" aria-describedby="locator-error">
       <button class="ghost" type="button" id="replay"></button>
       <button class="roll" type="button" id="roll"></button>
+      <button class="ghost" type="button" id="new-world"></button>
     </div>
+    <p class="locator-error" id="locator-error" role="alert"></p>
   </header>
   <p class="intro" id="intro"></p>
-  <main id="out" aria-live="polite"></main>
+  <p class="sr-only" id="status" role="status"></p>
+  <main id="out"></main>
 </div>
 <script type="module" src="/src/main.ts"></script>
 </body>

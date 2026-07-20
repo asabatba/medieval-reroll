@@ -86,6 +86,10 @@ header {
 .langsw button:hover {
   color: var(--bone);
 }
+.langsw button:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 2px;
+}
 button.roll {
   font-family: "Fraunces", serif;
   font-weight: 700;
@@ -126,6 +130,32 @@ button.roll:focus-visible,
   padding: 10px 10px;
   width: 110px;
   border-radius: 3px;
+}
+.worldseed {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gilt);
+  white-space: nowrap;
+}
+.locator-error {
+  min-height: 1.4em;
+  color: var(--rubric);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .ghost {
   font-family: "JetBrains Mono", monospace;
