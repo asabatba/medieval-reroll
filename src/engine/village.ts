@@ -45,7 +45,7 @@ import type { Address, Couple, Death, Envelope, Person, RiskTrade, Sex, SocialCl
 // a long-running session that browses thousands of addresses stays flat in
 // memory. Eviction is safe because solves are pure: a re-solve reproduces
 // the identical envelope (village.test.ts proves it).
-export const ENVELOPE_CACHE_LIMIT = 96;
+export const ENVELOPE_CACHE_LIMIT = 1024;
 const _envelopeCache = new Map<string, Envelope>();
 
 export function resolveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
