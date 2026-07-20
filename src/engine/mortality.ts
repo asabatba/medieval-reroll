@@ -1,4 +1,5 @@
 import type { Locale } from "../i18n/locale.js";
+import { demographyOf, periodMult, wealthIdx } from "./data/demography.js";
 import { plagueAt } from "./data/plagues.js";
 import type { Death, DeathCause, Region, RiskTrade, Rng, Sex } from "./types.js";
 
@@ -35,7 +36,14 @@ export function warAt(year: number, region: Region, locale: Locale = "en"): stri
 // something here, rather than being purely decorative text: a hazardous or
 // maritime trade adds flat accident risk (falls in the workplace, shipwreck,
 // drowning), and a military one sharply multiplies the existing war hazard.
-export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, region: Region, riskTrade: RiskTrade = "normal"): Death {
+//
+// § calibrated mechanics: the shared Russell-table baseline is modulated by
+// the region/period/class dataset in data/demography.ts when `regionKey` is
+// given; omitting it keeps the neutral NW-European default (used by unit
+// tests that compare trades in isolation).
+export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, region: Region, riskTrade: RiskTrade = "normal", regionKey?: string): Death {
+  const demo = demographyOf(regionKey);
+  const wi = wealthIdx(wealth);
   let age = 0;
   while (age <= 95) {
     const year = birth + age;
@@ -43,12 +51,28 @@ export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, reg
     const famine = famineAt(year, region) && wealth <= 2;
     const warName = warAt(year, region);
     let h = baseHazard(age);
+    if (age === 0) h *= demo.infantMult * demo.infantWealthMult[wi];
+    else if (age <= 9) h *= demo.childMult * demo.infantWealthMult[wi];
+    else h *= demo.wealthHazardMult[wi];
+    h *= demo.hazardMult * periodMult(demo, year);
     let cause: DeathCause | null = null;
     if (plague) {
-      let mult = plague[2];
-      if (plague[4] && age < 15) mult *= plague[4];
-      if (wealth >= 4) mult *= 0.75;
-      h = Math.min(0.9, h * mult + (plague[2] >= 10 ? 0.15 : 0.025));
+      // § calibrated mechanics: a multi-year pandemic window doesn't burn a
+      // household at full force every year — a given person faces the wave
+      // once (the year it actually reached their parish), with only a
+      // smouldering residual in the rest of the window. Without this, five
+      // compounding years of Black Death hazard kill ~70% of the living,
+      // well past the 40–60% the sources support.
+      const span = plague[1] - plague[0] + 1;
+      const exposureYear = plague[0] + ((birth * 31 + plague[0] * 7) % span);
+      if (span === 1 || year === exposureYear) {
+        let mult = plague[2];
+        if (plague[4] && age < 15) mult *= plague[4];
+        if (wealth >= 4) mult *= 0.75;
+        h = Math.min(0.9, h * mult + (plague[2] >= 10 ? 0.15 : 0.025));
+      } else {
+        h = Math.min(0.9, h * 2 + (plague[2] >= 10 ? 0.02 : 0.008));
+      }
     }
     if (famine) h += age < 5 || age > 55 ? 0.1 : 0.03;
     let warRisk = 0;

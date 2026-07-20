@@ -342,8 +342,8 @@ export const WORLD_EVENTS: Record<Locale, WorldEvent[]> = {
       0.3,
       "life",
       "chron",
-      (p) =>
-        p.literate
+      (_p, _locale, literate) =>
+        literate
           ? "Saw one of the new printed books, made with movable letters at Mainz — a whole Bible, each copy the twin of the last — and understood the world had changed."
           : "Heard of the new art of printing books with metal letters, by which a man at Mainz made a hundred Bibles in the time a scribe made one. Few in the village believed it.",
     ],
@@ -489,8 +489,8 @@ export const WORLD_EVENTS: Record<Locale, WorldEvent[]> = {
       0.3,
       "life",
       "chron",
-      (p) =>
-        p.literate
+      (_p, _locale, literate) =>
+        literate
           ? "Va veure un d'aquells nous llibres impresos, fets amb lletres mòbils a Magúncia — una Bíblia sencera, cada exemplar bessó de l'altre — i va entendre que el món havia canviat."
           : "Va sentir parlar de la nova art d'imprimir llibres amb lletres de metall, amb què un home de Magúncia feia cent Bíblies en el temps que un escrivà en feia una. Poca gent del poble s'ho creia.",
     ],

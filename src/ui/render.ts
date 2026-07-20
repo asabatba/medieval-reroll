@@ -144,15 +144,15 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   });
   html += `</div>`;
 
-  // Marriage & children
-  if (bio.spouse || bio.children.length) {
+  // Marriage & children — every union (remarriage included), spouses first
+  if (bio.unions.length || bio.children.length) {
     html += `<div class="sect reveal"><h2>${esc(t.marriageIssue)}</h2></div><div class="relgrid reveal">`;
-    if (bio.spouse) {
-      const note = t.marriedAbbr(bio.marriageYear || 0) + (bio.spouse.originPlace ? t.fromPlace(bio.spouse.originPlace) : "");
+    for (const u of bio.unions) {
+      const note = t.marriedAbbr(u.year) + (u.spouse.originPlace ? t.fromPlace(u.spouse.originPlace) : "");
       html += relCard(
         bio.sex === "M" ? t.wife : t.husband,
-        { name: bio.spouse.name, surname: "", birth: bio.spouse.birth, death: bio.spouse.death },
-        addrStr(bio.spouse.addr, bio.spouse.id),
+        { name: u.spouse.name, surname: "", birth: u.spouse.birth, death: u.spouse.death },
+        addrStr(u.spouse.addr, u.spouse.id),
         { note },
       );
     }

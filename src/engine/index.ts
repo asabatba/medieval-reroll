@@ -20,6 +20,7 @@
 
 export { decodePerson, fatherOccupation } from "./biography.js";
 export { CLASS_INFO } from "./data/classes.js";
+export { DEFAULT_DEMOGRAPHY, DEMOGRAPHY, demographyOf } from "./data/demography.js";
 export { CAUSE_LABEL } from "./data/narrative.js";
 export { PLAGUES } from "./data/plagues.js";
 export { REGIONS } from "./data/regions.js";
@@ -28,7 +29,15 @@ export { addrHash, makeRng } from "./hash.js";
 // Overlapping hierarchies (§10): independent trees over the same village
 // addresses, joined by a deterministic assignment table.
 export { manorOf, parishOf } from "./hierarchy.js";
+// Canonical cross-village identity (§ canonical identity): resolve either of
+// a migrant's records (natal / residence) to the other.
+export { canonicalRef, findResidenceRecord, residenceRef } from "./identity.js";
 export { randomCitizen, roster } from "./roster.js";
+export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";
+// Temporal resolver (§ year layer): the village population/households AS OF a year.
+export { CHURCH_HOUSEHOLD, MANOR_HOUSEHOLD, residentAt, villageStateAt } from "./snapshot.js";
+// Inheritance/household succession (§ family transitions), shared by Tier 2 and the snapshot layer.
+export { childrenOf, heirOf, inheritedFromFather } from "./succession.js";
 export type {
   Address,
   Bio,
@@ -47,5 +56,8 @@ export type {
   RosterRow,
   Sex,
   SocialClass,
+  SolveDiagnostics,
+  SpouseRef,
+  UnionRef,
 } from "./types.js";
-export { resolveVillage } from "./village.js";
+export { clearEnvelopeCache, ENVELOPE_CACHE_LIMIT, envelopeCacheSize, MATCH_ROUND_LIMIT, resolveVillage } from "./village.js";

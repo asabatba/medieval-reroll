@@ -42,18 +42,33 @@ describe("resolveVillage invariants", () => {
     }
   });
 
-  it("marriage is symmetric: spouses point at each other with the same year", () => {
+  it("marriage is symmetric: every couple appears in both spouses' unions, in year order", () => {
     for (const env of envs) {
-      for (const c of env.couples) {
+      for (let ci = 0; ci < env.couples.length; ci++) {
+        const c = env.couples[ci];
         const H = env.persons[c.husband];
         const W = env.persons[c.wife];
-        expect(H.spouse).toBe(W.id);
-        expect(W.spouse).toBe(H.id);
-        expect(H.marriageYear).toBe(c.year);
-        expect(W.marriageYear).toBe(c.year);
+        expect(H.unions).toContain(ci);
+        expect(W.unions).toContain(ci);
         // marriage cannot outlive either party
         expect(c.year).toBeLessThan(H.death.year);
         expect(c.year).toBeLessThan(W.death.year);
+      }
+      for (const p of env.persons) {
+        if (!p.unions) continue;
+        // first-marriage pointers agree with the unions history
+        const first = env.couples[p.unions[0]];
+        expect(p.spouse).toBe(p.id === first.husband ? first.wife : first.husband);
+        expect(p.marriageYear).toBe(first.year);
+        // unions are chronological and never overlap a living spouse:
+        // a later marriage starts only after the previous spouse died
+        for (let i = 1; i < p.unions.length; i++) {
+          const prev = env.couples[p.unions[i - 1]];
+          const next = env.couples[p.unions[i]];
+          expect(next.year).toBeGreaterThan(prev.year);
+          const prevSpouse = env.persons[p.id === prev.husband ? prev.wife : prev.husband];
+          expect(next.year).toBeGreaterThan(prevSpouse.death.year);
+        }
       }
     }
   });

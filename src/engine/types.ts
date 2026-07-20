@@ -43,9 +43,10 @@ export interface Rng {
 }
 
 // A person record inside one village's envelope. Many fields are set
-// progressively during the Tier-1 solve (death, spouse, emigration) or even
-// during Tier-2 decode (occupation, literate) — see village.ts/biography.ts
-// for exactly when each is populated.
+// progressively during the Tier-1 solve (death, spouse, emigration) — see
+// village.ts for exactly when each is populated. Tier-2 decode never writes
+// back into this record: derived narrative facts (occupation, literacy) live
+// only on the returned Bio.
 export interface Person {
   id: number;
   name: string;
@@ -53,6 +54,8 @@ export interface Person {
   sex: Sex;
   birth: number;
   cls: SocialClass;
+  /** Set when class mobility moved this person off their natal class (§ mobility): the class they were born into. */
+  clsOrigin?: SocialClass;
   father: number;
   mother: number;
   death: Death;
@@ -62,15 +65,19 @@ export interface Person {
   originId?: number;
   founder?: boolean;
   incomer?: boolean;
+  /** FIRST spouse (back-compat with single-marriage records); the full marital history is `unions`. */
   spouse?: number;
+  /** Year of the FIRST marriage; later unions carry their own year on the Couple. */
   marriageYear?: number;
+  /** Couple indices into Envelope.couples, in marriage order. Length > 1 means remarriage after widowhood. */
+  unions?: number[];
+  /** Years spent in service/apprenticeship in another household (§ service), rolled at Tier 1. */
+  service?: { from: number; to: number };
   inOrders?: boolean;
   marriedOut?: boolean;
   emigrated?: boolean;
   emigrateTo?: Address;
   longDistance?: boolean;
-  occupation?: string;
-  literate?: boolean;
   /** Assigned at Tier 1, alongside death; "normal" for women (see RiskTrade). */
   riskTrade?: RiskTrade;
 }
@@ -101,6 +108,17 @@ export interface Region {
   routiers?: boolean;
 }
 
+/** Diagnostics recorded by the Tier-1 solve (§ hardening): how the marriage
+ * matching actually terminated, so a silently truncated lineage is visible. */
+export interface SolveDiagnostics {
+  /** How many matching rounds ran before the genealogy closed. */
+  matchingRounds: number;
+  /** True if the round guard was exhausted while eligible persons remained — the lineage was cut short. */
+  truncated: boolean;
+  /** Eligible-but-unprocessed persons left when matching stopped (0 unless truncated). */
+  unmatched: number;
+}
+
 export interface Envelope {
   worldSeed: number;
   regionKey: string;
@@ -110,7 +128,9 @@ export interface Envelope {
   region: Region;
   persons: Person[];
   couples: Couple[];
+  /** Person id → index of their FIRST couple (see Person.unions for the full history). */
   coupleOf: Record<number, number>;
+  diagnostics: SolveDiagnostics;
 }
 
 // [startYear, endYear, severityMultiplier, name, childMultiplier]
@@ -122,7 +142,9 @@ export interface ClassInfo {
 }
 
 // [startYear, endYear, regionFilter (null = all), ageOffset, chance, kind, srcKind, textFn]
-export type WorldEvent = [number, number, string[] | null, number, number, string, DocumentKind, (p: Person, locale: Locale) => string];
+// textFn receives the decoded literacy as a third argument because literacy is a
+// Tier-2 derived fact that no longer lives on the Person record (§ pure decode).
+export type WorldEvent = [number, number, string[] | null, number, number, string, DocumentKind, (p: Person, locale: Locale, literate?: boolean) => string];
 
 // [template, weight, flag]
 export type TextureEvent = [string, number, string | null];
@@ -186,6 +208,13 @@ export interface SpouseRef extends RelativeRef {
   originPlace: string | null;
 }
 
+/** One marriage in a person's marital history, decoded from the envelope. */
+export interface UnionRef {
+  spouse: SpouseRef;
+  year: number;
+  children: RelativeRef[];
+}
+
 export interface Bio {
   id: number;
   env: Envelope;
@@ -211,10 +240,17 @@ export interface Bio {
   father: ParentRef | null;
   mother: ParentRef | null;
   fatherOccupation: string | null;
+  /** Derived at Tier 2 (never written back to the Person record — § pure decode). */
+  occupation: string | null;
   siblings: RelativeRef[];
+  /** First spouse (or, for an emigrant decoded at her origin, her destination spouse). Full history in `unions`. */
   spouse: SpouseRef | null;
   marriageYear: number | null;
+  unions: UnionRef[];
+  /** All children across every union. */
   children: RelativeRef[];
+  /** For an emigrant decoded at her ORIGIN village: her resident record in the destination register, when it exists. */
+  destRecord: PersonAddress | null;
   events: BioEvent[];
   widowed: number;
   plaguesLived: number;

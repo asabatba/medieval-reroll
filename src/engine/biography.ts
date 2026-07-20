@@ -38,8 +38,24 @@ import { REGIONS } from "./data/regions.js";
 import { citeDocument } from "./documents.js";
 import { makeRng, mix } from "./hash.js";
 import { manorOf, parishOf } from "./hierarchy.js";
+import { findResidenceRecord } from "./identity.js";
 import { famineAt, warAt } from "./mortality.js";
-import type { Address, Bio, BioEvent, DocumentKind, Envelope, Person, RiskTrade, Sex, SocialClass } from "./types.js";
+import { inheritedFromFather } from "./succession.js";
+import type {
+  Address,
+  Bio,
+  BioEvent,
+  Couple,
+  DocumentKind,
+  Envelope,
+  Person,
+  PersonAddress,
+  RiskTrade,
+  Sex,
+  SocialClass,
+  SpouseRef,
+  UnionRef,
+} from "./types.js";
 import { resolveVillage } from "./village.js";
 
 // Resolves a `{{masc/fem}}` token to whichever half matches `sex` — the one
@@ -202,6 +218,30 @@ function placeNameOf(worldSeed: number, addr: Address | null | undefined, locale
   return placeOf(worldSeed, addr.regionKey, addr.villageIdx)[locale];
 }
 
+function addrOnly(a: Address): Address {
+  return { regionKey: a.regionKey, villageIdx: a.villageIdx };
+}
+
+function spouseRefOf(s: Person, addr: Address, worldSeed: number, locale: Locale): SpouseRef {
+  return {
+    id: s.id,
+    name: s.name + " " + s.surname,
+    birth: s.birth,
+    death: s.death,
+    incomer: !!s.incomer,
+    addr: addrOnly(addr),
+    originPlace: s.incomer && s.origin ? placeNameOf(worldSeed, s.origin, locale) : null,
+  };
+}
+
+function unionRefOf(c: Couple, s: Person, kids: Person[], addr: Address, worldSeed: number, locale: Locale): UnionRef {
+  return {
+    spouse: spouseRefOf(s, addr, worldSeed, locale),
+    year: c.year,
+    children: kids.map((k) => ({ id: k.id, name: k.name, sex: k.sex, birth: k.birth, death: k.death, addr: addrOnly(addr) })),
+  };
+}
+
 export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | null {
   const p = env.persons[id];
   if (!p) return null;
@@ -213,6 +253,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const obj = p.sex === "M" ? "him" : "her";
   const selfAddr: Address = { regionKey: env.regionKey, villageIdx: env.villageIdx };
   const ca = locale === "ca";
+
+  // § pure decode: derived narrative facts accumulate in locals and are
+  // returned on the Bio — the envelope's Person records are never written.
+  let literate = false;
+  let occupation: string | null = null;
 
   // Overlapping hierarchies (§10): independent of the civil village tree,
   // resolved fresh here — cheap, non-recursive, no memo needed.
@@ -249,11 +294,33 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   }
   const fatherOccText = fatherEnvForOcc && fatherIdForOcc != null ? fatherOccupation(fatherEnvForOcc, fatherIdForOcc, locale) : null;
 
-  const natal = p.father >= 0 ? env.couples[env.coupleOf[p.father]] : null;
+  // Natal couple: with remarriage a father can head several couples, so
+  // find the one whose wife is this person's own mother.
+  const natalIdx = p.father >= 0 ? (env.persons[p.father].unions ?? []).find((ci) => env.couples[ci].wife === p.mother) : undefined;
+  const natal = natalIdx != null ? env.couples[natalIdx] : null;
   const siblings = natal ? natal.children.filter((cid) => cid !== id).map((cid) => env.persons[cid]) : [];
-  const own = p.spouse != null ? env.couples[env.coupleOf[id]] : null;
-  const spouse = p.spouse != null ? env.persons[p.spouse] : null;
-  const children = own ? own.children.map((cid) => env.persons[cid]) : [];
+
+  // Marital history: every union, in order. `own`/`spouse` keep pointing at
+  // the FIRST marriage for the sections that predate remarriage support.
+  const unionCouples: Couple[] = (p.unions ?? []).map((ci) => env.couples[ci]);
+  const spouseOf = (c: Couple): Person => env.persons[p.id === c.husband ? c.wife : c.husband];
+  const own = unionCouples[0] ?? null;
+  const spouse = own ? spouseOf(own) : null;
+  const children = unionCouples.flatMap((c) => c.children.map((cid) => env.persons[cid]));
+
+  // § canonical identity: an emigrant decoded at her ORIGIN village may have
+  // a real residence record in the destination register — resolve it (bounded:
+  // local cluster only) so her origin record links to her married life there.
+  let destRecord: PersonAddress | null = null;
+  let destEnv: Envelope | null = null;
+  if (p.emigrated && p.emigrateTo && !p.longDistance && unionCouples.length === 0) {
+    destRecord = findResidenceRecord(env.worldSeed, { regionKey: env.regionKey, villageIdx: env.villageIdx, personId: id }, p.emigrateTo);
+    if (destRecord) destEnv = resolveVillage(env.worldSeed, destRecord.regionKey, destRecord.villageIdx);
+  }
+  const destPerson = destRecord && destEnv ? destEnv.persons[destRecord.personId] : null;
+  const destUnion = destPerson?.unions?.length && destEnv ? destEnv.couples[destPerson.unions[0]] : null;
+  const destSpouse = destUnion && destEnv ? destEnv.persons[destUnion.husband === destPerson?.id ? destUnion.wife : destUnion.husband] : null;
+  const destChildren = destUnion && destEnv ? destUnion.children.map((cid) => destEnv.persons[cid]) : [];
 
   const events: BioEvent[] = [];
   const ev = (year: number, text: string, kind: string, src?: string) => {
@@ -391,12 +458,12 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     const occ = rng.pick(pool);
     const craft = rng.pick(CRAFTS[locale]);
     const occText = occ.text.replace("{craft}", craft);
-    p.occupation = occText;
-    if (occ.literate) p.literate = true;
+    occupation = occText;
+    if (occ.literate) literate = true;
     ev(p.birth + 13, `${p.name} ${occText}.`, "life");
   }
   if (p.inOrders) {
-    p.literate = true;
+    literate = true;
     ev(
       p.birth + 14,
       ca
@@ -406,30 +473,91 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // Marriage — real spouse from the matching
-  if (own && spouse) {
-    const sName = spouse.name + " " + spouse.surname;
-    let extra = "";
-    if (p.cls === "serf" && p.sex === "F")
-      extra = ca ? ` El seu pare va pagar a ${fief.lord} el dret per casar-la.` : ` Her father paid merchet to ${fief.lord} for licence to marry.`;
-    if (spouse.incomer && p.sex === "M") {
-      extra = spouse.origin
-        ? ca
-          ? ` Ella venia de ${placeNameOf(env.worldSeed, spouse.origin, locale)}, amb un dot de roba de lli i una vaca.`
-          : ` She came from ${placeNameOf(env.worldSeed, spouse.origin, locale)}, with a dowry of linen and a cow.`
-        : ca
-          ? ` Ella venia de la parròquia veïna, amb un dot de roba de lli i una vaca.`
-          : ` She came from the next parish, with a dowry of linen and a cow.`;
-    }
-    const older = p.sex === "F" && spouse.birth < p.birth - 3;
+  // § service: adolescent years in another household, rolled at Tier 1
+  if (p.service && p.death.year > p.service.from) {
+    const years = Math.min(p.service.to, p.death.year) - p.service.from;
     ev(
-      own.year,
+      p.service.from,
       ca
-        ? `Es va casar amb ${sName}${older ? ", un home uns quants anys més gran, com era habitual" : ""}.${extra}`
-        : `Married ${sName}${older ? ", a man some years older, as was usual" : ""}.${extra}`,
-      "marriage",
+        ? `Va entrar a servir en una altra casa als dotze anys, com era costum per als fills de cases humils, i hi va passar ${years > 1 ? `${years} anys` : "un any"} guanyant-se el llit, la taula i la soldada.`
+        : `Went into service in another household at twelve, as was the custom for children of humble houses, and spent ${years > 1 ? `${years} years` : "a year"} there earning bed, board, and a small wage.`,
+      "life",
+      cite("account"),
     );
-  } else if (p.marriedOut) {
+  }
+
+  // § mobility: the person left their natal class on coming of age
+  if (p.clsOrigin && p.death.age >= 16) {
+    const y = p.birth + 16;
+    let t: string;
+    if (p.clsOrigin === "serf")
+      t = ca
+        ? `Va sortir de la servitud: en el camp despoblat va aconseguir una tinença lliure, i el registre {{el/la}} comença a anomenar pagès{{/a}} lliure.`
+        : `Rose out of servitude: in the emptied countryside ${p.sex === "M" ? "he" : "she"} secured a free tenancy, and the rolls begin to style ${obj} a free tenant.`;
+    else if (p.clsOrigin === "freePeasant")
+      t = ca
+        ? `Va deixar la terra per un ofici: aprenentatge a un taller, i amb els anys un lloc propi entre l'artesanat del poble.`
+        : `Left the land for a trade: an apprenticeship in a workshop, and in time a place among the village artisans.`;
+    else
+      t = ca
+        ? `Va arriscar els estalvis del taller en el comerç, i li va anar bé: la casa va passar a viure dels tractes i no de les mans.`
+        : `Ventured the workshop's savings in trade, and prospered: the household came to live by dealing rather than by its hands.`;
+    ev(y, t, "fortune", cite("court"));
+  }
+
+  // § inheritance: succession to the father's holding, from succession.ts —
+  // the same rule the temporal resolver uses for household headship.
+  if (p.father >= 0 && inheritedFromFather(env, id)) {
+    const father = env.persons[p.father];
+    if (father.death.year > p.birth + 12 && father.death.year <= p.death.year) {
+      ev(
+        father.death.year,
+        ca
+          ? `A la mort del seu pare va entrar a la tinença com a hereu{{/va}}, pagant al senyor el lluïsme acostumat — la millor bèstia de la casa.`
+          : `At ${pos} father's death entered the holding as heir, paying the lord the customary relief — the best beast of the house.`,
+        "fortune",
+        cite("court"),
+      );
+    }
+  }
+
+  // Marriage — real spouses from the matching, first union and any remarriage
+  unionCouples.forEach((c, i) => {
+    const s = spouseOf(c);
+    const sName = s.name + " " + s.surname;
+    if (i === 0) {
+      let extra = "";
+      if (p.cls === "serf" && p.sex === "F")
+        extra = ca ? ` El seu pare va pagar a ${fief.lord} el dret per casar-la.` : ` Her father paid merchet to ${fief.lord} for licence to marry.`;
+      if (s.incomer && p.sex === "M") {
+        extra = s.origin
+          ? ca
+            ? ` Ella venia de ${placeNameOf(env.worldSeed, s.origin, locale)}, amb un dot de roba de lli i una vaca.`
+            : ` She came from ${placeNameOf(env.worldSeed, s.origin, locale)}, with a dowry of linen and a cow.`
+          : ca
+            ? ` Ella venia de la parròquia veïna, amb un dot de roba de lli i una vaca.`
+            : ` She came from the next parish, with a dowry of linen and a cow.`;
+      }
+      const older = p.sex === "F" && s.birth < p.birth - 3;
+      ev(
+        c.year,
+        ca
+          ? `Es va casar amb ${sName}${older ? ", un home uns quants anys més gran, com era habitual" : ""}.${extra}`
+          : `Married ${sName}${older ? ", a man some years older, as was usual" : ""}.${extra}`,
+        "marriage",
+      );
+    } else {
+      // § remarriage
+      ev(
+        c.year,
+        ca
+          ? `Es va tornar a casar, amb ${sName}: una casa no es podia portar sola, i el dol durava el que durava.`
+          : `Married again, to ${sName}: a household could not be run alone, and mourning lasted only as long as it could afford to.`,
+        "marriage",
+      );
+    }
+  });
+  if (!own && p.marriedOut) {
     const dest = p.emigrateTo;
     const destPlace = placeNameOf(env.worldSeed, dest, locale);
     const destText =
@@ -442,14 +570,26 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             ? ` to ${destPlace}, in ${REGIONS[dest.regionKey].name.en}`
             : ` to ${destPlace}`
         : "";
-    ev(
-      p.birth + region.marriageF[1],
-      ca
-        ? `Es va casar fora de la parròquia${destText}; el seu nom surt d'aquest registre cap a un altre, i la resta de la seva vida hi queda escrita.`
-        : `Married out of the parish${destText}; her name leaves this register for another, and the rest of her life is written there.`,
-      "marriage",
-    );
-  } else if (p.death.age >= 30 && !p.inOrders && rng.chance(0.7)) {
+    if (destPerson && destUnion && destSpouse) {
+      // § canonical identity: the destination register really recorded her —
+      // name the husband and the year, and let the Bio point at that record.
+      ev(
+        destUnion.year,
+        ca
+          ? `Es va casar fora de la parròquia${destText}, amb ${destSpouse.name} ${destSpouse.surname}; el registre d'aquell poble la recull des d'aleshores, i la resta de la seva vida hi queda escrita.`
+          : `Married out of the parish${destText}, to ${destSpouse.name} ${destSpouse.surname}; that village's register carries her from then on, and the rest of her life is written there.`,
+        "marriage",
+      );
+    } else {
+      ev(
+        p.birth + region.marriageF[1],
+        ca
+          ? `Es va casar fora de la parròquia${destText}; el seu nom surt d'aquest registre cap a un altre, i la resta de la seva vida hi queda escrita.`
+          : `Married out of the parish${destText}; her name leaves this register for another, and the rest of her life is written there.`,
+        "marriage",
+      );
+    }
+  } else if (!own && !p.marriedOut && p.death.age >= 30 && !p.inOrders && rng.chance(0.7)) {
     ev(
       p.birth + 30,
       ca
@@ -498,25 +638,27 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     }
   }
 
-  // Spouse death & widowhood — real
-  if (spouse && spouse.death.year < p.death.year) {
-    const atHome = children.filter((c) => c.death.year > spouse.death.year && spouse.death.year - c.birth < 15 && c.birth < spouse.death.year).length;
+  // Spouse death & widowhood — real, once per union that ended in bereavement
+  for (const c of unionCouples) {
+    const s = spouseOf(c);
+    if (s.death.year >= p.death.year) continue;
+    const atHome = children.filter((k) => k.death.year > s.death.year && s.death.year - k.birth < 15 && k.birth < s.death.year).length;
     const causeTxt = ca
-      ? spouse.death.cause === "plague"
+      ? s.death.cause === "plague"
         ? " de la pesta"
-        : spouse.death.cause === "childbirth"
+        : s.death.cause === "childbirth"
           ? " de part"
           : ""
-      : spouse.death.cause === "plague"
+      : s.death.cause === "plague"
         ? " of the pestilence"
-        : spouse.death.cause === "childbirth"
+        : s.death.cause === "childbirth"
           ? " in childbed"
           : "";
     ev(
-      spouse.death.year,
+      s.death.year,
       ca
-        ? `${spouse.name} ${spouse.surname} va morir${causeTxt}, deixant ${p.name} {{vidu/vídua}}${atHome ? ` amb ${atHome} fills encara a casa` : ""}.`
-        : `${spouse.name} ${spouse.surname} died${causeTxt}, leaving ${p.name} ${p.sex === "F" ? "a widow" : "a widower"}${atHome ? ` with ${atHome} children still at home` : ""}.`,
+        ? `${s.name} ${s.surname} va morir${causeTxt}, deixant ${p.name} {{vidu/vídua}}${atHome ? ` amb ${atHome} fills encara a casa` : ""}.`
+        : `${s.name} ${s.surname} died${causeTxt}, leaving ${p.name} ${p.sex === "F" ? "a widow" : "a widower"}${atHome ? ` with ${atHome} children still at home` : ""}.`,
       "grief",
     );
   }
@@ -563,7 +705,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   for (const w of WORLD_EVENTS[locale]) {
     if (w[1] < p.birth + w[3] || w[0] > p.death.year) continue;
     if (w[2] && !w[2].includes(env.regionKey)) continue;
-    if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale), w[5], SRC[locale][w[6] as DocumentKind]);
+    if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
   }
 
   // Personal texture events
@@ -586,7 +728,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       let src = cite("reg");
       if (flag === "court") src = cite("court");
       if (flag === "will") src = cite("will");
-      if (flag === "literate") p.literate = true;
+      if (flag === "literate") literate = true;
       ev(y, text, "life", src);
     }
   }
@@ -654,7 +796,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     wealth,
     place: env.place[locale],
     region: region.name[locale],
-    literate: !!p.literate,
+    literate,
     inOrders: !!p.inOrders,
     incomer: !!p.incomer,
     founder: !!p.founder,
@@ -685,22 +827,35 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         }
       : null,
     fatherOccupation: fatherOccText,
+    occupation,
     siblings: siblings.map((s) => ({ id: s.id, name: s.name, sex: s.sex, birth: s.birth, death: s.death, addr: selfAddr })),
-    spouse: spouse
-      ? {
-          id: spouse.id,
-          name: spouse.name + " " + spouse.surname,
-          birth: spouse.birth,
-          death: spouse.death,
-          incomer: !!spouse.incomer,
-          addr: selfAddr,
-          originPlace: spouse.incomer && spouse.origin ? placeNameOf(env.worldSeed, spouse.origin, locale) : null,
-        }
-      : null,
-    marriageYear: own ? own.year : null,
-    children: children.map((c) => ({ id: c.id, name: c.name, sex: c.sex, birth: c.birth, death: c.death, addr: selfAddr })),
+    spouse:
+      destSpouse && destRecord
+        ? spouseRefOf(destSpouse, destRecord, env.worldSeed, locale)
+        : spouse
+          ? spouseRefOf(spouse, selfAddr, env.worldSeed, locale)
+          : null,
+    marriageYear: destUnion ? destUnion.year : own ? own.year : null,
+    unions:
+      destUnion && destSpouse && destRecord
+        ? [unionRefOf(destUnion, destSpouse, destChildren, destRecord, env.worldSeed, locale)]
+        : unionCouples.map((c) =>
+            unionRefOf(
+              c,
+              spouseOf(c),
+              c.children.map((cid) => env.persons[cid]),
+              selfAddr,
+              env.worldSeed,
+              locale,
+            ),
+          ),
+    children:
+      destUnion && destRecord
+        ? destChildren.map((c) => ({ id: c.id, name: c.name, sex: c.sex, birth: c.birth, death: c.death, addr: addrOnly(destRecord) }))
+        : children.map((c) => ({ id: c.id, name: c.name, sex: c.sex, birth: c.birth, death: c.death, addr: selfAddr })),
+    destRecord,
     events,
-    widowed: spouse && spouse.death.year < p.death.year ? 1 : 0,
+    widowed: unionCouples.filter((c) => spouseOf(c).death.year < p.death.year).length,
     plaguesLived: PLAGUES.filter(
       (pl) => pl[0] >= p.birth && pl[1] <= p.death.year && !(p.death.cause === "plague" && p.death.year >= pl[0] && p.death.year <= pl[1]),
     ).length,

@@ -24,8 +24,11 @@ describe("decodePerson", () => {
         if (p.spouse != null) {
           expect(bio.spouse).not.toBeNull();
           expect(bio.spouse!.id).toBe(p.spouse);
-        } else {
-          expect(bio.spouse).toBeNull();
+        } else if (bio.spouse) {
+          // the only unmarried-at-home record with a spouse is an emigrant
+          // whose destination register was really found (§ canonical identity)
+          expect(p.emigrated).toBe(true);
+          expect(bio.destRecord).not.toBeNull();
         }
       }
     }
