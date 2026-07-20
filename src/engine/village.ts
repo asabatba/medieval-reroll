@@ -317,8 +317,27 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
 
   function makeChild(c: Couple, H: Person, W: Person, y: number): void {
     const sex: Sex = rng.chance(0.5) ? "M" : "F";
+    // § sibling name collision: the per-region name pools are small (a
+    // dozen or so per sex — see region.maleNames/femaleNames), so drawing
+    // independently for every child of a large family made it common for
+    // two or three of them to be alive AT THE SAME TIME sharing a name.
+    // Reusing a dead sibling's name for a later child was real medieval
+    // practice; two LIVING siblings sharing one was not (bar rare royal
+    // exceptions this model doesn't represent) — so exclude only the names
+    // still held by a full sibling (this couple's own children so far)
+    // who's still alive at this child's own birth year. Falls back to the
+    // full pool only if every name is already spoken for (a large family
+    // in a small-pool region), rather than ever picking from an empty list.
+    const namePool = sex === "M" ? region.maleNames : region.femaleNames;
+    const takenByLivingSibling = new Set(
+      c.children
+        .map((cid) => persons[cid])
+        .filter((sib) => sib.sex === sex && sib.death.year > y)
+        .map((sib) => sib.name),
+    );
+    const availableNames = namePool.filter((n) => !takenByLivingSibling.has(n));
     const child = addPerson({
-      name: sex === "M" ? rng.pick(region.maleNames) : rng.pick(region.femaleNames),
+      name: rng.pick(availableNames.length ? availableNames : namePool),
       surname: childSurname(H, W),
       sex,
       birth: y,

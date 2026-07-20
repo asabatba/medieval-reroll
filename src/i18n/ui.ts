@@ -78,6 +78,9 @@ interface UiStrings {
   emptyYear: string;
   famineBadge: string;
   warBadge: (name: string) => string;
+  // ---- family tree (§ one-step tree: parents / self+siblings+spouses / children) ----
+  familyTree: string;
+  self: (sex: "M" | "F") => string;
 }
 
 export const UI: Record<Locale, UiStrings> = {
@@ -160,6 +163,8 @@ export const UI: Record<Locale, UiStrings> = {
     emptyYear: "No one is yet entered in this register.",
     famineBadge: "famine",
     warBadge: (name: string) => name,
+    familyTree: "Family tree",
+    self: (sex) => (sex === "F" ? "Herself" : "Himself"),
   },
   ca: {
     brandSuffix: "REROLL",
@@ -240,5 +245,7 @@ export const UI: Record<Locale, UiStrings> = {
     emptyYear: "Encara no hi ha ningú inscrit en aquest registre.",
     famineBadge: "fam",
     warBadge: (name: string) => name,
+    familyTree: "Arbre genealògic",
+    self: (sex) => (sex === "F" ? "Ella mateixa" : "Ell mateix"),
   },
 };

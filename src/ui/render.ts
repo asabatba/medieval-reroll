@@ -1,5 +1,5 @@
 import type * as Engine from "../engine/index.js";
-import type { Address, Death, Envelope, EventRef, HouseholdState, PersonAddress } from "../engine/index.js";
+import type { Address, Bio, Death, Envelope, EventRef, HouseholdState, PersonAddress } from "../engine/index.js";
 import type { Locale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
 import { esc, KIND_LABEL } from "./dom.js";
@@ -72,6 +72,39 @@ function relCard(who: string, person: RelCardPerson, addr: string, opts?: RelCar
     <div class="rdates">${person.death.age < 16 ? '<span class="dagger">' + dates + "</span>" : dates}${opts.note ? " · " + esc(opts.note) : ""}</div>`;
   if (opts.nolink || opts.self) return `<div class="rel ${cls}">${inner}</div>`;
   return `<button class="rel ${cls}" data-goto="${addr}">${inner}</button>`;
+}
+
+// § one-step family tree: parents, then this generation (siblings, self,
+// spouse(s)), then children — the compact diagram counterpart to the
+// separate Parentage/Siblings/Marriage-&-issue list sections above, all
+// drawn from the same Bio facts (never a new resolve). "One step" means
+// exactly one generation each direction from self; it intentionally does
+// NOT reach into grandparents/grandchildren or a sibling's own spouse.
+function renderFamilyTree(t: (typeof UI)[Locale], bio: Bio): string {
+  const parentCards =
+    (bio.father ? relCard(t.father, bio.father, addrStr(bio.father.addr, bio.father.id)) : "") +
+    (bio.mother ? relCard(t.mother, bio.mother, addrStr(bio.mother.addr, bio.mother.id)) : "");
+
+  const selfCard = relCard(t.self(bio.sex), bio, "", { self: true });
+  const siblingCards = bio.siblings.map((s) => relCard(s.sex === "M" ? t.brother : t.sister, s, addrStr(s.addr, s.id))).join("");
+  const spouseCards = bio.unions
+    .map((u) =>
+      relCard(
+        bio.sex === "M" ? t.wife : t.husband,
+        { name: u.spouse.name, surname: "", birth: u.spouse.birth, death: u.spouse.death },
+        addrStr(u.spouse.addr, u.spouse.id),
+      ),
+    )
+    .join("");
+
+  const childCards = bio.children.map((c) => relCard(c.sex === "M" ? t.son : t.daughter, c, addrStr(c.addr, c.id))).join("");
+
+  let html = `<div class="sect reveal"><h2>${esc(t.familyTree)}</h2></div><div class="famtree reveal">`;
+  if (parentCards) html += `<div class="ft-tier ft-parents">${parentCards}</div><div class="ft-link"></div>`;
+  html += `<div class="ft-tier ft-self-row">${siblingCards}${selfCard}${spouseCards}</div>`;
+  if (childCards) html += `<div class="ft-link"></div><div class="ft-tier ft-children">${childCards}</div>`;
+  html += `</div>`;
+  return html;
 }
 
 // ---- village-in-year view (§ year layer) ----
@@ -296,6 +329,8 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   html += `<div class="ledger reveal">
     ${t.ledger(bio.death.age, bio.plaguesLived, !!bio.widowed, bio.literate)}
   </div>`;
+
+  html += renderFamilyTree(t, bio);
 
   return html;
 }

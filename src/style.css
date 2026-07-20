@@ -935,6 +935,33 @@ details.village {
   color: #6d6046;
 }
 
+/* ---- Family tree (§ one-step tree) ---- */
+.famtree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.ft-tier {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+.ft-tier .rel {
+  flex: 0 1 170px;
+  min-width: 140px;
+  max-width: 220px;
+}
+.ft-link {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+}
+.ft-self-row .rel.self {
+  flex-basis: 180px;
+}
+
 /* ---- Mobile / narrow viewports ---- */
 @media (max-width: 560px) {
   .card {

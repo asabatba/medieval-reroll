@@ -102,6 +102,37 @@ describe("resolveVillage invariants", () => {
     }
   });
 
+  // Regression: names were drawn independently per child from small
+  // per-region pools (a dozen or so per sex), so a large family commonly
+  // had two or three children of the same sex ALIVE AT THE SAME TIME
+  // sharing a name — historically a name was recycled onto a later child
+  // once an earlier same-named sibling had died, never worn by two living
+  // siblings at once.
+  it("no two full siblings of the same sex share a name while both are alive at the same time", () => {
+    let sawRecycledName = 0;
+    for (const env of envs) {
+      for (const c of env.couples) {
+        const bySexName = new Map<string, Person[]>();
+        for (const cid of c.children) {
+          const child = env.persons[cid];
+          const key = child.sex + ":" + child.name;
+          (bySexName.get(key) ?? bySexName.set(key, []).get(key)!).push(child);
+        }
+        for (const group of bySexName.values()) {
+          if (group.length < 2) continue;
+          sawRecycledName++;
+          const byBirth = group.slice().sort((a, b) => a.birth - b.birth);
+          for (let i = 1; i < byBirth.length; i++) {
+            // the earlier-born namesake must already be dead before the next one carrying the same name is born
+            expect(byBirth[i - 1].death.year).toBeLessThanOrEqual(byBirth[i].birth);
+          }
+        }
+      }
+    }
+    // the pool is small enough that name-reuse (onto a LATER, non-overlapping child) still happens often
+    expect(sawRecycledName).toBeGreaterThan(0);
+  });
+
   it("coupleOf index agrees with the couples array for every married person", () => {
     for (const env of envs) {
       for (const p of env.persons) {
