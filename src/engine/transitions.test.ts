@@ -7,7 +7,7 @@ import { CLASS_INFO } from "./data/classes.js";
 import { REGIONS } from "./data/regions.js";
 import { isFirstBornSon } from "./succession.js";
 import type { Envelope } from "./types.js";
-import { resolveVillage } from "./village.js";
+import { isHeir, resolveVillage } from "./village.js";
 
 const REGION_KEYS = Object.keys(REGIONS);
 const SEED = 1444;
@@ -145,12 +145,53 @@ describe("§ remarriage depth", () => {
 });
 
 describe("§ regional inheritance customs (partible vs impartible)", () => {
-  function heirVsNonHeirEmigrationRate(regionKey: string): { heir: number; nonHeir: number } {
+  // Bucket by village.ts's own `isHeir` — the actual heir concept the
+  // emigration mechanic itself reads (see § male out-migration in
+  // village.ts) — not succession.ts's pure-birth-order isFirstBornSon: a
+  // meaningful share of birth-order "non-heir" sons now legitimately get
+  // heir-level treatment once an elder brother who died before their
+  // father no longer counts against them (§ male out-migration's
+  // eldestSonOf), so birth order alone is no longer a good proxy for what
+  // the mechanic actually does. The per-roll odds gap is large
+  // (demography.ts's maleOutMigration: nonHeirBase 0.4-0.46 vs heirBase
+  // 0.05-0.08), but most men never reach this specific roll at all (most
+  // heirs simply marry locally), so the raw emigration-event counts behind
+  // the aggregate rate are modest — sampling many villages keeps the ratio
+  // stable rather than noisy from small counts.
+  function heirVsNonHeirEmigrationRateByIsHeir(regionKey: string, villages: number): { heir: number; nonHeir: number } {
     let heirTotal = 0,
       heirEmig = 0,
       nonHeirTotal = 0,
       nonHeirEmig = 0;
-    for (let villageIdx = 0; villageIdx < 20; villageIdx++) {
+    const region = REGIONS[regionKey];
+    for (let villageIdx = 0; villageIdx < villages; villageIdx++) {
+      const env = resolveVillage(SEED, regionKey, villageIdx);
+      for (const p of env.persons) {
+        if (p.sex !== "M" || p.founder || p.father < 0) continue;
+        if (isHeir(env.persons, region, p)) {
+          heirTotal++;
+          if (p.emigrated) heirEmig++;
+        } else {
+          nonHeirTotal++;
+          if (p.emigrated) nonHeirEmig++;
+        }
+      }
+    }
+    return { heir: heirEmig / heirTotal, nonHeir: nonHeirEmig / nonHeirTotal };
+  }
+
+  // Under partible custom, village.ts's `isHeir` is unconditionally true
+  // for every son (it short-circuits on region.inheritance === "partible"),
+  // so it can't discriminate anyone there. Bucket by pure birth order
+  // instead — an INDEPENDENT signal from the mechanic — specifically to
+  // check that birth order (which WOULD matter under impartible custom)
+  // carries no such correlation here.
+  function heirVsNonHeirEmigrationRateByBirthOrder(regionKey: string, villages: number): { heir: number; nonHeir: number } {
+    let heirTotal = 0,
+      heirEmig = 0,
+      nonHeirTotal = 0,
+      nonHeirEmig = 0;
+    for (let villageIdx = 0; villageIdx < villages; villageIdx++) {
       const env = resolveVillage(SEED, regionKey, villageIdx);
       for (const p of env.persons) {
         if (p.sex !== "M" || p.founder || p.father < 0) continue;
@@ -167,13 +208,13 @@ describe("§ regional inheritance customs (partible vs impartible)", () => {
   }
 
   it("impartible England: a non-heir son emigrates far more often than the eldest", () => {
-    const { heir, nonHeir } = heirVsNonHeirEmigrationRate("england");
+    const { heir, nonHeir } = heirVsNonHeirEmigrationRateByIsHeir("england", 150);
     expect(nonHeir).toBeGreaterThan(heir * 2);
   });
 
   it("partible France and Tuscany: eldest and non-eldest sons emigrate at close to the same rate", () => {
     for (const rk of ["france", "italy"]) {
-      const { heir, nonHeir } = heirVsNonHeirEmigrationRate(rk);
+      const { heir, nonHeir } = heirVsNonHeirEmigrationRateByBirthOrder(rk, 20);
       // both draw from the same heirBase-equivalent chance under partible
       // custom (village.ts's isHeir), nowhere near England's >2x gap above
       expect(nonHeir).toBeLessThan(heir * 1.6);

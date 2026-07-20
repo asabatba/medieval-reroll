@@ -122,12 +122,26 @@ function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: Sex): R
 // decode-time use). Evaluated against the local, still-growing `persons`
 // array — safe because persons are always created in non-decreasing birth
 // order (a person's elder siblings, if any, already exist by the time they
-// themselves are created or matched), so "the earliest-born existing son of
-// this father" never later turns out to be wrong once matching finishes.
+// themselves are created or matched).
+//
+// This can still disagree with heirOf's actual answer at the father's
+// death: an elder brother who emigrates or takes holy orders isn't
+// knowable here, since both are decided at HIS OWN later marriage-matching
+// round, long after this presumed-heir reckoning already had to happen for
+// every son as each one is born. Predecease is the one cause of that same
+// mismatch that IS fully knowable this early — every child of one marriage
+// is created synchronously in birth order with their death year rolled
+// immediately (mortality.ts), and the father's own death year was fixed
+// long before he had children — so an elder "brother" who's already known
+// to have died before the father never actually stood between a younger
+// son and the holding, and is excluded here rather than wrongly blocking
+// him from being treated as the presumed heir.
 function eldestSonOf(persons: readonly Person[], p: Person): boolean {
   if (p.sex !== "M" || p.father < 0) return true;
+  const father = persons[p.father];
   for (const q of persons) {
     if (q.id === p.id || q.father !== p.father || q.sex !== "M") continue;
+    if (q.death.year <= father.death.year) continue; // predeceased the father: never actually in the running
     if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
   }
   return true;
@@ -140,7 +154,7 @@ function eldestSonOf(persons: readonly Person[], p: Person): boolean {
 // downward mobility) read THIS, not eldestSonOf directly, so they simply
 // never apply in a partible region rather than needing a separate flag at
 // every call site.
-function isHeir(persons: readonly Person[], region: Region, p: Person): boolean {
+export function isHeir(persons: readonly Person[], region: Region, p: Person): boolean {
   return region.inheritance === "partible" || eldestSonOf(persons, p);
 }
 
@@ -260,16 +274,22 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     W.riskTrade = riskTradeOf(vHash, W.id, W.cls, W.sex);
     H.death = rollDeath(makeRng(personStream(vHash, 7001, H.id)), hb, "M", wealth, region, H.riskTrade, regionKey);
     W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", wealth, region, W.riskTrade, regionKey);
-    // founders are guaranteed to reach marriage (they existed to found the line)
-    if (H.death.age < 24) {
-      const extra = rng.int(0, 30);
-      H.death = { year: hb + 24 + extra, age: 24 + extra, cause: "disease" };
+    // founders are guaranteed to reach marriage (they existed to found the
+    // line) — extend a death that would otherwise fall on or before the
+    // marriage year itself, not just one that's short of a fixed age floor.
+    // (A fixed floor here previously undershot the marriage-year formula's
+    // own range, e.g. a natural death age of 24-25 for H still failed to
+    // outlive a marriage age that can itself roll as high as 26.)
+    const marriageYear = Math.max(hb + rng.int(22, 26), wb + rng.int(17, 20));
+    if (H.death.year <= marriageYear) {
+      const age = marriageYear - hb + 1 + rng.int(0, 30);
+      H.death = { year: hb + age, age, cause: "disease" };
     }
-    if (W.death.age < 20) {
-      const extra = rng.int(0, 30);
-      W.death = { year: wb + 20 + extra, age: 20 + extra, cause: "disease" };
+    if (W.death.year <= marriageYear) {
+      const age = marriageYear - wb + 1 + rng.int(0, 30);
+      W.death = { year: wb + age, age, cause: "disease" };
     }
-    marry(H, W, Math.max(hb + rng.int(22, 26), wb + rng.int(17, 20)));
+    marry(H, W, marriageYear);
   }
 
   function marry(H: Person, W: Person, year: number): Couple | null {
@@ -416,7 +436,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           bestScore = 1e9;
         for (const W of women) {
           if (takenW.has(W.id)) continue;
-          if (W.father === M.father && M.father !== -1) continue; // no siblings
+          if (W.father === M.father && M.father !== -1) continue; // no siblings (paternal)
+          if (W.mother === M.mother && M.mother !== -1) continue; // no siblings (maternal — a widow's children by an earlier husband)
           const wAgeAt = wantYear - W.birth;
           if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6) continue;
           if (W.death.year <= wantYear || M.death.year <= wantYear) continue;
@@ -617,7 +638,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         const wLost = latestWidowedAt(W);
         if (wLost != null && wLost >= year) continue;
         if (W.father === m.id || W.mother === m.id) continue; // never a daughter
-        if (W.father === m.father && m.father !== -1) continue; // never a sister
+        if (W.father === m.father && m.father !== -1) continue; // never a sister (paternal)
+        if (W.mother === m.mother && m.mother !== -1) continue; // never a sister (maternal)
         if (W.death.year <= year) continue;
         const age = year - W.birth;
         if (age < 18 || age > 45) continue;
@@ -669,7 +691,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         const mLost = latestWidowedAt(M);
         if (mLost != null && mLost >= year) continue;
         if (M.father === w.id || M.mother === w.id) continue; // never a son
-        if (M.father === w.father && w.father !== -1) continue; // never a brother
+        if (M.father === w.father && w.father !== -1) continue; // never a brother (paternal)
+        if (M.mother === w.mother && w.mother !== -1) continue; // never a brother (maternal)
         if (M.death.year <= year) continue;
         const age = year - M.birth;
         if (age < 22 || age > 60) continue;

@@ -4,7 +4,8 @@
 // internally-generated) text normally.
 import { describe, expect, it } from "vitest";
 import type { EventRef } from "../engine/index.js";
-import { linkifyEventText } from "./render.js";
+import * as E from "../engine/index.js";
+import { buildRecordHTML, defaultVillageYear, linkifyEventText, renderVillageBody, type StackNode, VILLAGE_YEAR_MIN } from "./render.js";
 
 const ADDR = { regionKey: "england", villageIdx: 3 };
 function ref(id: number, name: string): EventRef {
@@ -12,8 +13,8 @@ function ref(id: number, name: string): EventRef {
 }
 
 describe("linkifyEventText", () => {
-  it("with no refs, just escapes the text (matching dom.ts's esc: & and < only)", () => {
-    expect(linkifyEventText("Married Agnes & <friends>.", undefined)).toBe("Married Agnes &amp; &lt;friends>.");
+  it("with no refs, just escapes the text (matching dom.ts's esc: text AND attribute contexts)", () => {
+    expect(linkifyEventText("Married Agnes & <friends>.", undefined)).toBe("Married Agnes &amp; &lt;friends&gt;.");
     expect(linkifyEventText("Plain text.", [])).toBe("Plain text.");
   });
 
@@ -51,6 +52,60 @@ describe("linkifyEventText", () => {
 
   it("escapes HTML-significant characters in both the linked name and the surrounding text", () => {
     const out = linkifyEventText("A & B married C <D>.", [ref(1, "C <D>")]);
-    expect(out).toBe('A &amp; B married <button class="namelink" data-goto="england:3:1">C &lt;D></button>.');
+    expect(out).toBe('A &amp; B married <button class="namelink" data-goto="england:3:1">C &lt;D&gt;</button>.');
+  });
+});
+
+// Previously untested: buildRecordHTML/renderVillageBody are the two
+// functions that actually assemble the page, and had zero direct
+// assertions on their output (only linkifyEventText, a small piece of
+// buildRecordHTML, was covered) — app.test.ts drives them through a real
+// DOM now, but these check the section content directly.
+describe("buildRecordHTML", () => {
+  const env = E.resolveVillage(1444, "england", 0);
+  const person = env.persons.find((p) => !p.founder) ?? env.persons[0];
+  const stack: StackNode[] = [{ regionKey: "england", villageIdx: 0, personId: person.id }];
+
+  it("renders the vitals, chronicle, and parentage sections for a real person", () => {
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    expect(html).toContain('class="vital"');
+    expect(html).toContain('class="chronicle"');
+    expect(html).toContain('class="parents');
+    // the person's own name appears somewhere in the record (vitals or chronicle)
+    expect(html).toContain(person.name);
+  });
+
+  it("renders a Catalan record with the same structural sections as English", () => {
+    const html = buildRecordHTML(E, 1444, stack, "ca");
+    expect(html).toContain('class="vital"');
+    expect(html).toContain('class="chronicle"');
+  });
+
+  it("renders no breadcrumb trail bar for a single-node stack, and one for a multi-node stack", () => {
+    const one = buildRecordHTML(E, 1444, stack, "en");
+    expect(one).not.toContain('data-jump="0"');
+
+    const sibling = env.persons.find((p) => p.id !== person.id && p.father === person.father && p.father >= 0);
+    const twoStack: StackNode[] = sibling ? [...stack, { regionKey: "england", villageIdx: 0, personId: sibling.id }] : stack;
+    if (sibling) {
+      const two = buildRecordHTML(E, 1444, twoStack, "en");
+      expect(two).toContain("data-jump=");
+    }
+  });
+});
+
+describe("renderVillageBody", () => {
+  const env = E.resolveVillage(1444, "england", 0);
+  const person = env.persons.find((p) => !p.founder) ?? env.persons[0];
+
+  it("renders household cards for a year the village is populated", () => {
+    const year = defaultVillageYear(person.birth);
+    const html = renderVillageBody(E, env, year, "en", person.id);
+    expect(html).toContain('data-goto="england:0:');
+  });
+
+  it("renders an empty state for a year before the register begins", () => {
+    const html = renderVillageBody(E, env, VILLAGE_YEAR_MIN, "en", person.id);
+    expect(html.length).toBeGreaterThan(0); // never blank/crashes even with nobody alive yet
   });
 });

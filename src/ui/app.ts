@@ -12,7 +12,13 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   const worldSeed = Number(parts[0]);
   const villageIdx = Number(parts[2]);
   const personId = Number(parts[3]);
-  if (!Number.isSafeInteger(worldSeed) || !E.REGIONS[parts[1]] || !Number.isSafeInteger(villageIdx) || !Number.isSafeInteger(personId)) return null;
+  // Object.hasOwn (not a bracket-truthy check): REGIONS is a plain object
+  // literal, so a region segment of "__proto__"/"constructor"/"toString"
+  // etc. would otherwise resolve through the prototype chain to a truthy
+  // built-in and pass validation, then crash deep inside resolveVillage
+  // once something tries to read a region-shaped property off it.
+  if (!Number.isSafeInteger(worldSeed) || !Object.hasOwn(E.REGIONS, parts[1]) || !Number.isSafeInteger(villageIdx) || !Number.isSafeInteger(personId))
+    return null;
   if (worldSeed < 0 || villageIdx < 0 || personId < 0) return null;
   return { worldSeed, node: { regionKey: parts[1], villageIdx, personId } };
 }
@@ -54,14 +60,23 @@ export function initApp(): void {
     });
   }
 
+  function sameNode(a: StackNode, b: StackNode): boolean {
+    return a.regionKey === b.regionKey && a.villageIdx === b.villageIdx && a.personId === b.personId;
+  }
+
   function bindGoto(root: ParentNode): void {
     root.querySelectorAll<HTMLButtonElement>("[data-goto]").forEach((b) => {
       b.addEventListener("click", () => {
         const [rk, vi, pid] = b.dataset.goto!.split(":");
         const addr: StackNode = { regionKey: rk, villageIdx: +vi, personId: +pid };
+        const current = stack[stack.length - 1];
+        // a household/register row also renders the record you're already
+        // viewing (styled `.current`, but still clickable) — clicking it
+        // is a no-op, not a duplicate breadcrumb entry
+        if (current && sameNode(current, addr)) return;
         // walking back to the previous crumb pops instead of pushing
         const prev = stack[stack.length - 2];
-        if (prev && prev.regionKey === addr.regionKey && prev.villageIdx === addr.villageIdx && prev.personId === addr.personId) stack.pop();
+        if (prev && sameNode(prev, addr)) stack.pop();
         else stack.push(addr);
         render();
       });
@@ -76,10 +91,15 @@ export function initApp(): void {
     seedbox.value = loc;
     worldseed.textContent = UI[locale].worldSeed(worldSeed);
 
-    // fixed URL for this life: push so back/forward retrace the trail
+    // fixed URL for this life: push so back/forward retrace the trail.
+    // The visited-record breadcrumb trail is carried in the history state
+    // itself (not just the URL, which only ever encodes the CURRENT node)
+    // so that native back/forward — which fires hashchange, not our own
+    // in-app pushState — can restore the full trail instead of collapsing
+    // it to a single node.
     if (location.hash.slice(1) !== loc) {
-      if (pushUrl) history.pushState(null, "", `#${loc}`);
-      else history.replaceState(null, "", `#${loc}`);
+      if (pushUrl) history.pushState(stack, "", `#${loc}`);
+      else history.replaceState(stack, "", `#${loc}`);
     }
 
     out.innerHTML = html;
@@ -176,6 +196,19 @@ export function initApp(): void {
   window.addEventListener("hashchange", () => {
     const cur = stack[stack.length - 1];
     if (cur && location.hash.slice(1) === locator(worldSeed, cur)) return; // our own push
+    // Native back/forward restores `history.state` for us — if it's a
+    // trail we ourselves pushed (its own tail locator matches the hash we
+    // just navigated to), restore the full breadcrumb rather than falling
+    // through to openLocator's fresh single-node stack. A hand-edited or
+    // externally-pasted hash has no such state (or a stale/mismatched one)
+    // and correctly falls through.
+    const savedStack = history.state as StackNode[] | null;
+    const savedTail = Array.isArray(savedStack) ? savedStack[savedStack.length - 1] : null;
+    if (savedTail && locator(worldSeed, savedTail) === location.hash.slice(1)) {
+      stack = savedStack!;
+      render(false, false);
+      return;
+    }
     if (!openLocator(location.hash, false) && stack.length) render(false, false);
   });
 

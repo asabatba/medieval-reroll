@@ -151,7 +151,16 @@ export interface ClassInfo {
 // [startYear, endYear, regionFilter (null = all), ageOffset, chance, kind, srcKind, textFn]
 // textFn receives the decoded literacy as a third argument because literacy is a
 // Tier-2 derived fact that no longer lives on the Person record (§ pure decode).
-export type WorldEvent = [number, number, string[] | null, number, number, string, DocumentKind, (p: Person, locale: Locale, literate?: boolean) => string];
+export type WorldEvent = [
+  number,
+  number,
+  string[] | null,
+  number,
+  number,
+  BioEventKind,
+  DocumentKind,
+  (p: Person, locale: Locale, literate?: boolean) => string,
+];
 
 // [template, weight, flag]
 export type TextureEvent = [string, number, string | null];
@@ -198,11 +207,18 @@ export interface EventRef {
   addr: Address;
 }
 
+/** Every category of life event biography.ts narrates — kept in sync with
+ * KIND_LABEL (src/ui/dom.ts), which the UI uses to tag each event; unlike
+ * DeathCause, this used to be a bare `string`, so a typo'd or renamed kind
+ * on the narrative side could silently drop its UI tag with nothing
+ * catching it. A literal union here makes that a compile error instead. */
+export type BioEventKind = "birth" | "plague" | "famine" | "grief" | "fortune" | "marriage" | "child" | "war" | "revolt" | "hardship" | "death" | "life";
+
 export interface BioEvent {
   year: number;
   age: number;
   text: string;
-  kind: string;
+  kind: BioEventKind;
   src: string;
   /** Every other person named in `text`, if any (§ name links). */
   refs?: EventRef[];

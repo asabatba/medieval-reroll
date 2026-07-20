@@ -78,4 +78,54 @@ describe("app navigation", () => {
     expect(catalan.getAttribute("aria-pressed")).toBe("true");
     expect(document.querySelector('[data-lang="en"]')?.getAttribute("aria-pressed")).toBe("false");
   });
+
+  it("a locator segment that resolves through Object.prototype (e.g. __proto__) is rejected, not treated as a valid region", async () => {
+    await start("#1444:__proto__:0:0");
+    expect(document.getElementById("locator-error")?.textContent).not.toBe("");
+    expect(location.hash).toMatch(/^#1444:/);
+    expect(location.hash).not.toContain("__proto__");
+  });
+
+  it("clicking another record in the parish register navigates there and pushes a new history entry carrying the visited trail", async () => {
+    await start();
+    const before = location.hash;
+    const other = document.querySelector<HTMLButtonElement>(".regrow:not(.current)");
+    expect(other).not.toBeNull();
+    other!.click();
+    expect(location.hash).not.toBe(before);
+    // history state now carries the full stack (not null) so native
+    // back/forward can restore the breadcrumb trail, not just the node
+    expect(Array.isArray(history.state)).toBe(true);
+    expect(history.state).toHaveLength(2);
+  });
+
+  it("clicking the currently-viewed record's own row in the register is a no-op (no duplicate breadcrumb entry)", async () => {
+    await start();
+    const before = location.hash;
+    const self = document.querySelector<HTMLButtonElement>(".regrow.current");
+    expect(self).not.toBeNull();
+    self!.click();
+    expect(location.hash).toBe(before);
+    // a real second stack entry would render a (possibly duplicate-looking)
+    // breadcrumb trail bar; a no-op must never show one from a single click
+    expect(document.querySelectorAll(".crumb[data-jump]")).toHaveLength(0);
+  });
+
+  it("browser back restores the full breadcrumb trail, not just the single node being navigated to", async () => {
+    await start();
+    const firstHash = location.hash;
+    const other = document.querySelector<HTMLButtonElement>(".regrow:not(.current)");
+    other!.click();
+    expect(location.hash).not.toBe(firstHash);
+    expect(document.querySelectorAll(".crumb[data-jump]")).toHaveLength(2); // A, B
+
+    history.back();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(location.hash).toBe(firstHash);
+    // restored via the saved history state, so the trail bar for A alone
+    // correctly shows nothing (stack length 1) rather than either crashing
+    // or silently collapsing into some other inconsistent state
+    expect(document.querySelectorAll(".crumb[data-jump]")).toHaveLength(0);
+  });
 });

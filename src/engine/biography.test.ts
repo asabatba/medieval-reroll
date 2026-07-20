@@ -3,6 +3,7 @@ import type { Locale } from "../i18n/locale.js";
 import { decodePerson } from "./biography.js";
 import { CLASS_INFO } from "./data/classes.js";
 import { REGIONS } from "./data/regions.js";
+import { manorOf } from "./hierarchy.js";
 import { isFirstBornSon } from "./succession.js";
 import { resolveVillage } from "./village.js";
 
@@ -306,6 +307,82 @@ describe("§ occupation marital gate", () => {
   });
 });
 
+// § texture "hasChildren" gate: entries that presuppose she already has a
+// child of her own ("raised them with {pos} own", "churched after each
+// childbed") must never fire for someone who never has children (a
+// childless adult, or a celibate priest in orders — inOrders never marries,
+// § occupation above), and never at a chronicle year before her own
+// earliest child's birth.
+function earliestChildBirthRaw(env: ReturnType<typeof resolveVillage>, id: number): number | null {
+  const p = env.persons[id];
+  const births = (p.unions ?? []).flatMap((ci) => env.couples[ci].children.map((cid) => env.persons[cid].birth));
+  return births.length ? Math.min(...births) : null;
+}
+
+describe("§ texture events gated on having children", () => {
+  function scan(marker: string) {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const e = bio.events.find((ev) => ev.text.includes(marker));
+          if (!e) continue;
+          seen++;
+          const earliest = earliestChildBirthRaw(env, p.id);
+          expect(earliest).not.toBeNull();
+          expect(e.year).toBeGreaterThanOrEqual(earliest!);
+        }
+      }
+    }
+    return seen;
+  }
+
+  it('"raised them with {pos} own" never appears for someone childless, and never before her/his earliest child\'s birth', () => {
+    expect(scan("raised them with")).toBeGreaterThan(0);
+  });
+
+  it('"was churched after each childbed" never appears for someone childless, and never before her earliest child\'s birth', () => {
+    expect(scan("churched after each childbed")).toBeGreaterThan(0);
+  });
+
+  it("neither entry ever appears for a person in holy orders", () => {
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          if (!p.inOrders) continue;
+          const bio = decodePerson(env, p.id, "en")!;
+          expect(bio.events.some((e) => e.text.includes("raised them with"))).toBe(false);
+        }
+      }
+    }
+  });
+});
+
+describe("§ merchet marital gate", () => {
+  it('"paid merchet" never appears unless her father was actually alive at her marriage', () => {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          if (p.sex !== "F" || p.cls !== "serf" || p.father < 0 || !p.unions?.length) continue;
+          const bio = decodePerson(env, p.id, "en")!;
+          const e = bio.events.find((ev) => ev.text.includes("paid merchet"));
+          if (!e) continue;
+          seen++;
+          const father = env.persons[p.father];
+          const marriageYear = env.couples[p.unions[0]].year;
+          expect(father.death.year).toBeGreaterThan(marriageYear);
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+});
+
 // § name links: an event's `refs` are metadata for the UI to turn a name
 // into a link — this checks the invariant the UI relies on (every ref's
 // name is a literal, findable substring of its own event's text) and that
@@ -395,6 +472,37 @@ describe("§ age text removed from event prose", () => {
     }
     expect(seen).toBeGreaterThan(0);
   });
+
+  // Regression: the wardship event used to always cite decodePerson's OWN
+  // envelope's lord (`fief`), even for a real immigrant decoded from her
+  // DESTINATION register — but she was orphaned as a child back in her
+  // ORIGIN village, years before her marriage ever brought her onto this
+  // register, so the wardship (and the court that granted it) belongs to
+  // her origin village's own lord, not the destination's.
+  it("an immigrant orphaned before her marriage cites her ORIGIN village's lord in the wardship event, never the destination's", () => {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 60; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          if (!p.incomer || !p.origin || p.originId == null) continue;
+          const originEnv = resolveVillage(1444, p.origin.regionKey, p.origin.villageIdx);
+          const native = originEnv.persons[p.originId];
+          if (!native || native.father < 0 || native.mother < 0) continue;
+          const destFief = manorOf(1444, regionKey, villageIdx, "en");
+          const originFief = manorOf(1444, p.origin.regionKey, p.origin.villageIdx, "en");
+          if (destFief.lord === originFief.lord) continue; // can't distinguish by name; skip
+          const bio = decodePerson(env, p.id, "en")!;
+          const e = bio.events.find((e) => e.text.includes("wardship of"));
+          if (!e) continue;
+          seen++;
+          expect(e.text).toContain(originFief.lord);
+          expect(e.text).not.toContain(destFief.lord);
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
 });
 
 describe("§ godparents", () => {
@@ -470,6 +578,34 @@ describe("§ manorial accounts (rent/tax narrative)", () => {
   });
 });
 
+// Regression: the printing-press world event (Germany, 1460-1475) chooses
+// its text based on `literate` — but `literate` used to be read by the
+// World-events loop BEFORE the CHILD_EVENTS texture pass (ages 5-11, the
+// only place literacy is actually acquired for someone who isn't a
+// clergyFamily/merchant/gentry occupation) had any chance to set it, so a
+// child taught letters at 5-11 could still get the illiterate-framed
+// reaction. Both branches share enough vocabulary ("printed books"/"printing
+// books") that this checks the LITERATE-only phrase specifically.
+describe("§ world event reads literacy set by the child texture pass", () => {
+  it('a German villager taught letters as a child gets the literate framing ("understood the world had changed") for the printing-press event, never the illiterate one', () => {
+    let seen = 0;
+    for (let villageIdx = 0; villageIdx < 60; villageIdx++) {
+      const env = resolveVillage(1444, "germany", villageIdx);
+      for (const p of env.persons) {
+        const bio = decodePerson(env, p.id, "en")!;
+        const press = bio.events.find((e) => e.text.includes("printed books") || e.text.includes("printing books"));
+        if (!press) continue;
+        const taughtLetters = bio.events.some((e) => e.text.includes("Was taught letters by the parish priest"));
+        if (!taughtLetters) continue;
+        seen++;
+        expect(press.text).toContain("understood the world had changed");
+        expect(press.text).not.toContain("Few in the village believed it");
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+});
+
 describe("§ downward mobility narrative", () => {
   it("a downward class move (village.ts) is narrated distinctly from an upward one, and dated to age 16", () => {
     let sawDown = 0;
@@ -508,6 +644,44 @@ describe("§ downward mobility narrative", () => {
       expect(e!.kind).toBe("fortune");
     }
     expect(sawUp).toBeGreaterThan(0);
+  });
+});
+
+// Regression: the age-13 occupation event used to read OCCUPATIONS by
+// p.cls (the eventual, POST-mobility class) even for someone with a
+// clsOrigin — so a serf who later rises to free peasant could get "leased
+// extra strips and prospered as a yeoman" at 13, then flatly contradict it
+// three years later with "Rose out of servitude" at the § mobility event
+// (age 16). Each marker below is a substring that only ever appears in ONE
+// class's own occupation pool (EN), so its presence at age 13 for someone
+// who held a DIFFERENT class at 13 (clsOrigin != null) would prove the
+// pool was read by the wrong class.
+describe("§ occupation vs mobility timing", () => {
+  const CLASS_ONLY_MARKER: Record<string, string[]> = {
+    serf: ["servile holding", "the lord's demesne", "the lord's sheep", "the lord's quarry", "the dairy, and the harvest", "the manor house"],
+    freePeasant: ["farmed the family holding", "prospered as a yeoman", "fished the estuary", "the dairy, the poultry", "a townhouse"],
+    artisan: ["in time kept the shop", "became a journeyman", "hewed and dressed stone", "family workshop", "in widowhood"],
+    merchant: ["rode to the fairs", "trading fleet", "household accounts", "when her husband travelled"],
+  };
+
+  it("the age-13 occupation event narrates the class actually held at 13 (clsOrigin), never the post-mobility final class", () => {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          if (!p.clsOrigin || p.death.age < 12 || p.inOrders) continue;
+          const bio = decodePerson(env, p.id, "en")!;
+          const occEvent = bio.events.find((e) => e.kind === "life" && e.text.startsWith(`${bio.name} `));
+          if (!occEvent) continue;
+          seen++;
+          for (const marker of CLASS_ONLY_MARKER[p.cls] ?? []) {
+            expect(occEvent.text).not.toContain(marker);
+          }
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
   });
 });
 

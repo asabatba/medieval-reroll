@@ -73,6 +73,35 @@ describe("resolveVillage invariants", () => {
     }
   });
 
+  // Regression: founders exist solely to found a line, and were previously
+  // extended to a death age just short of the marriage-year formula's own
+  // range, so a natural death age of 24 (H) or 20 (W) could still fail to
+  // outlive a marriage year rolled as high as hb+26/wb+20 — silently
+  // leaving the couple unmarried with no diagnostic anywhere.
+  it("every founder marries (the death-age extension always outlives the rolled marriage year)", () => {
+    for (const env of envs) {
+      for (const p of env.persons) {
+        if (!p.founder) continue;
+        expect(p.spouse).not.toBeNull();
+        expect(p.spouse).not.toBeUndefined();
+        expect(p.unions?.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  // Regression: sibling-avoidance in matching only compared `.father`,
+  // so a widow's children by two different husbands (sharing a mother but
+  // not a father) could be matched to each other.
+  it("no marriage is between siblings who share a mother, even from different fathers", () => {
+    for (const env of envs) {
+      for (const c of env.couples) {
+        const H = env.persons[c.husband];
+        const W = env.persons[c.wife];
+        if (H.mother >= 0 && W.mother >= 0) expect(H.mother).not.toBe(W.mother);
+      }
+    }
+  });
+
   it("coupleOf index agrees with the couples array for every married person", () => {
     for (const env of envs) {
       for (const p of env.persons) {

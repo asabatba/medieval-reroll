@@ -46,6 +46,7 @@ import type {
   Address,
   Bio,
   BioEvent,
+  BioEventKind,
   Couple,
   DocumentKind,
   Envelope,
@@ -337,7 +338,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const destChildren = destUnion && destEnv ? destUnion.children.map((cid) => destEnv.persons[cid]) : [];
 
   const events: BioEvent[] = [];
-  const ev = (year: number, text: string, kind: string, src?: string, refs?: EventRef[]) => {
+  const ev = (year: number, text: string, kind: BioEventKind, src?: string, refs?: EventRef[]) => {
     if (year <= p.death.year)
       events.push({ year, age: year - p.birth, text: gender(text, p.sex), kind, src: src || cite("reg"), refs: refs?.length ? refs : undefined });
   };
@@ -499,17 +500,31 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     const orphanedAt = Math.max(father.death.year, mother.death.year);
     const orphanedAge = orphanedAt - p.birth;
     if (orphanedAge >= 0 && orphanedAge < 14 && orphanedAt < p.death.year) {
+      // § canonical identity: an immigrant orphaned as a child was orphaned
+      // in HER OWN origin village — years before her marriage ever brought
+      // her onto THIS (destination) register — so the wardship's lord and
+      // court citation must come from the origin village's own hierarchy
+      // (fatherEnvForOcc, already resolved above), never this envelope's,
+      // or a bride pulled in from elsewhere would be narrated as a ward of
+      // a lord she in fact never lived under as a child.
+      const wardEnv = fatherEnvForOcc ?? env;
+      const wardFief = manorOf(wardEnv.worldSeed, wardEnv.regionKey, wardEnv.villageIdx, locale);
+      const wardCite = citeDocument(
+        "court",
+        { jurisdiction: parishOf(wardEnv.worldSeed, wardEnv.regionKey, wardEnv.villageIdx, locale), fief: wardFief, place: wardEnv.place[locale] },
+        locale,
+      );
       ev(
         orphanedAt,
         wealth >= 4
           ? ca
-            ? `Orfe de pare i mare, la tutela de la seva persona i de la seva terra va ser atorgada per ${fief.lord} a un parent, que en cobraria els fruits fins que arribés a la majoria d'edat.`
-            : `Orphaned of both parents, wardship of ${pos} person and land was granted by ${fief.lord} to a kinsman, who would take the profits of the holding until ${obj} came of age.`
+            ? `Orfe de pare i mare, la tutela de la seva persona i de la seva terra va ser atorgada per ${wardFief.lord} a un parent, que en cobraria els fruits fins que arribés a la majoria d'edat.`
+            : `Orphaned of both parents, wardship of ${pos} person and land was granted by ${wardFief.lord} to a kinsman, who would take the profits of the holding until ${obj} came of age.`
           : ca
             ? `Orfe de pare i mare, el van acollir uns parents, com va quedar constatat quan la cort del senyoriu va confirmar qui responia ara pels drets de la casa.`
             : `Orphaned of both parents, ${p.name} was taken in by kin, as the manor court noted when it confirmed who now answered for the household's dues.`,
         "grief",
-        cite("court"),
+        wardCite,
       );
     }
   }
@@ -567,9 +582,27 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // preferentially narrated into a trade that actually carries that hazard,
   // never the reverse (a "normal" person never draws a risk-flavoured entry).
   if (p.death.age >= 12 && !p.inOrders) {
-    const eligible = OCCUPATIONS[locale][p.cls][p.sex].filter((o) => !o.maritalGate || (o.maritalGate === "married" ? everMarried : widowedUnions.length > 0));
-    const fullPool = eligible.length ? eligible : OCCUPATIONS[locale][p.cls][p.sex];
-    const riskTrade = p.riskTrade ?? "normal";
+    // § mobility timing: the age-13 "occupation decided" moment predates
+    // the age-16 class-mobility transition (§ mobility below) — so someone
+    // WITH a clsOrigin (mobility applies) is still living their ORIGIN
+    // class at 13, not their eventual final class. Reading OCCUPATIONS by
+    // p.cls here would narrate the final trade years early (e.g. a serf
+    // already "prospered as a yeoman" at 13, then "Rose out of servitude"
+    // at 16 — flatly contradicting itself); reading it by clsOrigin instead
+    // keeps this event honest about which class is actually true yet, the
+    // same fix already applied to the maritalGate entries above.
+    const occCls = p.clsOrigin ?? p.cls;
+    const eligible = OCCUPATIONS[locale][occCls][p.sex].filter((o) => !o.maritalGate || (o.maritalGate === "married" ? everMarried : widowedUnions.length > 0));
+    const fullPool = eligible.length ? eligible : OCCUPATIONS[locale][occCls][p.sex];
+    // riskTrade (village.ts) is rolled from the person's FINAL class — the
+    // hazard belongs to the trade they end up in, not necessarily one they
+    // were already practicing at 13. Only let it steer text selection when
+    // occCls IS that final class (no mobility, or mobility hasn't happened
+    // yet in the narrative sense); otherwise a mobility case could fall
+    // through to the "no matching risk entry in the origin pool" fallback
+    // and randomly draw an unrelated risk-flavoured line from the origin
+    // class (e.g. a future sailor's age-13 text calling him a quarryman).
+    const riskTrade = occCls === p.cls ? (p.riskTrade ?? "normal") : "normal";
     const matching = riskTrade === "normal" ? fullPool.filter((o) => !o.risk) : fullPool.filter((o) => o.risk === riskTrade);
     const pool = matching.length ? matching : fullPool;
     const occ = rng.pick(pool);
@@ -710,7 +743,12 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     const sName = s.name + " " + s.surname;
     if (i === 0) {
       let extra = "";
-      if (p.cls === "serf" && p.sex === "F")
+      // Merchet was HER FATHER'S payment for licence to marry her off — so
+      // it only ever happened if he was actually alive to make it, not just
+      // recorded somewhere earlier in her life (same-shape fix as the
+      // maritalGate occupation entries above: a fact tied to a real event
+      // must be checked against that event's own year, not "ever true").
+      if (p.cls === "serf" && p.sex === "F" && father && father.death.year > c.year)
         extra = ca ? ` El seu pare va pagar a ${fief.lord} el dret per casar-la.` : ` Her father paid merchet to ${fief.lord} for licence to marry.`;
       if (s.incomer && p.sex === "M") {
         extra = s.origin
@@ -947,14 +985,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     }
   }
 
-  // World events
-  for (const w of WORLD_EVENTS[locale]) {
-    if (w[1] < p.birth + w[3] || w[0] > p.death.year) continue;
-    if (w[2] && !w[2].includes(env.regionKey)) continue;
-    if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
-  }
-
   // Personal texture events
+  const earliestChildBirth = children.length ? Math.min(...children.map((c) => c.birth)) : null;
   function texture(pool: readonly [string, number, string | null][], lo: number, hi: number, n: number) {
     const span = Math.min(hi, p.death.age) - lo;
     if (span <= 0) return;
@@ -963,9 +995,17 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       if (count >= n) break;
       if (flag === "englandM" && !(env.regionKey === "england" && p.sex === "M")) continue;
       if (flag === "nw" && !["england", "germany"].includes(env.regionKey)) continue;
+      // § texture marital gate: an entry that presupposes children of her
+      // own (e.g. "raised them with {pos} own") must only ever be eligible
+      // for someone who actually has any — otherwise it can fire for a
+      // childless adult or even a celibate priest (§ occupation above
+      // already excludes inOrders from having any union/children at all).
+      if (flag === "hasChildren" && earliestChildBirth == null) continue;
       if (!rng.chance(wgt * 0.16)) continue;
       count++;
-      const y = p.birth + lo + rng.int(0, span);
+      // Never date it earlier than the year it's actually true: she has to
+      // have a child ("her own") before she can raise one alongside it.
+      const y = Math.max(p.birth + lo + rng.int(0, span), flag === "hasChildren" && earliestChildBirth != null ? earliestChildBirth : -Infinity);
       const text = tmpl
         .replace("{pos}", pos)
         .replace("{obj}", obj)
@@ -983,6 +1023,21 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   texture(ADULT_EVENTS[locale], 21, 58, 3);
   if (p.sex === "F" && own) texture(FEMALE_EVENTS[locale], 20, 45, 1);
   texture(OLD_EVENTS[locale], 58, 90, 2);
+
+  // World events — run AFTER the texture passes above (not before): a
+  // world event's text can read `literate`, and childhood literacy is only
+  // ever set by the CHILD_EVENTS texture pass (ages 5-11). Reading it
+  // beforehand always saw the initial `false`, so e.g. a child who WAS
+  // taught letters at 5-11 could still get the illiterate-framed reaction
+  // to the 1460s printing press. Narrative event ORDER in the finished
+  // chronicle is unaffected either way (events.sort() below is by year,
+  // not call order) — this only changes which value of `literate` this
+  // block's own text-selection callback sees.
+  for (const w of WORLD_EVENTS[locale]) {
+    if (w[1] < p.birth + w[3] || w[0] > p.death.year) continue;
+    if (w[2] && !w[2].includes(env.regionKey)) continue;
+    if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
+  }
 
   // Pilgrimage
   if (p.death.age >= 28 && rng.chance(0.18)) {

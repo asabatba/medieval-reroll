@@ -544,7 +544,7 @@ export const YOUTH_EVENTS: Record<Locale, TextureEvent[]> = {
 export const ADULT_EVENTS: Record<Locale, TextureEvent[]> = {
   en: [
     ["Fire took the house one autumn night — thatch and timber gone in an hour. Neighbours helped raise a new frame before winter.", 1, null],
-    ["Took in two orphaned children of dead kin after a plague year, and raised them with {pos} own.", 0.9, null],
+    ["Took in two orphaned children of dead kin after a plague year, and raised them with {pos} own.", 0.9, "hasChildren"],
     ["Stood godparent to a neighbour's child — a bond of gossipred taken as seriously as blood.", 1, null],
     ["Joined the confraternity of the parish, paying the yearly candle-money for prayers after death and a decent funeral.", 1, null],
     ["Was cited before the church court over unpaid tithes of lambs and wool, and did penance rather than pay the fine.", 0.7, "court"],
@@ -566,7 +566,7 @@ export const ADULT_EVENTS: Record<Locale, TextureEvent[]> = {
       1,
       null,
     ],
-    ["Va acollir dos infants orfes de parents morts després d'un any de pesta, i els va criar juntament amb els seus propis.", 0.9, null],
+    ["Va acollir dos infants orfes de parents morts després d'un any de pesta, i els va criar juntament amb els seus propis.", 0.9, "hasChildren"],
     ["Va fer de {{padrí/padrina}} en el bateig d'un infant del veïnat — un lligam de {{compare/comare}} tan seriós com el de sang.", 1, null],
     ["Es va afiliar a la confraria de la parròquia, pagant la candela anual per les misses de difunts i un enterrament digne.", 1, null],
     [
@@ -609,7 +609,7 @@ export const COURT_CAUSES: Record<Locale, string[]> = {
 };
 export const FEMALE_EVENTS: Record<Locale, TextureEvent[]> = {
   en: [
-    ["Was churched after each childbed with candles and a feast — her return to the world marked as it was for every mother.", 1, null],
+    ["Was churched after each childbed with candles and a feast — her return to the world marked as it was for every mother.", 1, "hasChildren"],
     [
       "Was presented in the manor court, as most brewing women were, for selling ale before it was tasted — the fine treated by all as a licence fee.",
       1,
@@ -617,7 +617,7 @@ export const FEMALE_EVENTS: Record<Locale, TextureEvent[]> = {
     ],
   ],
   ca: [
-    ["Va ser beneïda a l'església després de cada part, amb ciris i un àpat — el seu retorn al món marcat, com el de totes les mares.", 1, null],
+    ["Va ser beneïda a l'església després de cada part, amb ciris i un àpat — el seu retorn al món marcat, com el de totes les mares.", 1, "hasChildren"],
     [
       "Va ser presentada a la cort del senyor, com la majoria de dones cerveseres, per vendre cervesa abans de ser tastada — una multa que tothom tractava com si fos una llicència.",
       1,
