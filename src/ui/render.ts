@@ -1,5 +1,5 @@
 import type * as Engine from "../engine/index.js";
-import type { Address, Death, PersonAddress } from "../engine/index.js";
+import type { Address, Death, Envelope, HouseholdState, PersonAddress } from "../engine/index.js";
 import type { Locale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
 import { esc, KIND_LABEL } from "./dom.js";
@@ -43,6 +43,90 @@ function relCard(who: string, person: RelCardPerson, addr: string, opts?: RelCar
     <div class="rdates">${person.death.age < 16 ? '<span class="dagger">' + dates + "</span>" : dates}${opts.note ? " · " + esc(opts.note) : ""}</div>`;
   if (opts.nolink || opts.self) return `<div class="rel ${cls}">${inner}</div>`;
   return `<button class="rel ${cls}" data-goto="${addr}">${inner}</button>`;
+}
+
+// ---- village-in-year view (§ year layer) ----
+export const VILLAGE_YEAR_MIN = 1290;
+export const VILLAGE_YEAR_MAX = 1500;
+
+/** Default snapshot year for a record: the subject's adult prime. */
+export function defaultVillageYear(birth: number): number {
+  return Math.min(VILLAGE_YEAR_MAX, Math.max(VILLAGE_YEAR_MIN, birth + 30));
+}
+
+// The households of one village in one year, as clickable member cards.
+// Exported separately from the section wrapper so the year slider can
+// re-render just this body without rebuilding the whole record page.
+export function renderVillageBody(E: typeof Engine, env: Envelope, year: number, locale: Locale, currentId: number): string {
+  const t = UI[locale];
+  const state = E.villageStateAt(env, year);
+  if (!state.population) return `<p class="vempty">${esc(t.emptyYear)}</p>`;
+  const byId = new Map(state.residents.map((r) => [r.id, r]));
+
+  const badges: string[] = [];
+  const pl = E.plagueAt(year);
+  if (pl) badges.push(`<span class="badge b-plague">☠ ${esc(pl[3][locale])}</span>`);
+  if (E.famineAt(year, env.region)) badges.push(`<span class="badge b-famine">${esc(env.region.famineName[locale])} · ${esc(t.famineBadge)}</span>`);
+  const war = E.warAt(year, env.region, locale);
+  if (war) badges.push(`<span class="badge b-war">⚔ ${esc(t.warBadge(war))}</span>`);
+
+  const family = state.households.filter((h) => h.id >= 0).sort((a, b) => b.members.length - a.members.length || a.id - b.id);
+  const pseudo = state.households.filter((h) => h.id < 0).sort((a, b) => b.id - a.id); // manor before church
+
+  function roleOf(id: number, h: HouseholdState): string {
+    if (h.id === E.MANOR_HOUSEHOLD) return t.serviceTag;
+    if (h.id === E.CHURCH_HOUSEHOLD) return t.ordersTag;
+    const st = byId.get(id)!;
+    const p = env.persons[id];
+    if (id === h.headId) return st.maritalStatus === "widowed" ? (p.sex === "F" ? t.widowTag : t.widowerTag) : t.headTag;
+    if (st.spouseId === h.headId) return p.sex === "F" ? t.wife : t.husband;
+    const headSpouse = byId.get(h.headId)?.spouseId;
+    if (p.father === h.headId || p.mother === h.headId || (headSpouse != null && (p.father === headSpouse || p.mother === headSpouse)))
+      return p.sex === "M" ? t.son : t.daughter;
+    const head = env.persons[h.headId];
+    if (head && p.father >= 0 && p.father === head.father) return p.sex === "M" ? t.brother : t.sister;
+    return t.kinTag;
+  }
+
+  function hhCard(h: HouseholdState): string {
+    const isManor = h.id === E.MANOR_HOUSEHOLD;
+    const isChurch = h.id === E.CHURCH_HOUSEHOLD;
+    const orphan = h.id >= 200000;
+    const head = h.headId >= 0 ? env.persons[h.headId] : null;
+    const title = isManor ? t.manorHouse : isChurch ? t.churchHouse : head ? `${head.name} ${head.surname}` : "";
+    const rank = (id: number) => (id === h.headId ? 0 : byId.get(id)?.spouseId === h.headId ? 1 : 2);
+    const members = h.members.slice().sort((a, b) => rank(a) - rank(b) || env.persons[a].birth - env.persons[b].birth || a - b);
+    const rows = members
+      .map((id) => {
+        const p = env.persons[id];
+        const st = byId.get(id)!;
+        return `<button class="member${id === currentId ? " current" : ""}" data-goto="${env.regionKey}:${env.villageIdx}:${id}">
+        <span class="m-name">${esc(p.name)} ${esc(p.surname)}</span>
+        <span class="m-role">${esc(roleOf(id, h))}</span>
+        <span class="m-age">aet. ${st.age}</span></button>`;
+      })
+      .join("");
+    return `<div class="hh${orphan ? " orphan" : ""}${isManor || isChurch ? " pseudo" : ""}">
+      <div class="hh-title">${esc(title)}${orphan ? ` <i>${esc(t.orphanTag)}</i>` : ""}</div>
+      <div class="hh-members">${rows}</div></div>`;
+  }
+
+  return (
+    `<div class="vstats">${esc(t.hearthCount(state.population, family.length))}${badges.length ? badges.join("") : ""}</div>` +
+    `<div class="hhgrid">${family.map(hhCard).join("")}${pseudo.map(hhCard).join("")}</div>`
+  );
+}
+
+function renderVillageSection(E: typeof Engine, env: Envelope, year: number, locale: Locale, currentId: number): string {
+  const t = UI[locale];
+  return `<details class="register village reveal"><summary>${esc(t.villageHeader(env.place[locale]))}</summary>
+    <div class="village-controls">
+      <label class="vyear-lbl" for="vyear">${esc(t.yearLabel)}</label>
+      <input type="range" id="vyear" min="${VILLAGE_YEAR_MIN}" max="${VILLAGE_YEAR_MAX}" step="1" value="${year}">
+      <output class="vyear-out" id="vyearout" for="vyear">${year}</output>
+    </div>
+    <div class="village-body" id="vbody">${renderVillageBody(E, env, year, locale, currentId)}</div>
+  </details>`;
 }
 
 function renderLineageBar(stack: StackNode[], t: (typeof UI)[Locale]): string {
@@ -176,6 +260,9 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
       )
       .join("") +
     `</div></details>`;
+
+  // Village-in-year view (§ year layer), defaulting to the subject's prime
+  html += renderVillageSection(E, env, defaultVillageYear(bio.birth), locale, node.personId);
 
   html += `<div class="ledger reveal">
     ${t.ledger(bio.death.age, bio.plaguesLived, !!bio.widowed, bio.literate)}

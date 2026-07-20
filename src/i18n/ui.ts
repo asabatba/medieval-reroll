@@ -57,6 +57,22 @@ interface UiStrings {
   incomerTag: string;
   emigratedTag: string;
   ledger: (age: number, plagues: number, widowed: boolean, literate: boolean) => string;
+  // ---- village-in-year view (§ year layer) ----
+  villageHeader: (place: string) => string;
+  yearLabel: string;
+  hearthCount: (souls: number, hearths: number) => string;
+  headTag: string;
+  widowTag: string;
+  widowerTag: string;
+  kinTag: string;
+  serviceTag: string;
+  ordersTag: string;
+  manorHouse: string;
+  churchHouse: string;
+  orphanTag: string;
+  emptyYear: string;
+  famineBadge: string;
+  warBadge: (name: string) => string;
 }
 
 export const UI: Record<Locale, UiStrings> = {
@@ -119,6 +135,21 @@ export const UI: Record<Locale, UiStrings> = {
     emigratedTag: " (removed elsewhere)",
     ledger: (age: number, plagues: number, widowed: boolean, literate: boolean) =>
       `lifespan <b>${age} years</b> · plagues lived through <b>${plagues}</b> · widowed <b>${widowed ? "yes" : "no"}</b> · literate <b>${literate ? "yes" : "no"}</b>`,
+    villageHeader: (place: string) => `Visit ${place} through the years`,
+    yearLabel: "Anno Domini",
+    hearthCount: (souls: number, hearths: number) => `${souls} souls · ${hearths} hearths`,
+    headTag: "head",
+    widowTag: "widow",
+    widowerTag: "widower",
+    kinTag: "kin",
+    serviceTag: "in service",
+    ordersTag: "in orders",
+    manorHouse: "The manor — servants & apprentices",
+    churchHouse: "The church",
+    orphanTag: "orphaned kin",
+    emptyYear: "No one is yet entered in this register.",
+    famineBadge: "famine",
+    warBadge: (name: string) => name,
   },
   ca: {
     brandSuffix: "REROLL",
@@ -179,5 +210,20 @@ export const UI: Record<Locale, UiStrings> = {
     emigratedTag: " (traslladat)",
     ledger: (age: number, plagues: number, widowed: boolean, literate: boolean) =>
       `durada de vida <b>${age} anys</b> · pestes viscudes <b>${plagues}</b> · vidu/vídua <b>${widowed ? "sí" : "no"}</b> · alfabetitzat <b>${literate ? "sí" : "no"}</b>`,
+    villageHeader: (place: string) => `Visita ${place} a través dels anys`,
+    yearLabel: "Anno Domini",
+    hearthCount: (souls: number, hearths: number) => `${souls} ànimes · ${hearths} focs`,
+    headTag: "cap de casa",
+    widowTag: "vídua",
+    widowerTag: "vidu",
+    kinTag: "parent",
+    serviceTag: "servint",
+    ordersTag: "en ordes",
+    manorHouse: "La casa senyorial — criats i aprenents",
+    churchHouse: "L'església",
+    orphanTag: "orfes",
+    emptyYear: "Encara no hi ha ningú inscrit en aquest registre.",
+    famineBadge: "fam",
+    warBadge: (name: string) => name,
   },
 };

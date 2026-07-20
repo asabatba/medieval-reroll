@@ -315,7 +315,11 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       const takenW = new Set<number>();
 
       for (const M of men) {
-        if (rng.chance(0.14)) continue; // never marries
+        // § calibrated mechanics: never-marry share ~10% (was higher, which —
+        // compounded with emigration and plague — sank most villages below
+        // replacement and emptied them by 1450, far past the ~10% of real
+        // villages deserted by 1500).
+        if (rng.chance(0.1)) continue; // never marries
         if (M.cls === "clergyFamily" && rng.chance(0.35)) {
           M.inOrders = true;
           continue;
@@ -347,7 +351,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           // cluster-mate's own envelope (a genuine cross-village pointer, never
           // a new decode) — only fabricate an unaddressable incomer if the
           // local cluster has nobody to offer.
-          if (M.death.year <= wantYear || rng.chance(0.25)) continue;
+          // most men without a local match DO find a bride outside (skip only ~12%)
+          if (M.death.year <= wantYear || rng.chance(0.12)) continue;
           const pulled = pullImmigrantBride(wantYear, region.marriageF[0] - 1, region.marriageF[1] + 6);
           let W: Person;
           if (pulled) {

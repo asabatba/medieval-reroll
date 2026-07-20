@@ -22,7 +22,7 @@ export { decodePerson, fatherOccupation } from "./biography.js";
 export { CLASS_INFO } from "./data/classes.js";
 export { DEFAULT_DEMOGRAPHY, DEMOGRAPHY, demographyOf } from "./data/demography.js";
 export { CAUSE_LABEL } from "./data/narrative.js";
-export { PLAGUES } from "./data/plagues.js";
+export { PLAGUES, plagueAt } from "./data/plagues.js";
 export { REGIONS } from "./data/regions.js";
 export { citeDocument } from "./documents.js";
 export { addrHash, makeRng } from "./hash.js";
@@ -32,6 +32,7 @@ export { manorOf, parishOf } from "./hierarchy.js";
 // Canonical cross-village identity (§ canonical identity): resolve either of
 // a migrant's records (natal / residence) to the other.
 export { canonicalRef, findResidenceRecord, residenceRef } from "./identity.js";
+export { famineAt, warAt } from "./mortality.js";
 export { randomCitizen, roster } from "./roster.js";
 export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";
 // Temporal resolver (§ year layer): the village population/households AS OF a year.
