@@ -577,7 +577,21 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     const occText = occ.text.replace("{craft}", craft);
     occupation = occText;
     if (occ.literate) literate = true;
-    ev(p.birth + 13, `${p.name} ${occText}.`, "life");
+    // A marital-gated entry narrates something only true once she's married
+    // (or widowed) — dating it to the fixed age-13 "occupation decided"
+    // moment would print "ran the manor during her husband's absences"
+    // years before the chronicle's own marriage entry, for a girl who is
+    // in fact still unmarried at 13. Anchor it to the year that actually
+    // makes it true instead (never earlier than 13, and never invented:
+    // `own`/`widowedUnions` are the same real union records the eligibility
+    // filter above already checked).
+    const occYear =
+      occ.maritalGate === "married"
+        ? Math.max(p.birth + 13, own!.year)
+        : occ.maritalGate === "widowed"
+          ? Math.max(p.birth + 13, Math.min(...widowedUnions.map((c) => spouseOf(c).death.year)))
+          : p.birth + 13;
+    ev(occYear, `${p.name} ${occText}.`, "life");
   }
   if (p.inOrders) {
     literate = true;

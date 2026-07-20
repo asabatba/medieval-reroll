@@ -251,6 +251,59 @@ describe("§ occupation marital gate", () => {
   it('"ran the manor entirely during her husband\'s absences" never appears unless she actually married', () => {
     expect(scan("ran the manor entirely during her husband's absences", everMarriedRaw)).toBeGreaterThan(0);
   });
+
+  // A gated line must not just be TRUE somewhere in her recorded life — it
+  // must not be printed at a chronicle year that predates the marriage (or
+  // widowhood) it depends on. Regression for a bug where e.g. a 13-year-old,
+  // years away from her own wedding entry, got "ran the manor entirely
+  // during her husband's absences" because the occupation event was always
+  // dated to the fixed age-13 "occupation decided" moment regardless of
+  // when marriage actually happened in her life.
+  const MARRIED_MARKERS = ["kept the shop and the books when her husband travelled", "ran the manor entirely during her husband's absences"];
+  const WIDOWED_MARKERS = ["carried on the workshop in widowhood, with journeymen under her"];
+
+  it("a married-gated occupation line never appears before her own marriage entry", () => {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const occEvent = bio.events.find((e) => MARRIED_MARKERS.some((m) => e.text.includes(m)));
+          if (!occEvent) continue;
+          seen++;
+          const firstMarriage = bio.events.find((e) => e.kind === "marriage");
+          expect(firstMarriage).toBeDefined();
+          expect(occEvent.year).toBeGreaterThanOrEqual(firstMarriage!.year);
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("a widowed-gated occupation line never appears before she was actually widowed", () => {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const occEvent = bio.events.find((e) => WIDOWED_MARKERS.some((m) => e.text.includes(m)));
+          if (!occEvent) continue;
+          seen++;
+          const earliestWidowing = Math.min(
+            ...(env.persons[p.id].unions ?? [])
+              .map((ci) => env.couples[ci])
+              .map((c) => env.persons[p.id === c.husband ? c.wife : c.husband].death.year)
+              .filter((y) => y < env.persons[p.id].death.year),
+          );
+          expect(Number.isFinite(earliestWidowing)).toBe(true);
+          expect(occEvent.year).toBeGreaterThanOrEqual(earliestWidowing);
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
 });
 
 // § name links: an event's `refs` are metadata for the UI to turn a name
