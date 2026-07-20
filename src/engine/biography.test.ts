@@ -121,3 +121,81 @@ describe("decodePerson", () => {
     }
   });
 });
+
+// Occupational-hazard riskTrade (village.ts) is a Tier-1 mechanical fact;
+// this checks Tier 2's occupation/death narrative never contradicts it —
+// a "normal" man never reads as a quarryman or sailor, and a hazardous one
+// is never narrated as an ordinary ploughman drawing an ordinary death.
+const HAZARD_OCC_MARKERS = ["quarry", "pedrera"];
+const MARITIME_OCC_MARKERS = ["fished the estuary", "trading fleet", "va pescar a l'estuari", "flota mercant"];
+const MILITARY_OCC_MARKERS = ["raised chiefly to war", "format sobretot per a la guerra"];
+const HAZARD_DEATH_MARKERS = ["fall of stone in the quarry", "gallery of the mine", "despreniment de pedra", "galeria de la mina"];
+const MARITIME_DEATH_MARKERS = ["lost overboard", "boat went down", "foreign port", "borda", "vaixell", "port estranger"];
+
+function includesAny(text: string, markers: string[]): boolean {
+  return markers.some((m) => text.includes(m));
+}
+
+describe("occupational-risk narrative consistency", () => {
+  it("occupation text matches the person's own riskTrade, never someone else's", () => {
+    let sawHazardous = 0;
+    let sawMaritime = 0;
+    let sawMilitary = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 8; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          if (p.death.age < 12 || p.inOrders) continue;
+          const bio = decodePerson(env, p.id, "en")!;
+          const occText = bio.events.find((e) => e.kind === "life" && e.year === p.birth + 13)?.text ?? "";
+          const isHazard = includesAny(occText, HAZARD_OCC_MARKERS);
+          const isMaritime = includesAny(occText, MARITIME_OCC_MARKERS);
+          const isMilitary = includesAny(occText, MILITARY_OCC_MARKERS);
+          if (isHazard) {
+            expect(p.riskTrade).toBe("hazardous");
+            sawHazardous++;
+          }
+          if (isMaritime) {
+            expect(p.riskTrade).toBe("maritime");
+            sawMaritime++;
+          }
+          if (isMilitary) {
+            expect(p.riskTrade).toBe("military");
+            sawMilitary++;
+          }
+          if (p.riskTrade === "normal" || p.riskTrade == null) {
+            expect(isHazard || isMaritime || isMilitary).toBe(false);
+          }
+        }
+      }
+    }
+    // sanity: the scan actually turned up examples of each, so the assertions above were exercised
+    expect(sawHazardous).toBeGreaterThan(0);
+    expect(sawMaritime).toBeGreaterThan(0);
+    expect(sawMilitary).toBeGreaterThan(0);
+  });
+
+  it("occupational-accident death detail only ever appears for a matching riskTrade", () => {
+    let sawHazardDeath = 0;
+    let sawMaritimeDeath = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 8; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const deathText = bio.events.find((e) => e.kind === "death")?.text ?? "";
+          if (includesAny(deathText, HAZARD_DEATH_MARKERS)) {
+            expect(p.riskTrade).toBe("hazardous");
+            sawHazardDeath++;
+          }
+          if (includesAny(deathText, MARITIME_DEATH_MARKERS)) {
+            expect(p.riskTrade).toBe("maritime");
+            sawMaritimeDeath++;
+          }
+        }
+      }
+    }
+    expect(sawHazardDeath).toBeGreaterThan(0);
+    expect(sawMaritimeDeath).toBeGreaterThan(0);
+  });
+});

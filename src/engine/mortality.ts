@@ -1,6 +1,6 @@
 import type { Locale } from "../i18n/locale.js";
 import { plagueAt } from "./data/plagues.js";
-import type { Death, DeathCause, Region, Rng, Sex } from "./types.js";
+import type { Death, DeathCause, Region, RiskTrade, Rng, Sex } from "./types.js";
 
 const FALLBACK_WAR: Record<Locale, string> = { en: "the wars", ca: "les guerres" };
 
@@ -29,8 +29,13 @@ export function warAt(year: number, region: Region, locale: Locale = "en"): stri
 }
 
 // Pure per-person mortality walk. Returns {year, age, cause} where cause is
-// a coarse category; narrative detail is decoded at Tier 2.
-export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, region: Region): Death {
+// a coarse category; narrative detail is decoded at Tier 2. `riskTrade`
+// (§ occupational mortality) lets a trade the person was always going to be
+// decoded into at Tier 2 (miner, sailor, man-at-arms...) actually cost them
+// something here, rather than being purely decorative text: a hazardous or
+// maritime trade adds flat accident risk (falls in the workplace, shipwreck,
+// drowning), and a military one sharply multiplies the existing war hazard.
+export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, region: Region, riskTrade: RiskTrade = "normal"): Death {
   let age = 0;
   while (age <= 95) {
     const year = birth + age;
@@ -49,8 +54,13 @@ export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, reg
     let warRisk = 0;
     if (warName && sex === "M" && age >= 16 && age <= 45) {
       warRisk = wealth >= 4 ? 0.012 : 0.005;
+      if (riskTrade === "military") warRisk *= 2.2;
       if (region.routiers && wealth <= 2) warRisk += 0.004;
       h += warRisk;
+    }
+    if (sex === "M" && age >= 14 && age <= 65) {
+      if (riskTrade === "hazardous") h += 0.006;
+      else if (riskTrade === "maritime") h += 0.008;
     }
     if (rng() < h) {
       if (plague && rng() < 0.8) cause = "plague";

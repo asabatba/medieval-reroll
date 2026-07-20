@@ -13,6 +13,10 @@ export type SocialClass = "serf" | "freePeasant" | "artisan" | "merchant" | "cle
 
 export type DeathCause = "plague" | "famine" | "war" | "infancy" | "childhood" | "childbirth" | "disease" | "oldage";
 
+/** Occupational hazard category, rolled at Tier 1 alongside death and read back by
+ * Tier 2 so the occupation narrative it decodes stays consistent with the mechanic. */
+export type RiskTrade = "normal" | "hazardous" | "maritime" | "military";
+
 export interface Death {
   year: number;
   age: number;
@@ -67,6 +71,8 @@ export interface Person {
   longDistance?: boolean;
   occupation?: string;
   literate?: boolean;
+  /** Assigned at Tier 1, alongside death; "normal" for women (see RiskTrade). */
+  riskTrade?: RiskTrade;
 }
 
 export interface Couple {

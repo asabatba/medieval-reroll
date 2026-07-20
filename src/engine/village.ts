@@ -25,11 +25,12 @@
 // =====================================================================
 
 import { CLASS_INFO, CLASSES } from "./data/classes.js";
+import { placeOf } from "./data/placeNames.js";
 import { REGIONS } from "./data/regions.js";
 import { addrHash, makeRng, mix } from "./hash.js";
 import { famineAt, rollDeath, warAt } from "./mortality.js";
 import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
-import type { Address, Couple, Death, Envelope, Person, Sex } from "./types.js";
+import type { Address, Couple, Death, Envelope, Person, RiskTrade, Sex } from "./types.js";
 
 const _envelopeCache = new Map<string, Envelope>();
 
@@ -49,13 +50,39 @@ export function resolveVillage(worldSeed: number, regionKey: string, villageIdx:
 type NewPersonInput = Omit<Person, "id" | "death" | "origin"> & { origin?: Address | null };
 const PLACEHOLDER_DEATH: Death = { year: 0, age: 0, cause: "infancy" };
 
+// A person's trade-hazard category (§ occupational mortality): rolled once,
+// deterministically, from a stream independent of the shared village `rng`
+// (own namespace 8001, mirroring the per-person death stream at 7001) so
+// adding this never perturbs the marriage/migration draw sequence. Women
+// keep "normal" for now — their mortality model is already dominated by
+// childbirth risk, tracked separately. Tier 2 (biography.ts) reads this same
+// tag to keep occupation narrative consistent with the mechanic.
+function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: Sex): RiskTrade {
+  if (sex !== "M") return "normal";
+  const r = makeRng(mix(vHash, 8001 + id));
+  switch (cls) {
+    case "gentry":
+      return r.chance(0.35) ? "military" : "normal";
+    case "merchant":
+      return r.chance(0.25) ? "maritime" : "normal";
+    case "artisan":
+      return r.chance(0.18) ? "hazardous" : "normal";
+    case "freePeasant":
+      return r.chance(0.08) ? "maritime" : "normal";
+    case "serf":
+      return r.chance(0.05) ? "hazardous" : "normal";
+    default:
+      return "normal";
+  }
+}
+
 function solveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
   const region = REGIONS[regionKey];
   const vHash = addrHash(worldSeed, [regionKey, "village", villageIdx]);
   const rng = makeRng(vHash);
   const origin: Address = { regionKey, villageIdx };
 
-  const place = region.places[villageIdx % region.places.length];
+  const place = placeOf(worldSeed, regionKey, villageIdx);
   const persons: Person[] = []; // id-indexed
   const couples: Couple[] = [];
 
@@ -88,8 +115,10 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       incomer: true,
       origin: null,
     });
-    H.death = rollDeath(makeRng(mix(vHash, 7001 + H.id)), hb, "M", wealth, region);
-    W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", wealth, region);
+    H.riskTrade = riskTradeOf(vHash, H.id, H.cls, H.sex);
+    W.riskTrade = riskTradeOf(vHash, W.id, W.cls, W.sex);
+    H.death = rollDeath(makeRng(mix(vHash, 7001 + H.id)), hb, "M", wealth, region, H.riskTrade);
+    W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", wealth, region, W.riskTrade);
     // founders are guaranteed to reach marriage (they existed to found the line)
     if (H.death.age < 24) {
       const extra = rng.int(0, 30);
@@ -160,7 +189,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         father: H.id,
         mother: W.id,
       });
-      child.death = rollDeath(makeRng(mix(vHash, 7001 + child.id)), y, sex, wealth, region);
+      child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
+      child.death = rollDeath(makeRng(mix(vHash, 7001 + child.id)), y, sex, wealth, region, child.riskTrade);
       c.children.push(child.id);
       // maternal mortality: if the mother's independently-rolled death lands
       // on a birth year in her childbearing span, the register calls it childbed
@@ -318,7 +348,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         father: H.id,
         mother: W.id,
       });
-      child.death = rollDeath(makeRng(mix(vHash, 7001 + child.id)), y, sex, wealth, region);
+      child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
+      child.death = rollDeath(makeRng(mix(vHash, 7001 + child.id)), y, sex, wealth, region, child.riskTrade);
       c.children.push(child.id);
       if (W.death.year === y && W.death.age <= 43) W.death.cause = "childbirth";
       y += rng.int(2, 4);

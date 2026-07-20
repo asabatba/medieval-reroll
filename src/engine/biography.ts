@@ -27,17 +27,19 @@ import {
   FATHER_OCC,
   FEMALE_EVENTS,
   OLD_EVENTS,
+  RISK_DEATH_DETAIL,
   SRC,
   WORLD_EVENTS,
   YOUTH_EVENTS,
 } from "./data/narrative.js";
+import { placeOf } from "./data/placeNames.js";
 import { PLAGUES, plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
 import { citeDocument } from "./documents.js";
 import { makeRng, mix } from "./hash.js";
 import { manorOf, parishOf } from "./hierarchy.js";
 import { famineAt, warAt } from "./mortality.js";
-import type { Address, Bio, BioEvent, DocumentKind, Envelope, Person, Sex, SocialClass } from "./types.js";
+import type { Address, Bio, BioEvent, DocumentKind, Envelope, Person, RiskTrade, Sex, SocialClass } from "./types.js";
 import { resolveVillage } from "./village.js";
 
 // Resolves a `{{masc/fem}}` token to whichever half matches `sex` — the one
@@ -50,6 +52,8 @@ function gender(text: string, sex: Sex): string {
 interface OccEntry {
   text: string;
   literate?: boolean;
+  /** Occupational hazard category this entry's trade actually carries — must match the person's own riskTrade (village.ts) so narrative and mortality agree. Untagged entries are the safe default. */
+  risk?: RiskTrade;
 }
 const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> = {
   en: {
@@ -58,22 +62,35 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "worked his father's servile holding, and inherited its bondage with its land" },
         { text: "laboured on the lord's demesne as a ploughman" },
         { text: "kept the lord's sheep as a shepherd" },
+        { text: "was sent to break stone in the lord's quarry, a service owed like any other", risk: "hazardous" },
       ],
       F: [{ text: "worked the holding, the dairy, and the harvest alongside the family" }, { text: "went into service at the manor house at twelve" }],
     },
     freePeasant: {
-      M: [{ text: "farmed the family holding" }, { text: "worked as the village {craft}" }, { text: "leased extra strips and prospered as a yeoman" }],
+      M: [
+        { text: "farmed the family holding" },
+        { text: "worked as the village {craft}" },
+        { text: "leased extra strips and prospered as a yeoman" },
+        { text: "fished the estuary for the household's table and the market", risk: "maritime" },
+      ],
       F: [{ text: "ran the dairy, the poultry, the garden, and the brewing" }, { text: "went into service in a townhouse at fourteen" }],
     },
     artisan: {
-      M: [{ text: "was apprenticed to the family trade of {craft} and in time kept the shop" }, { text: "became a journeyman {craft}" }],
+      M: [
+        { text: "was apprenticed to the family trade of {craft} and in time kept the shop" },
+        { text: "became a journeyman {craft}" },
+        { text: "hewed and dressed stone in the quarry, a trade that crippled or killed men young", risk: "hazardous" },
+      ],
       F: [
         { text: "worked in the family workshop, minding the shop and the accounts" },
         { text: "carried on the workshop in widowhood, with journeymen under her" },
       ],
     },
     merchant: {
-      M: [{ text: "rode to the fairs with the family's cloth and kept the books", literate: true }],
+      M: [
+        { text: "rode to the fairs with the family's cloth and kept the books", literate: true },
+        { text: "took ship with the trading fleet along the coast, buying and selling in foreign ports", literate: true, risk: "maritime" },
+      ],
       F: [{ text: "kept the shop and the books when her husband travelled", literate: true }],
     },
     clergyFamily: {
@@ -81,7 +98,11 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
       F: [{ text: "was taught to read her psalter, unusual for a girl", literate: true }],
     },
     gentry: {
-      M: [{ text: "was raised to arms and the management of the estate" }, { text: "studied law and served at the sessions", literate: true }],
+      M: [
+        { text: "was raised to arms and the management of the estate" },
+        { text: "studied law and served at the sessions", literate: true },
+        { text: "was raised chiefly to war, and rode in the retinue of a greater lord", risk: "military" },
+      ],
       F: [{ text: "was raised to needlework, estate accounts, and the marriage market" }, { text: "ran the manor entirely during her husband's absences" }],
     },
   },
@@ -91,6 +112,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "va treballar l'explotació servil del seu pare, i en va heretar la servitud amb la terra" },
         { text: "va llaurar el domini del senyor com a bover" },
         { text: "va guardar les ovelles del senyor com a pastor" },
+        { text: "va ser enviat a tallar pedra a la pedrera del senyor, una prestació deguda com qualsevol altra", risk: "hazardous" },
       ],
       F: [
         { text: "va treballar l'explotació, la lleteria i la collita al costat de la família" },
@@ -102,18 +124,26 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "va conrear l'explotació familiar" },
         { text: "va treballar com a {craft} del poble" },
         { text: "va arrendar terres addicionals i va prosperar com a pagès benestant" },
+        { text: "va pescar a l'estuari per a la taula de la casa i el mercat", risk: "maritime" },
       ],
       F: [{ text: "va portar la lleteria, els corrals, l'hort i la cervesa" }, { text: "va entrar a servir en una casa de vila als catorze anys" }],
     },
     artisan: {
-      M: [{ text: "va aprendre l'ofici familiar de {craft} i amb el temps va portar el taller" }, { text: "es va fer oficial {craft}" }],
+      M: [
+        { text: "va aprendre l'ofici familiar de {craft} i amb el temps va portar el taller" },
+        { text: "es va fer oficial {craft}" },
+        { text: "va tallar i polir pedra a la pedrera, un ofici que esguerrava o matava els homes joves", risk: "hazardous" },
+      ],
       F: [
         { text: "va treballar al taller familiar, cuidant la botiga i els comptes" },
         { text: "va portar el taller en la viduïtat, amb oficials al seu càrrec" },
       ],
     },
     merchant: {
-      M: [{ text: "va anar a les fires amb els draps de la família i en va portar els comptes", literate: true }],
+      M: [
+        { text: "va anar a les fires amb els draps de la família i en va portar els comptes", literate: true },
+        { text: "va anar a la mar amb la flota mercant al llarg de la costa, comprant i venent en ports estrangers", literate: true, risk: "maritime" },
+      ],
       F: [{ text: "va portar la botiga i els comptes quan el seu marit viatjava", literate: true }],
     },
     clergyFamily: {
@@ -121,7 +151,11 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
       F: [{ text: "va aprendre a llegir el seu saltiri, cosa poc habitual en una noia", literate: true }],
     },
     gentry: {
-      M: [{ text: "va ser format en les armes i el govern de l'hisenda" }, { text: "va estudiar dret i va servir a les sessions", literate: true }],
+      M: [
+        { text: "va ser format en les armes i el govern de l'hisenda" },
+        { text: "va estudiar dret i va servir a les sessions", literate: true },
+        { text: "va ser format sobretot per a la guerra, i va cavalcar al seguici d'un senyor més poderós", risk: "military" },
+      ],
       F: [
         { text: "va ser formada en la brodadora, els comptes de l'hisenda i el mercat matrimonial" },
         { text: "va portar tot el senyoriu durant les absències del marit" },
@@ -163,11 +197,9 @@ const BURIAL_PLAIN: Record<Locale, string[]> = {
 // full village solve. Safe to call for a destination address regardless of
 // rank, which is what lets the origin side name where someone went without
 // depending on that village ever being resolved.
-function placeNameOf(addr: Address | null | undefined, locale: Locale): string | null {
+function placeNameOf(worldSeed: number, addr: Address | null | undefined, locale: Locale): string | null {
   if (!addr) return null;
-  const region = REGIONS[addr.regionKey];
-  if (!region) return null;
-  return region.places[addr.villageIdx % region.places.length][locale];
+  return placeOf(worldSeed, addr.regionKey, addr.villageIdx)[locale];
 }
 
 export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | null {
@@ -245,8 +277,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     ev(
       p.birth,
       ca
-        ? `Va néixer a ${placeNameOf(p.origin, locale)}; la seva família consta al registre d'aquell poble. Entra en aquest amb el seu casament.`
-        : `Born in ${placeNameOf(p.origin, locale)}; her people are entered in that village's own register. She comes into this one on her marriage.`,
+        ? `Va néixer a ${placeNameOf(env.worldSeed, p.origin, locale)}; la seva família consta al registre d'aquell poble. Entra en aquest amb el seu casament.`
+        : `Born in ${placeNameOf(env.worldSeed, p.origin, locale)}; her people are entered in that village's own register. She comes into this one on her marriage.`,
       "birth",
       cite("reg"),
     );
@@ -347,9 +379,15 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       );
   }
 
-  // Occupation
+  // Occupation — text stays consistent with the mechanical riskTrade tag
+  // rolled at Tier 1 (village.ts): a hazardous/maritime/military person is
+  // preferentially narrated into a trade that actually carries that hazard,
+  // never the reverse (a "normal" person never draws a risk-flavoured entry).
   if (p.death.age >= 12 && !p.inOrders) {
-    const pool = OCCUPATIONS[locale][p.cls][p.sex];
+    const fullPool = OCCUPATIONS[locale][p.cls][p.sex];
+    const riskTrade = p.riskTrade ?? "normal";
+    const matching = riskTrade === "normal" ? fullPool.filter((o) => !o.risk) : fullPool.filter((o) => o.risk === riskTrade);
+    const pool = matching.length ? matching : fullPool;
     const occ = rng.pick(pool);
     const craft = rng.pick(CRAFTS[locale]);
     const occText = occ.text.replace("{craft}", craft);
@@ -377,8 +415,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     if (spouse.incomer && p.sex === "M") {
       extra = spouse.origin
         ? ca
-          ? ` Ella venia de ${placeNameOf(spouse.origin, locale)}, amb un dot de roba de lli i una vaca.`
-          : ` She came from ${placeNameOf(spouse.origin, locale)}, with a dowry of linen and a cow.`
+          ? ` Ella venia de ${placeNameOf(env.worldSeed, spouse.origin, locale)}, amb un dot de roba de lli i una vaca.`
+          : ` She came from ${placeNameOf(env.worldSeed, spouse.origin, locale)}, with a dowry of linen and a cow.`
         : ca
           ? ` Ella venia de la parròquia veïna, amb un dot de roba de lli i una vaca.`
           : ` She came from the next parish, with a dowry of linen and a cow.`;
@@ -393,7 +431,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   } else if (p.marriedOut) {
     const dest = p.emigrateTo;
-    const destPlace = placeNameOf(dest, locale);
+    const destPlace = placeNameOf(env.worldSeed, dest, locale);
     const destText =
       destPlace && dest
         ? ca
@@ -572,8 +610,16 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // Death — real cause from envelope, decoded detail
-  const deathPool = DEATH_DETAIL[locale][p.death.cause];
+  // Death — real cause from envelope, decoded detail. A hazardous/maritime
+  // trade occasionally pulls its detail from the matching occupational-
+  // accident pool instead of the generic one, same "disease" cause bucket
+  // the register would file it under either way, but the coroner's roll
+  // (not the parish register) is what actually recorded such a death.
+  const riskPool =
+    p.death.cause === "disease" && (p.riskTrade === "hazardous" || p.riskTrade === "maritime") && rng.chance(0.55)
+      ? RISK_DEATH_DETAIL[locale][p.riskTrade]
+      : null;
+  const deathPool = riskPool ?? DEATH_DETAIL[locale][p.death.cause];
   const ddIdx = rng.int(0, deathPool.length - 1);
   const dd = deathPool[ddIdx];
   let burialTxt: string;
@@ -589,7 +635,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       ? "Enterrat{{/da}} a l'església parroquial davant l'altar, sota una llosa amb inscripció, amb misses fundades per la seva ànima."
       : "Buried in the parish church before the altar, beneath a marked stone, with masses endowed for the soul.";
   else burialTxt = rng.pick(BURIAL_PLAIN[locale]);
-  const dSrc = p.death.cause === "disease" && (ddIdx === 5 || ddIdx === 6) ? cite("coroner") : cite("reg");
+  const dSrc = riskPool || (p.death.cause === "disease" && (ddIdx === 5 || ddIdx === 6)) ? cite("coroner") : cite("reg");
   ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
 
   events.sort((a, b) => a.year - b.year || (a.kind === "birth" ? -1 : a.kind === "death" ? 1 : 0));
@@ -613,7 +659,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     incomer: !!p.incomer,
     founder: !!p.founder,
     marriedOut: !!p.marriedOut,
-    originPlace: p.incomer && p.origin ? placeNameOf(p.origin, locale) : null,
+    originPlace: p.incomer && p.origin ? placeNameOf(env.worldSeed, p.origin, locale) : null,
     jurisdiction,
     fief,
     father: father
@@ -648,7 +694,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           death: spouse.death,
           incomer: !!spouse.incomer,
           addr: selfAddr,
-          originPlace: spouse.incomer && spouse.origin ? placeNameOf(spouse.origin, locale) : null,
+          originPlace: spouse.incomer && spouse.origin ? placeNameOf(env.worldSeed, spouse.origin, locale) : null,
         }
       : null,
     marriageYear: own ? own.year : null,

@@ -17,9 +17,10 @@
 
 import type { Locale } from "../i18n/locale.js";
 import { JURISDICTIONS, SAINTS } from "./data/jurisdictions.js";
+import { placeShortOf } from "./data/placeNames.js";
 import { REGIONS } from "./data/regions.js";
 import { addrHash, makeRng } from "./hash.js";
-import type { Fief, Jurisdiction, Region } from "./types.js";
+import type { Fief, Jurisdiction } from "./types.js";
 
 // ---- ecclesiastical tree: province > diocese > deanery > parish ----
 // Villages are grouped into small blocks; most blocks are one parish per
@@ -62,17 +63,6 @@ export function parishOf(worldSeed: number, regionKey: string, villageIdx: numbe
 // where parish boundaries fall — the whole point of the exercise.
 const HONOUR_CLUSTER = 9;
 
-function placeShortName(region: Region, villageIdx: number, locale: Locale): string {
-  const raw = region.places[villageIdx % region.places.length][locale];
-  // English: "the village of X, ..." / "a parish in Y" — Catalan: "el poble de X, ..." / "una parròquia de Y"
-  const ofMatch = locale === "ca" ? raw.match(/\bd(?:e|')\s*([^,]+)/i) : raw.match(/\bof\s+([^,]+)/i);
-  if (ofMatch) return ofMatch[1].trim();
-  return raw
-    .replace(locale === "ca" ? /^(el|la|els|les|un|una)\s+/i : /^(the|a)\s+/i, "")
-    .split(",")[0]
-    .trim();
-}
-
 export function manorOf(worldSeed: number, regionKey: string, villageIdx: number, locale: Locale): Fief {
   const region = REGIONS[regionKey];
   const j = JURISDICTIONS[regionKey];
@@ -84,7 +74,7 @@ export function manorOf(worldSeed: number, regionKey: string, villageIdx: number
   const lordFirst = mRng.pick(region.maleNames);
   const lordSurname = mRng.chance(0.5) ? honourLord : mRng.pick(region.surnames);
   const lord = `${lordFirst} ${lordSurname}`;
-  const place = placeShortName(region, villageIdx, locale);
+  const place = placeShortOf(worldSeed, regionKey, villageIdx);
   return locale === "ca"
     ? { manor: `la senyoria de ${place}`, honour: `l'honor de ${honourLord}`, earldom: `el comtat de ${earldom}`, lord }
     : { manor: `the manor of ${place}`, honour: `the honour of ${honourLord}`, earldom: `the earldom of ${earldom}`, lord };
