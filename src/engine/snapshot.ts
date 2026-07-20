@@ -11,9 +11,14 @@
 // Residence rules mirror the migration model (village.ts):
 //  - an immigrant (residence record) is present from her marriage year;
 //    before that she lives in her origin village.
-//  - an emigrant is present until her married-out year (birth + the
-//    region's upper female marriage age — the same year her biography
-//    narrates), and afterwards belongs to her destination's snapshot.
+//  - an emigrant is present until she actually leaves. When the destination
+//    is resolvable (local, non-long-distance emigration), that's read as
+//    the REAL residence record's own arrival year — the same year the
+//    destination snapshot starts counting her — so there is no gap or
+//    overlap between the two villages' snapshots for the same real person
+//    (§ residency continuity). Only when no destination record exists
+//    (never pulled, or long-distance — narrated, not tracked) does this
+//    fall back to a birth+marriage-age heuristic.
 // Household rules:
 //  - a married couple (latest union as of the year) is its own household,
 //    headed by the husband; a surviving spouse keeps it as widow/widower.
@@ -25,7 +30,9 @@
 //  - adolescents rolled into service (§ service) are counted in the manor
 //    pseudo-household; adults in orders in the church pseudo-household.
 // =====================================================================
+import { findResidenceRecord } from "./identity.js";
 import type { Envelope, Person } from "./types.js";
+import { resolveVillage } from "./village.js";
 
 export type MaritalStatus = "child" | "single" | "married" | "widowed";
 
@@ -68,9 +75,22 @@ function aliveAt(p: Person, year: number): boolean {
   return p.birth <= year && p.death.year > year;
 }
 
-/** The year an emigrant's own register stops carrying her (see biography.ts). */
+/** The year an emigrant's own register stops carrying her (see biography.ts).
+ * § residency continuity: for a locally (non-long-distance) emigrated
+ * person whose destination actually pulled them, this is the REAL year
+ * their residence record begins there — not an independent guess — so an
+ * origin and destination snapshot can never both (or neither) claim them. */
 export function emigrationYearOf(p: Person, env: Envelope): number {
-  return p.birth + env.region.marriageF[1];
+  if (p.emigrateTo && !p.longDistance) {
+    const canonical = { regionKey: env.regionKey, villageIdx: env.villageIdx, personId: p.id };
+    const res = findResidenceRecord(env.worldSeed, canonical, p.emigrateTo);
+    if (res) {
+      const destEnv = resolveVillage(env.worldSeed, res.regionKey, res.villageIdx);
+      const arrival = arrivalYearOf(destEnv.persons[res.personId], destEnv);
+      return arrival;
+    }
+  }
+  return p.birth + (p.sex === "M" ? env.region.marriageM[1] : env.region.marriageF[1]);
 }
 
 /** The year an immigrant's residence record begins: her marriage here. */

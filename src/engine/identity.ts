@@ -28,17 +28,35 @@ export function canonicalRef(env: Envelope, id: number): PersonAddress {
   return { regionKey: env.regionKey, villageIdx: env.villageIdx, personId: id };
 }
 
+// § performance: findResidenceRecord is called on every origin-side decode
+// of an emigrant AND on every villageStateAt() computation for a locally
+// emigrated resident, so a linear scan of the destination's persons array
+// repeats on every call. A lazy, per-envelope index turns repeated lookups
+// into a single Map read. Keyed by envelope OBJECT identity (a WeakMap), so
+// it never needs manual invalidation: resolveVillage's LRU cache returns
+// the same object for repeated resolves of one address until evicted, and
+// an eviction's re-solve produces a genuinely new object with its own fresh
+// (lazily-built) index — this is purely a cache, never a correctness input.
+const _residenceIndex = new WeakMap<Envelope, Map<string, number>>();
+
+function residenceIndexOf(env: Envelope): Map<string, number> {
+  let idx = _residenceIndex.get(env);
+  if (idx) return idx;
+  idx = new Map();
+  for (const q of env.persons) {
+    if (q.origin && q.originId != null) idx.set(`${q.origin.regionKey}:${q.origin.villageIdx}:${q.originId}`, q.id);
+  }
+  _residenceIndex.set(env, idx);
+  return idx;
+}
+
 /** Find the residence record a destination village keeps for a canonical
  * person, or null if the destination never pulled her (emigration is an
  * offer, not a guarantee). Only meaningful for local emigration. */
 export function findResidenceRecord(worldSeed: number, canonical: PersonAddress, dest: Address): PersonAddress | null {
   const destEnv = resolveVillage(worldSeed, dest.regionKey, dest.villageIdx);
-  for (const q of destEnv.persons) {
-    if (q.originId === canonical.personId && q.origin && q.origin.regionKey === canonical.regionKey && q.origin.villageIdx === canonical.villageIdx) {
-      return { regionKey: dest.regionKey, villageIdx: dest.villageIdx, personId: q.id };
-    }
-  }
-  return null;
+  const personId = residenceIndexOf(destEnv).get(`${canonical.regionKey}:${canonical.villageIdx}:${canonical.personId}`);
+  return personId != null ? { regionKey: dest.regionKey, villageIdx: dest.villageIdx, personId } : null;
 }
 
 /** Where a person's adult life is actually recorded: the destination

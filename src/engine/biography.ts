@@ -40,7 +40,7 @@ import { makeRng, mix } from "./hash.js";
 import { manorOf, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
 import { famineAt, warAt } from "./mortality.js";
-import { inheritedFromFather } from "./succession.js";
+import { inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
   Bio,
@@ -446,6 +446,74 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       );
   }
 
+  // § wardship: a full orphan below working age needed a guardian — for the
+  // landed classes the lord/manor court typically took the wardship (and
+  // its profits) until majority; for humbler families, kin took the child
+  // in, a duty the court roll sometimes records alongside who now answered
+  // for the household's dues.
+  if (father && mother) {
+    const orphanedAt = Math.max(father.death.year, mother.death.year);
+    const orphanedAge = orphanedAt - p.birth;
+    if (orphanedAge >= 0 && orphanedAge < 14 && orphanedAt < p.death.year) {
+      ev(
+        orphanedAt,
+        wealth >= 4
+          ? ca
+            ? `Orfe de pare i mare als ${orphanedAge} anys, la tutela de la seva persona i de la seva terra va ser atorgada per ${fief.lord} a un parent, que en cobraria els fruits fins que arribés a la majoria d'edat.`
+            : `Orphaned of both parents at ${orphanedAge}, wardship of ${pos} person and land was granted by ${fief.lord} to a kinsman, who would take the profits of the holding until ${obj} came of age.`
+          : ca
+            ? `Orfe de pare i mare als ${orphanedAge} anys, el van acollir uns parents, com va quedar constatat quan la cort del senyoriu va confirmar qui responia ara pels drets de la casa.`
+            : `Orphaned of both parents at ${orphanedAge}, ${p.name} was taken in by kin, as the manor court noted when it confirmed who now answered for the household's dues.`,
+        "grief",
+        cite("court"),
+      );
+    }
+  }
+
+  // § stepfamily: a parent's later remarriage brought a stepparent into a
+  // still-young child's household — read from the same union history that
+  // drives remarriage (village.ts), so it only ever fires when it really
+  // happened. Native-born only (siblings/natalIdx aren't resolved for an
+  // immigrant's cross-village family — see the natalIdx computation above).
+  function firstLaterUnion(parent: Person | null): { spouse: Person; year: number } | null {
+    if (!parent?.unions || natalIdx == null) return null;
+    const natalYear = env.couples[natalIdx].year;
+    const later = parent.unions
+      .map((ci) => env.couples[ci])
+      .filter((c) => c.year > natalYear)
+      .sort((a, b) => a.year - b.year)[0];
+    if (!later) return null;
+    return { spouse: env.persons[parent.id === later.husband ? later.wife : later.husband], year: later.year };
+  }
+  const stepMotherUnion = firstLaterUnion(father); // father remarried -> new wife is a stepmother
+  const stepFatherUnion = firstLaterUnion(mother); // mother remarried -> new husband is a stepfather
+  if (stepFatherUnion) {
+    const ageAt = stepFatherUnion.year - p.birth;
+    if (ageAt >= 0 && ageAt <= 16 && stepFatherUnion.year < p.death.year) {
+      const s = stepFatherUnion.spouse;
+      ev(
+        stepFatherUnion.year,
+        ca
+          ? `La seva mare es va tornar a casar, amb ${s.name} ${s.surname}, que va entrar a la casa com a padrastre.`
+          : `${pos.charAt(0).toUpperCase() + pos.slice(1)} mother married again, to ${s.name} ${s.surname}, who came into the house as ${pos} stepfather.`,
+        "life",
+      );
+    }
+  }
+  if (stepMotherUnion) {
+    const ageAt = stepMotherUnion.year - p.birth;
+    if (ageAt >= 0 && ageAt <= 16 && stepMotherUnion.year < p.death.year) {
+      const s = stepMotherUnion.spouse;
+      ev(
+        stepMotherUnion.year,
+        ca
+          ? `El seu pare es va tornar a casar, amb ${s.name} ${s.surname}, que va entrar a la casa com a madrastra.`
+          : `${pos.charAt(0).toUpperCase() + pos.slice(1)} father married again, to ${s.name} ${s.surname}, who came into the house as ${pos} stepmother.`,
+        "life",
+      );
+    }
+  }
+
   // Occupation — text stays consistent with the mechanical riskTrade tag
   // rolled at Tier 1 (village.ts): a hazardous/maritime/military person is
   // preferentially narrated into a trade that actually carries that hazard,
@@ -589,7 +657,54 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         "marriage",
       );
     }
-  } else if (!own && !p.marriedOut && p.death.age >= 30 && !p.inOrders && rng.chance(0.7)) {
+  } else if (!own && p.sex === "M" && p.emigrated) {
+    // § male out-migration: a non-heir who left, narrated distinctly from a
+    // woman's "married out" — he may or may not have gone to marry.
+    const dest = p.emigrateTo;
+    const destPlace = placeNameOf(env.worldSeed, dest, locale);
+    const destText =
+      destPlace && dest
+        ? ca
+          ? p.longDistance
+            ? ` cap a ${destPlace}, a ${REGIONS[dest.regionKey].name.ca}`
+            : ` cap a ${destPlace}`
+          : p.longDistance
+            ? ` for ${destPlace}, in ${REGIONS[dest.regionKey].name.en}`
+            : ` for ${destPlace}`
+        : "";
+    if (destPerson && destUnion && destSpouse) {
+      // § canonical identity: the destination register really recorded him.
+      ev(
+        destUnion.year,
+        ca
+          ? `Va deixar la parròquia${destText} i allà es va casar amb ${destSpouse.name} ${destSpouse.surname}; el registre d'aquell poble el recull des d'aleshores, i la resta de la seva vida hi queda escrita.`
+          : `Left the parish${destText} and there married ${destSpouse.name} ${destSpouse.surname}; that village's register carries him from then on, and the rest of his life is written there.`,
+        "marriage",
+      );
+    } else {
+      const heir = isFirstBornSon(env, id);
+      const reasons = ca
+        ? [
+            `Sense terra pròpia que esperar, va marxar${destText} a provar sort en un ofici.`,
+            `Va entrar al seguici armat d'un senyor, i el registre no en sap dir més que va marxar.`,
+            `Va anar a servir en una altra casa senyorial${destText}, no havent-hi tinença aquí per a un segon fill.`,
+          ]
+        : [
+            `With no holding of his own to wait for, he left${destText} to try his luck at a trade.`,
+            `Took service in a lord's armed retinue, and the register can say no more than that he left.`,
+            `Went to serve in another manor's household${destText}, there being no tenement here for a second son.`,
+          ];
+      ev(
+        p.birth + region.marriageM[1],
+        heir || p.death.age < region.marriageM[1] + 3
+          ? ca
+            ? `Va marxar de la parròquia${destText}; el seu nom surt d'aquest registre cap a un altre, i la resta de la seva vida hi queda escrita.`
+            : `Left the parish${destText}; his name leaves this register for another, and the rest of his life is written there.`
+          : rng.pick(reasons),
+        "life",
+      );
+    }
+  } else if (!own && !p.marriedOut && !p.emigrated && p.death.age >= 30 && !p.inOrders && rng.chance(0.7)) {
     ev(
       p.birth + 30,
       ca

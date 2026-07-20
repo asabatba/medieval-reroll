@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addrHash, hashStr, makeRng, mix } from "./hash.js";
+import { addrHash, hashStr, makeRng, mix, personStream } from "./hash.js";
 
 describe("hash primitives", () => {
   it("mix is deterministic for the same inputs", () => {
@@ -62,5 +62,40 @@ describe("makeRng", () => {
     for (let i = 0; i < 200; i++) seen.add(rng.weighted(pairs));
     expect(seen.has("b")).toBe(false);
     for (const v of seen) expect(["a", "c"]).toContain(v);
+  });
+});
+
+// § RNG stream hygiene: village.ts used to seed per-person streams with
+// mix(vHash, NAMESPACE + id) — an addition that collides whenever two
+// (namespace, id) pairs sum to the same total (e.g. death's 7001+1000 equals
+// riskTrade's 8001+0), which a village north of ~1000 persons can reach.
+// personStream mixes the namespace in instead of adding it, so it must never
+// reproduce that collision.
+describe("personStream — no arithmetic namespace collisions", () => {
+  it("two (namespace, id) pairs that sum to the same total produce different streams", () => {
+    const vHash = 0xc0ffee;
+    // 7001+1000 === 8001+0 === 8001, the exact collision the old formula hit
+    expect(personStream(vHash, 7001, 1000)).not.toBe(personStream(vHash, 8001, 0));
+    // a second, unrelated colliding pair for good measure
+    expect(personStream(vHash, 900000, 50)).not.toBe(personStream(vHash, 900050, 0));
+  });
+
+  it("is deterministic: same (vHash, namespace, id) always yields the same seed", () => {
+    expect(personStream(42, 7001, 17)).toBe(personStream(42, 7001, 17));
+  });
+
+  it("is sensitive to every component", () => {
+    const base = personStream(42, 7001, 17);
+    expect(personStream(43, 7001, 17)).not.toBe(base);
+    expect(personStream(42, 7002, 17)).not.toBe(base);
+    expect(personStream(42, 7001, 18)).not.toBe(base);
+  });
+
+  it("produces well-distributed streams across a large id range within one namespace", () => {
+    // a village of ~4000 persons (hardening.test.ts's own upper bound) must
+    // not produce meaningful repeats within a single stream's namespace
+    const seen = new Set<number>();
+    for (let id = 0; id < 4000; id++) seen.add(personStream(0xc0ffee, 7001, id));
+    expect(seen.size).toBe(4000);
   });
 });

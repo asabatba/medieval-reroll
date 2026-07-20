@@ -36,7 +36,7 @@ import { CLASS_INFO, CLASSES } from "./data/classes.js";
 import { demographyOf } from "./data/demography.js";
 import { placeOf } from "./data/placeNames.js";
 import { REGIONS } from "./data/regions.js";
-import { addrHash, makeRng, mix } from "./hash.js";
+import { addrHash, makeRng, personStream } from "./hash.js";
 import { famineAt, rollDeath, warAt } from "./mortality.js";
 import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
 import type { Address, Couple, Death, Envelope, Person, RiskTrade, Sex, SocialClass } from "./types.js";
@@ -75,10 +75,14 @@ export function envelopeCacheSize(): number {
   return _envelopeCache.size;
 }
 
-// How many marriage-matching rounds a solve may run. Generations to 1490
-// bound the real need to ~8; hitting this limit means truncation, which is
-// recorded in Envelope.diagnostics instead of silently dropping a lineage.
-export const MATCH_ROUND_LIMIT = 24;
+// How many marriage-matching rounds a solve may run, SHARED across every
+// call to runMatchingRounds() in a solve — including the several extra
+// calls interleaved with remarriage passes (§ remarriage depth), which
+// consume more of the budget than the original single-pass design did.
+// Generations to 1490 bound the real per-call need to ~8; hitting this
+// limit means truncation, which is recorded in Envelope.diagnostics instead
+// of silently dropping a lineage.
+export const MATCH_ROUND_LIMIT = 40;
 
 // Persons are constructed in two steps at every call site: addPerson()
 // assigns the id (and, unless overridden, the origin), then the caller
@@ -96,7 +100,7 @@ const PLACEHOLDER_DEATH: Death = { year: 0, age: 0, cause: "infancy" };
 // tag to keep occupation narrative consistent with the mechanic.
 function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: Sex): RiskTrade {
   if (sex !== "M") return "normal";
-  const r = makeRng(mix(vHash, 8001 + id));
+  const r = makeRng(personStream(vHash, 8001, id));
   switch (cls) {
     case "gentry":
       return r.chance(0.35) ? "military" : "normal";
@@ -111,6 +115,22 @@ function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: Sex): R
     default:
       return "normal";
   }
+}
+
+// § male out-migration: only the eldest surviving son inherits (male
+// primogeniture, mirrored by succession.ts's heirOf/isFirstBornSon for
+// decode-time use). Evaluated against the local, still-growing `persons`
+// array — safe because persons are always created in non-decreasing birth
+// order (a person's elder siblings, if any, already exist by the time they
+// themselves are created or matched), so "the earliest-born existing son of
+// this father" never later turns out to be wrong once matching finishes.
+function eldestSonOf(persons: readonly Person[], p: Person): boolean {
+  if (p.sex !== "M" || p.father < 0) return true;
+  for (const q of persons) {
+    if (q.id === p.id || q.father !== p.father || q.sex !== "M") continue;
+    if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
+  }
+  return true;
 }
 
 function solveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
@@ -136,7 +156,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // sons apprenticed into crafts, artisans' sons into trade. Rolled from a
   // per-person stream so it never perturbs the shared village rng.
   function rollMobility(p: Person): void {
-    const r = makeRng(mix(vHash, 950000 + p.id));
+    const r = makeRng(personStream(vHash, 950000, p.id));
     const post = p.birth + 16 >= 1350;
     const m = demo.mobility;
     let next: SocialClass | null = null;
@@ -152,10 +172,14 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // § service: low-wealth children commonly spent adolescence in service or
   // apprenticeship in another household (the NW-European life-cycle-service
   // pattern; rarer in the Mediterranean — rates come from demography.ts).
-  function rollService(p: Person): void {
-    if (CLASS_INFO[p.cls].wealth > 2) return;
-    const r = makeRng(mix(vHash, 900000 + p.id));
-    if (!r.chance(demo.service[p.sex])) return;
+  function rollService(p: Person, heirBoost = false): void {
+    if (CLASS_INFO[p.cls].wealth > 2 && !heirBoost) return;
+    const r = makeRng(personStream(vHash, 900000, p.id));
+    // § male out-migration: a non-heir son of a wealthier household (who
+    // won't inherit the land either) is also more likely to be sent into
+    // service or apprenticeship than the base low-wealth rate alone implies.
+    const chance = heirBoost ? Math.min(0.9, demo.service[p.sex] * 1.4) : demo.service[p.sex];
+    if (!r.chance(chance)) return;
     const from = p.birth + 12;
     p.service = { from, to: from + r.int(4, 8) };
   }
@@ -185,8 +209,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     });
     H.riskTrade = riskTradeOf(vHash, H.id, H.cls, H.sex);
     W.riskTrade = riskTradeOf(vHash, W.id, W.cls, W.sex);
-    H.death = rollDeath(makeRng(mix(vHash, 7001 + H.id)), hb, "M", wealth, region, H.riskTrade, regionKey);
-    W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", wealth, region, W.riskTrade, regionKey);
+    H.death = rollDeath(makeRng(personStream(vHash, 7001, H.id)), hb, "M", wealth, region, H.riskTrade, regionKey);
+    W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", wealth, region, W.riskTrade, regionKey);
     // founders are guaranteed to reach marriage (they existed to found the line)
     if (H.death.age < 24) {
       const extra = rng.int(0, 30);
@@ -235,12 +259,12 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     });
     rollMobility(child);
     child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
-    child.death = rollDeath(makeRng(mix(vHash, 7001 + child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
-    rollService(child);
+    child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
+    // § male out-migration: a non-heir son — of ANY wealth grade, not just
+    // the low-wealth default rollService already covers — is likelier to be
+    // sent into service or apprenticeship elsewhere, since he won't inherit.
+    rollService(child, child.sex === "M" && !eldestSonOf(persons, child));
     c.children.push(child.id);
-    // maternal mortality: if the mother's independently-rolled death lands
-    // on a birth year in her childbearing span, the register calls it childbed
-    if (W.death.year === y && W.death.age <= 43) W.death.cause = "childbirth";
   }
 
   function genChildren(c: Couple, capYear: number): void {
@@ -260,13 +284,13 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // local cluster, so this can only ever trigger up to LOCAL_CLUSTER-1
   // neighbour solves, never an unbounded chain.
   const immigrantTaken = new Set<string>();
-  function pullImmigrantBride(wantYear: number, ageLo: number, ageHi: number): { srcIdx: number; cand: Person } | null {
+  function pullImmigrant(sex: Sex, wantYear: number, ageLo: number, ageHi: number): { srcIdx: number; cand: Person } | null {
     const base = clusterBase(villageIdx);
     for (let srcIdx = base; srcIdx < villageIdx; srcIdx++) {
       if (srcIdx < 0) continue;
       const srcEnv = resolveVillage(worldSeed, regionKey, srcIdx); // strictly lower rank: safe, terminates
       for (const cand of srcEnv.persons) {
-        if (cand.sex !== "F" || !cand.emigrated || !cand.emigrateTo) continue;
+        if (cand.sex !== sex || !cand.emigrated || !cand.emigrateTo) continue;
         if (cand.emigrateTo.regionKey !== regionKey || cand.emigrateTo.villageIdx !== villageIdx) continue;
         const key = `${srcIdx}:${cand.id}`;
         if (immigrantTaken.has(key)) continue;
@@ -279,18 +303,19 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     }
     return null;
   }
+  const pullImmigrantBride = (wantYear: number, ageLo: number, ageHi: number) => pullImmigrant("F", wantYear, ageLo, ageHi);
+  // § male out-migration: symmetric to pullImmigrantBride, but for a local
+  // woman who found no local husband — she marries a REAL non-heir man who
+  // left his own (lower-rank cluster-mate) village, rather than either
+  // village fabricating anyone. Reuses the same `immigrantTaken` set: keys
+  // are `srcIdx:id` scoped to one sex's search since only opposite-sex
+  // candidates are ever matched, so bride and groom keys never collide.
+  const pullImmigrantGroom = (wantYear: number, ageLo: number, ageHi: number) => pullImmigrant("M", wantYear, ageLo, ageHi);
 
   // Generate children for every couple (in couple-creation order — this is a
   // work queue, so children of later marriages get processed too).
   for (let ci = 0; ci < couples.length; ci++) {
-    const c = couples[ci];
-    const W = persons[c.wife];
-    genChildren(c, 1490);
-    if (W.death.cause !== "childbirth" && rng.chance(0.012 * c.children.length) && W.death.year > c.year && W.death.year - W.birth <= 43) {
-      // occasionally reassign a plausible near-birth death to childbed
-      const nearest = c.children.map((id) => persons[id].birth).find((b) => Math.abs(b - W.death.year) <= 1);
-      if (nearest != null) W.death.cause = "childbirth";
-    }
+    genChildren(couples[ci], 1490);
   }
 
   // Marriage matching (spec §4): resolved at the envelope tier, in rounds —
@@ -315,11 +340,14 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       const takenW = new Set<number>();
 
       for (const M of men) {
-        // § calibrated mechanics: never-marry share ~10% (was higher, which —
-        // compounded with emigration and plague — sank most villages below
-        // replacement and emptied them by 1450, far past the ~10% of real
-        // villages deserted by 1500).
-        if (rng.chance(0.1)) continue; // never marries
+        // § calibrated mechanics: never-marry share ~10% on average (was
+        // higher, which — compounded with emigration and plague — sank most
+        // villages below replacement and emptied them by 1450, far past the
+        // ~10% of real villages deserted by 1500).
+        // § male out-migration: an heir had a tenement to offer a bride and
+        // marries reliably; a non-heir is a somewhat less attractive match.
+        const heir = eldestSonOf(persons, M);
+        if (rng.chance(heir ? 0.07 : 0.12)) continue; // never marries
         if (M.cls === "clergyFamily" && rng.chance(0.35)) {
           M.inOrders = true;
           continue;
@@ -383,7 +411,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
               incomer: true,
               origin: null,
             });
-            W.death = rollDeath(makeRng(mix(vHash, 7001 + W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region, "normal", regionKey);
+            W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region, "normal", regionKey);
             if (W.death.year <= wantYear) {
               const deathYear = wantYear + 1 + rng.int(0, 25);
               W.death = { year: deathYear, age: deathYear - wb, cause: "disease" };
@@ -393,29 +421,131 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           if (c) genChildren(c, 1495);
         }
       }
+
+      // § male out-migration: local women this round's men loop left
+      // unmatched get a shot at a REAL immigrant groom — a non-heir man who
+      // left a lower-rank cluster-mate village — before falling through to
+      // their own eventual emigration pass below. Symmetric to
+      // pullImmigrantBride, so a woman's alternative to waiting or leaving
+      // herself is marrying someone who actually left another village's own
+      // register, not a fabrication on either side.
+      for (const W of women) {
+        if (takenW.has(W.id) || W.spouse != null || W.marriedOut) continue;
+        const wantYear = W.birth + rng.int(region.marriageF[0], region.marriageF[1]);
+        if (W.death.year <= wantYear) continue;
+        if (!rng.chance(demo.maleOutMigration.groomPullChance)) continue;
+        const pulled = pullImmigrantGroom(wantYear, region.marriageM[0] - 3, region.marriageM[1] + 8);
+        if (!pulled) continue;
+        const { srcIdx, cand } = pulled;
+        const M = addPerson({
+          name: cand.name,
+          surname: cand.surname,
+          sex: "M",
+          birth: cand.birth,
+          cls: cand.cls,
+          father: -1,
+          mother: -1,
+          incomer: true,
+          origin: { regionKey, villageIdx: srcIdx },
+          originId: cand.id,
+        });
+        M.death = { ...cand.death }; // copy of the ORIGIN's canonical roll: the two records never disagree on when he died
+        M.riskTrade = cand.riskTrade ?? "normal";
+        takenW.add(W.id);
+        const c = marry(M, W, wantYear);
+        if (c) genChildren(c, 1495);
+      }
     }
   }
   runMatchingRounds();
 
+  // Shared by both emigration passes below: a real, resolvable destination
+  // address — mostly a short hop to a higher-offset cluster-mate (later
+  // pull-able by that village's own solve), occasionally a long jump to
+  // another region (still real, just outside anyone's scan range).
+  function assignDestination(p: Person): void {
+    const offset = clusterOffset(villageIdx);
+    if (offset < LOCAL_CLUSTER - 1 && rng.chance(0.8)) {
+      p.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + rng.int(offset + 1, LOCAL_CLUSTER - 1) };
+    } else {
+      const higher = higherRankRegions(regionKey);
+      if (higher.length && rng.chance(0.6)) {
+        p.emigrateTo = { regionKey: rng.pick(higher), villageIdx: rng.int(0, 200) };
+        p.longDistance = true;
+      } else {
+        p.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + LOCAL_CLUSTER + rng.int(0, LOCAL_CLUSTER - 1) };
+        p.longDistance = true; // outside this cluster's own scan range: narrated, not pulled
+      }
+    }
+  }
+
+  // Native adults unmatched after the PRIMARY rounds: emigration (§11),
+  // decided entirely by this village's own solve — never by a destination
+  // reaching back in. A famine or war year raises the chance, so a bad
+  // harvest here and a swollen neighbour there stay consistent with each
+  // other for free. Deliberately placed BEFORE remarriage (not after): a
+  // large surplus of unmatched native women after primary matching is
+  // expected by design (men often import a bride instead of marrying
+  // locally) — emigration is its normal outlet, at a normal age. Running
+  // remarriage first would instead sweep that whole backlog into
+  // increasingly old widower-marriages before it ever got the chance to
+  // leave, skewing the marriage-age statistics badly.
+  for (const W of persons) {
+    if (W.sex !== "F" || W.founder || W.spouse != null || W.emigrated || W.death.age < region.marriageF[1]) continue;
+    const atYear = W.birth + region.marriageF[1];
+    const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
+    if (!rng.chance(pressured ? demo.emigration.pressured : demo.emigration.base)) continue;
+    W.emigrated = true;
+    W.marriedOut = true;
+    assignDestination(W);
+  }
+
+  // § male out-migration: the landless-younger-son safety valve, same
+  // ordering rationale as the female pass above. Non-heirs who found no
+  // local match leave far more often than heirs, who had a tenement to
+  // hold and stayed even unmarried. `marriedOut` is deliberately left
+  // false: he isn't narrated as having married out, just left, though he
+  // may yet be pulled as a real immigrant groom by a village further down
+  // the cluster (the groom-pull step inside the matching rounds above).
+  for (const M of persons) {
+    if (M.sex !== "M" || M.founder || M.spouse != null || M.emigrated || M.inOrders) continue;
+    if (M.death.age < region.marriageM[1]) continue;
+    const heir = eldestSonOf(persons, M);
+    const atYear = M.birth + region.marriageM[1];
+    const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
+    const chance = pressured ? demo.maleOutMigration.pressured : heir ? demo.maleOutMigration.heirBase : demo.maleOutMigration.nonHeirBase;
+    if (!rng.chance(chance)) continue;
+    M.emigrated = true;
+    assignDestination(M);
+  }
+
   // § remarriage: widowhood in mid-life was routinely followed by
   // remarriage, at region-specific rates (demography.ts) — high for men
   // everywhere, high for women in NW Europe, low in the dowry-regime
-  // Mediterranean. One extra union per person keeps the solve bounded.
-  function widowedAt(p: Person): number | null {
-    if (p.unions?.length !== 1) return null;
-    const c = couples[p.unions[0]];
+  // Mediterranean. Depth is NOT capped at one remarriage: `latestWidowedAt`
+  // reads the person's MOST RECENT union rather than requiring exactly one,
+  // so someone widowed a second (or third) time gets the same chance again.
+  function latestWidowedAt(p: Person): number | null {
+    if (!p.unions?.length) return null;
+    const c = couples[p.unions[p.unions.length - 1]];
     const other = persons[p.id === c.husband ? c.wife : c.husband];
     if (other.death.year >= p.death.year) return null;
     return other.death.year;
   }
+  // "currently unmarried" = never married, or widowed with no union since.
+  function isCurrentlyUnmarried(p: Person): boolean {
+    if (!p.unions?.length) return p.spouse == null;
+    return latestWidowedAt(p) != null;
+  }
 
-  function remarriagePhase(): void {
-    const takenSpouse = new Set<number>();
+  function matchWidowers(takenSpouse: Set<number>): boolean {
+    let any = false;
     const widowers = persons
-      .map((m) => ({ m, lost: m.sex === "M" && !m.inOrders ? widowedAt(m) : null }))
+      .map((m) => ({ m, lost: m.sex === "M" && !m.inOrders && !m.emigrated && !takenSpouse.has(m.id) ? latestWidowedAt(m) : null }))
       .filter((x): x is { m: Person; lost: number } => x.lost != null && x.lost - x.m.birth <= 58)
       .sort((a, b) => a.lost - b.lost || a.m.id - b.m.id);
     for (const { m, lost } of widowers) {
+      if (takenSpouse.has(m.id)) continue; // matched earlier in this same pass
       if (!rng.chance(demo.remarry.M)) continue;
       const year = lost + 1 + rng.int(0, 2);
       if (year >= m.death.year) continue;
@@ -423,43 +553,65 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         bestScore = 1e9;
       for (const W of persons) {
         if (W.sex !== "F" || W.founder || W.inOrders || W.marriedOut || W.emigrated) continue;
-        if (takenSpouse.has(W.id) || (W.unions?.length ?? 0) > 1) continue;
+        if (takenSpouse.has(W.id) || !isCurrentlyUnmarried(W)) continue;
+        // `year` is drawn from M's OWN bereavement timeline — a widowed W is
+        // only actually free to take it if SHE was already free strictly
+        // before it too (isCurrentlyUnmarried alone only says she EVENTUALLY
+        // outlives her current spouse, not that she already has by `year`).
+        const wLost = latestWidowedAt(W);
+        if (wLost != null && wLost >= year) continue;
         if (W.father === m.id || W.mother === m.id) continue; // never a daughter
         if (W.father === m.father && m.father !== -1) continue; // never a sister
         if (W.death.year <= year) continue;
         const age = year - W.birth;
         if (age < 18 || age > 45) continue;
-        const wLost = widowedAt(W);
-        const isWidow = wLost != null && wLost < year;
-        if (!isWidow && W.spouse != null) continue; // married, husband living
-        // a widow follows her own region's remarriage propensity
-        const score = Math.abs(year - m.birth - 8 - age) + (isWidow ? 0 : 2);
+        const isWidow = wLost != null;
+        // § remarriage vs. the emigration backlog: emigration (above) already
+        // ran first and drained most of the surplus never-married women at a
+        // normal age, so what's left here is mostly genuine widows plus
+        // whoever stayed by choice — a widower still prefers a widow (score
+        // bonus) or a never-married woman already past the normal local
+        // marriage window (an "old maid" he took on) over a young single
+        // woman who simply didn't happen to emigrate.
+        const stillYoung = !isWidow && age <= region.marriageF[1] + 4;
+        const score = Math.abs(year - m.birth - 8 - age) + (isWidow ? 0 : 2) + (stillYoung ? 6 : 0);
         if (score < bestScore) {
           bestScore = score;
           best = W;
         }
       }
       if (!best) continue;
-      if (widowedAt(best) != null && !rng.chance(Math.min(1, demo.remarry.F / Math.max(demo.remarry.M, 0.01)))) continue;
+      if (latestWidowedAt(best) != null && !rng.chance(Math.min(1, demo.remarry.F / Math.max(demo.remarry.M, 0.01)))) continue;
       takenSpouse.add(best.id);
       takenSpouse.add(m.id);
       const c = marry(m, best, year);
       if (c) genChildren(c, 1495);
+      any = true;
     }
+    return any;
+  }
+
+  function matchWidows(takenSpouse: Set<number>): boolean {
+    let any = false;
     // widows left un-courted above may still remarry a never-married man
     const widows = persons
-      .map((w) => ({ w, lost: w.sex === "F" && !w.marriedOut && !w.emigrated ? widowedAt(w) : null }))
-      .filter((x): x is { w: Person; lost: number } => x.lost != null && x.lost - x.w.birth <= 45 && !takenSpouse.has(x.w.id))
+      .map((w) => ({ w, lost: w.sex === "F" && !w.marriedOut && !w.emigrated && !takenSpouse.has(w.id) ? latestWidowedAt(w) : null }))
+      .filter((x): x is { w: Person; lost: number } => x.lost != null && x.lost - x.w.birth <= 45)
       .sort((a, b) => a.lost - b.lost || a.w.id - b.w.id);
     for (const { w, lost } of widows) {
+      if (takenSpouse.has(w.id)) continue;
       if (!rng.chance(demo.remarry.F)) continue;
       const year = lost + 1 + rng.int(0, 3);
       if (year >= w.death.year) continue;
       let best: Person | null = null,
         bestScore = 1e9;
       for (const M of persons) {
-        if (M.sex !== "M" || M.founder || M.inOrders || M.spouse != null) continue;
+        if (M.sex !== "M" || M.founder || M.inOrders || M.emigrated || !isCurrentlyUnmarried(M)) continue;
         if (takenSpouse.has(M.id)) continue;
+        // symmetric to matchWidowers: `year` comes from W's own bereavement
+        // timeline, so a widowed M must already be free strictly before it.
+        const mLost = latestWidowedAt(M);
+        if (mLost != null && mLost >= year) continue;
         if (M.father === w.id || M.mother === w.id) continue; // never a son
         if (M.father === w.father && w.father !== -1) continue; // never a brother
         if (M.death.year <= year) continue;
@@ -476,44 +628,40 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       takenSpouse.add(w.id);
       const c = marry(best, w, year);
       if (c) genChildren(c, 1495);
+      any = true;
     }
+    return any;
   }
-  remarriagePhase();
-  // children born of remarriages come of age after the first matching pass
-  // ended — run the rounds again so they get matched too.
-  runMatchingRounds();
+
+  // § remarriage depth: run widower- then widow-matching passes to a small
+  // fixed depth, re-scanning each time so someone widowed a SECOND or third
+  // time (by their new spouse's independently-rolled death, or by a spouse
+  // gained in a later pass) gets the same remarriage chance as the first
+  // time — not just the initial widowhood.
+  function remarriagePhase(): boolean {
+    const takenSpouse = new Set<number>();
+    let anyEver = false;
+    for (let pass = 0; pass < 3; pass++) {
+      const a = matchWidowers(takenSpouse);
+      const b = matchWidows(takenSpouse);
+      if (a || b) anyEver = true;
+      else break;
+    }
+    return anyEver;
+  }
+  // Interleaved with matching rounds (not a single one-shot phase): a
+  // remarriage can produce children who come of age and need matching, and
+  // THAT matching can itself create new couples who are later widowed and
+  // eligible to remarry in turn. Bounded and self-terminating (each
+  // iteration that changes nothing stops the loop).
+  for (let i = 0; i < 4; i++) {
+    const any = remarriagePhase();
+    runMatchingRounds();
+    if (!any) break;
+  }
 
   const leftover = persons.filter((p) => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
   const diagnostics = { matchingRounds, truncated: leftover.length > 0, unmatched: leftover.length };
-
-  // Women unmatched after all rounds: emigration (§11), decided entirely by
-  // this village's own solve — never by a destination reaching back in.
-  // Mostly a short hop to a higher-offset cluster-mate (a real, later
-  // pull-able destination); occasionally a long jump to another region
-  // (still a real address, just not one anybody will scan back for).
-  // A famine or war year raises the chance, so a bad harvest here and a
-  // swollen neighbour there stay consistent with each other for free.
-  for (const W of persons) {
-    if (W.sex !== "F" || W.founder || W.spouse != null || W.emigrated || W.death.age < region.marriageF[1]) continue;
-    const atYear = W.birth + region.marriageF[1];
-    const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
-    if (!rng.chance(pressured ? demo.emigration.pressured : demo.emigration.base)) continue;
-    W.emigrated = true;
-    W.marriedOut = true;
-    const offset = clusterOffset(villageIdx);
-    if (offset < LOCAL_CLUSTER - 1 && rng.chance(0.8)) {
-      W.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + rng.int(offset + 1, LOCAL_CLUSTER - 1) };
-    } else {
-      const higher = higherRankRegions(regionKey);
-      if (higher.length && rng.chance(0.6)) {
-        W.emigrateTo = { regionKey: rng.pick(higher), villageIdx: rng.int(0, 200) };
-        W.longDistance = true;
-      } else {
-        W.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + LOCAL_CLUSTER + rng.int(0, LOCAL_CLUSTER - 1) };
-        W.longDistance = true; // outside this cluster's own scan range: narrated, not pulled
-      }
-    }
-  }
 
   // index couples on persons for O(1) FIRST-marriage lookup (full history
   // is on Person.unions)

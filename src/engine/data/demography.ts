@@ -53,6 +53,26 @@ export interface RegionDemography {
     freeToArtisan: { base: number; postPlague: number };
     artisanToMerchant: { base: number; postPlague: number };
   };
+  /** § maternal mortality: calibrated so the RESULTING per-registered-birth death rate lands
+   * near the historical ~1–1.5%, not the raw target itself — rollDeath applies the derived
+   * per-year hazard across a woman's WHOLE fertile-age ramp (it can't know her actual
+   * marital status; marriage isn't resolved until after death is rolled), so a region with
+   * low widow-remarriage (Mediterranean: dowry-return regime) spends more of that ramp
+   * "at risk" without an actual pregnancy behind it, and needs a lower input to land on the
+   * same real-world output rate as a high-remarriage NW region. */
+  maternalMortalityPerBirth: number;
+  /** § male out-migration: the landless-younger-son safety valve. Only the eldest surviving
+   * son inherits (succession.ts); everyone else was historically far more mobile. */
+  maleOutMigration: {
+    /** Chance a non-heir man who fails to marry locally leaves the village. */
+    nonHeirBase: number;
+    /** Chance an heir leaves despite failing to marry locally — rare; he has a tenement to hold. */
+    heirBase: number;
+    /** Elevated chance in a famine/war year. */
+    pressured: number;
+    /** Chance, per matching round, that a local woman without a local match marries a real immigrant groom instead of waiting. */
+    groomPullChance: number;
+  };
 }
 
 const SHARED_PERIODS: PeriodMult[] = [
@@ -77,6 +97,8 @@ const NW_DEFAULT: RegionDemography = {
     freeToArtisan: { base: 0.04, postPlague: 0.07 },
     artisanToMerchant: { base: 0.02, postPlague: 0.04 },
   },
+  maternalMortalityPerBirth: 0.012,
+  maleOutMigration: { nonHeirBase: 0.42, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.3 },
 };
 
 export const DEMOGRAPHY: Record<string, RegionDemography> = {
@@ -86,6 +108,8 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     hazardMult: 0.98,
     emigration: { base: 0.55, pressured: 0.7 }, // eastward colonization pull
     service: { M: 0.35, F: 0.4 },
+    maternalMortalityPerBirth: 0.007,
+    maleOutMigration: { nonHeirBase: 0.46, heirBase: 0.06, pressured: 0.62, groomPullChance: 0.32 }, // Ostsiedlung pulled younger sons east too
   },
   france: {
     ...NW_DEFAULT,
@@ -93,6 +117,8 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     infantMult: 1.05,
     emigration: { base: 0.5, pressured: 0.7 },
     service: { M: 0.3, F: 0.34 },
+    maternalMortalityPerBirth: 0.0075,
+    maleOutMigration: { nonHeirBase: 0.4, heirBase: 0.08, pressured: 0.65, groomPullChance: 0.28 }, // war retinues an ever-present outlet, but disrupt heirs too
   },
   catalonia: {
     ...NW_DEFAULT,
@@ -106,6 +132,8 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
       freeToArtisan: { base: 0.04, postPlague: 0.07 },
       artisanToMerchant: { base: 0.03, postPlague: 0.05 },
     },
+    maternalMortalityPerBirth: 0.0052,
+    maleOutMigration: { nonHeirBase: 0.32, heirBase: 0.05, pressured: 0.5, groomPullChance: 0.22 }, // stronger land ties, less rural out-migration
   },
   italy: {
     ...NW_DEFAULT,
@@ -121,6 +149,8 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
       freeToArtisan: { base: 0.05, postPlague: 0.08 },
       artisanToMerchant: { base: 0.03, postPlague: 0.05 },
     },
+    maternalMortalityPerBirth: 0.0068,
+    maleOutMigration: { nonHeirBase: 0.3, heirBase: 0.05, pressured: 0.48, groomPullChance: 0.2 }, // urban guild apprenticeship more local than rural flight
   },
 };
 

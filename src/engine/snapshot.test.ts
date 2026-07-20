@@ -146,3 +146,60 @@ describe("villageStateAt invariants", () => {
     }
   });
 });
+
+// § residency continuity: a real, locally-pulled migrant must never be
+// resident in BOTH her origin and destination villages' snapshots in the
+// same year, and — the specific seam this fixes — never resident in
+// NEITHER either, for any year strictly between her birth and death.
+describe("residency continuity across origin/destination registers", () => {
+  function findLocalMigrants(regionKey: string): { env: Envelope; migrants: number[] }[] {
+    const found: { env: Envelope; migrants: number[] }[] = [];
+    for (let villageIdx = 0; villageIdx < 60; villageIdx++) {
+      const env = resolveVillage(555, regionKey, villageIdx);
+      const migrants = env.persons.filter((p) => p.incomer && !p.founder && p.origin && p.originId != null).map((p) => p.id);
+      if (migrants.length) found.push({ env, migrants });
+    }
+    return found;
+  }
+
+  it("no real migrant is resident in both her origin and destination snapshots the same year", () => {
+    let checked = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (const { env: destEnv, migrants } of findLocalMigrants(regionKey)) {
+        for (const id of migrants) {
+          const resident = destEnv.persons[id];
+          const originEnv = resolveVillage(555, resident.origin!.regionKey, resident.origin!.villageIdx);
+          const native = originEnv.persons[resident.originId!];
+          checked++;
+          for (const year of [native.birth + 1, native.birth + 16, native.birth + 25, native.birth + 40, native.death.year - 1]) {
+            if (year <= native.birth || year >= native.death.year) continue;
+            const inOrigin = villageStateAt(originEnv, year).residents.some((r) => r.id === native.id);
+            const inDest = villageStateAt(destEnv, year).residents.some((r) => r.id === id);
+            expect(inOrigin && inDest).toBe(false);
+          }
+        }
+      }
+      if (checked > 30) break;
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("the ORIGIN snapshot's departure year matches the DESTINATION snapshot's own arrival year exactly (no gap)", () => {
+    let checked = 0;
+    outer: for (const regionKey of REGION_KEYS) {
+      for (const { env: destEnv, migrants } of findLocalMigrants(regionKey)) {
+        for (const id of migrants) {
+          const resident = destEnv.persons[id];
+          const originEnv = resolveVillage(555, resident.origin!.regionKey, resident.origin!.villageIdx);
+          const native = originEnv.persons[resident.originId!];
+          const departureYear = emigrationYearOf(native, originEnv);
+          const arrivalYear = arrivalYearOf(resident, destEnv);
+          expect(departureYear).toBe(arrivalYear);
+          checked++;
+          if (checked > 30) break outer;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+});

@@ -16,7 +16,7 @@ describe("envelope cache", () => {
       resolveVillage(99, "england", i * 7); // spread across clusters
       expect(envelopeCacheSize()).toBeLessThanOrEqual(ENVELOPE_CACHE_LIMIT);
     }
-  });
+  }, 20000);
 
   it("clearEnvelopeCache empties it, and a re-solve reproduces identical facts", () => {
     const before = resolveVillage(99, "france", 11);

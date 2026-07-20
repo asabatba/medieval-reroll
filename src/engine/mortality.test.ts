@@ -58,3 +58,51 @@ describe("rollDeath — occupational risk", () => {
     }
   });
 });
+
+// § maternal mortality: a real per-year hazard concentrated around a
+// region's own fertile-age window, not a post-hoc relabel of whichever
+// death happened to land on a birth year.
+describe("rollDeath — maternal mortality", () => {
+  it("never assigns cause 'childbirth' to a man", () => {
+    for (let i = 0; i < 300; i++) {
+      const d = rollDeath(makeRng(i), 1350, "M", 2, region, "normal", "italy");
+      expect(d.cause).not.toBe("childbirth");
+    }
+  });
+
+  it("childbirth deaths cluster inside the fertile age window, never in early childhood or deep old age", () => {
+    let sawChildbirth = 0;
+    for (let i = 0; i < 3000; i++) {
+      const d = rollDeath(makeRng(i), 1350, "F", 2, region, "normal", "italy");
+      if (d.cause === "childbirth") {
+        sawChildbirth++;
+        expect(d.age).toBeGreaterThanOrEqual(12);
+        expect(d.age).toBeLessThan(46);
+      }
+    }
+    expect(sawChildbirth).toBeGreaterThan(0);
+  });
+
+  it("a woman born just before the region's fertile window faces materially more childbirth risk than a woman who dies out of it entirely (sanity: the hazard is really there)", () => {
+    let sawChildbirth = 0;
+    const trials = 2000;
+    for (let i = 0; i < trials; i++) {
+      const d = rollDeath(makeRng(9500 + i), 1400, "F", 2, region, "normal", "england");
+      if (d.cause === "childbirth") sawChildbirth++;
+    }
+    // ~1–1.5% risk per birth, several potential births across the fertile
+    // span: over many independent lives, some non-trivial share should show
+    // a childbirth-attributed death.
+    expect(sawChildbirth / trials).toBeGreaterThan(0.01);
+    expect(sawChildbirth / trials).toBeLessThan(0.3);
+  });
+
+  it("omitting regionKey (default demography) still applies a maternal hazard, not zero", () => {
+    let sawChildbirth = 0;
+    for (let i = 0; i < 2000; i++) {
+      const d = rollDeath(makeRng(i), 1400, "F", 2, region, "normal");
+      if (d.cause === "childbirth") sawChildbirth++;
+    }
+    expect(sawChildbirth).toBeGreaterThan(0);
+  });
+});

@@ -144,11 +144,12 @@ describe("aggregate demographic statistics stay within historical bands", () => 
   });
 
   it.each(Object.keys(REGIONS))("%s: female first-marriage age lands inside the region's own window", (rk) => {
-    // the matcher tolerates brides up to marriageF[1]+6, so the sample mean
-    // can sit a little above the nominal window
+    // the matcher tolerates brides up to marriageF[1]+6, and a widower's
+    // remarriage search (village.ts) reaches a bit further still, so the
+    // sample mean can sit somewhat above the nominal window
     const [lo, hi] = REGIONS[rk].marriageF;
     expect(STATS[rk].femaleMarriageAge).toBeGreaterThan(lo - 1);
-    expect(STATS[rk].femaleMarriageAge).toBeLessThan(hi + 4);
+    expect(STATS[rk].femaleMarriageAge).toBeLessThan(hi + 5);
   });
 
   it.each(Object.keys(REGIONS))("%s: completed families bear 3.5–8 children", (rk) => {

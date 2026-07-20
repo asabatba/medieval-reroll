@@ -18,6 +18,18 @@ export function addrHash(worldSeed: number, segments: readonly (string | number)
   return h >>> 0;
 }
 
+// § RNG stream hygiene: village.ts seeds many independent per-person streams
+// off the same vHash, namespaced by adding a constant to the person id
+// (mix(vHash, 7001 + id)). That's an arithmetic collision waiting to happen —
+// person 1000's death stream (7001+1000=8001) lands on the exact same seed
+// as person 0's riskTrade stream (8001+0=8001) the moment a village crosses
+// ~1000 persons, which the hardening tests allow. Mixing the namespace INTO
+// the hash instead of adding it keeps every (namespace, id) pair on its own
+// stream regardless of population size.
+export function personStream(vHash: number, namespace: number, id: number): number {
+  return mix(vHash, mix(namespace, id));
+}
+
 export function makeRng(seed: number): Rng {
   let a = seed >>> 0;
   const r = (() => {

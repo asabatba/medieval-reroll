@@ -40,3 +40,20 @@ export function inheritedFromFather(env: Envelope, personId: number): boolean {
   if (!father || father.death.year >= p.death.year) return false;
   return heirOf(env, father.id)?.id === personId;
 }
+
+/** True if `personId` is the eldest-born son among ALL of their father's sons
+ * (across every union, i.e. birth order — the § male out-migration heir
+ * predicate village.ts uses to decide who is far more likely to leave). This
+ * is birth order, not `heirOf`'s "who is alive when the tenement actually
+ * changes hands" — an eldest son who himself later dies young or emigrates
+ * is still the one the family expected to inherit, which is what a
+ * biography's departure narrative wants to explain. */
+export function isFirstBornSon(env: Envelope, personId: number): boolean {
+  const p = env.persons[personId];
+  if (p?.sex !== "M" || p.father < 0) return true; // no father on record: no inheritance question
+  for (const q of env.persons) {
+    if (q.id === p.id || q.father !== p.father || q.sex !== "M") continue;
+    if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
+  }
+  return true;
+}

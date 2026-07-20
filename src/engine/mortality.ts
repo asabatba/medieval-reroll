@@ -29,6 +29,22 @@ export function warAt(year: number, region: Region, locale: Locale = "en"): stri
   return null;
 }
 
+// § maternal mortality: rollDeath is called before marriage is resolved, so
+// there's no actual birth to key off — instead a woman's chance of being
+// married and actively bearing children ramps up around the region's own
+// female marriage window (regions.ts) and tapers off toward the end of the
+// fertile span, rather than switching on/off at a single age.
+function fertileRamp(age: number, marriageF: readonly [number, number]): number {
+  const rampStart = Math.max(12, marriageF[0] - 3);
+  const fullBy = marriageF[0] + 2;
+  const declineStart = 42;
+  const declineEnd = 46;
+  if (age < rampStart || age >= declineEnd) return 0;
+  if (age < fullBy) return (age - rampStart) / (fullBy - rampStart);
+  if (age < declineStart) return 1;
+  return (declineEnd - age) / (declineEnd - declineStart);
+}
+
 // Pure per-person mortality walk. Returns {year, age, cause} where cause is
 // a coarse category; narrative detail is decoded at Tier 2. `riskTrade`
 // (§ occupational mortality) lets a trade the person was always going to be
@@ -86,10 +102,25 @@ export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, reg
       if (riskTrade === "hazardous") h += 0.006;
       else if (riskTrade === "maritime") h += 0.008;
     }
+    // § maternal mortality: a real per-year excess hazard, not a post-hoc
+    // relabel of a coincidentally-timed death. Per-birth risk (demography.ts)
+    // is spread over the region's own birth spacing to get a per-year rate,
+    // then scaled by the same wealth grade that already softens other adult
+    // mortality (poorer households: worse-attended, worse-nourished births).
+    let maternalRisk = 0;
+    if (sex === "F") {
+      const ramp = fertileRamp(age, region.marriageF);
+      if (ramp > 0) {
+        const avgSpacing = (demo.birthSpacing[0] + demo.birthSpacing[1]) / 2;
+        maternalRisk = (demo.maternalMortalityPerBirth / avgSpacing) * ramp * demo.wealthHazardMult[wi];
+        h += maternalRisk;
+      }
+    }
     if (rng() < h) {
       if (plague && rng() < 0.8) cause = "plague";
       else if (famine && rng() < 0.7) cause = "famine";
       else if (warName && rng() < warRisk / Math.max(h, 0.001)) cause = "war";
+      else if (maternalRisk > 0 && rng() < maternalRisk / Math.max(h, 0.001)) cause = "childbirth";
       else if (age === 0) cause = "infancy";
       else if (age <= 9) cause = "childhood";
       else cause = age >= 60 && rng() < 0.6 ? "oldage" : "disease";
