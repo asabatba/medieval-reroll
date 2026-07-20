@@ -50,6 +50,7 @@ export type {
   Death,
   DeathCause,
   Envelope,
+  EventRef,
   Fief,
   Jurisdiction,
   Person,

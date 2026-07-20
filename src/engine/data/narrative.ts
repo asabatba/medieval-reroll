@@ -500,14 +500,14 @@ export const WORLD_EVENTS: Record<Locale, WorldEvent[]> = {
 export const CHILD_EVENTS: Record<Locale, TextureEvent[]> = {
   en: [
     ["Caught the smallpox and survived it, though it left {pos} face pitted for life.", 1.2, null],
-    ["Was set to work at seven, scaring crows from the seed corn and gleaning at harvest, as every child of the village was.", 1.5, null],
+    ["Was set to work scaring crows from the seed corn and gleaning at harvest, as every child of the village was.", 1.5, null],
     ["Nearly drowned in the river in summer and was pulled out by a neighbour — a vow of a candle to St Nicholas was made and kept.", 0.8, null],
     ["Saw the Corpus Christi plays in the town — Noah's flood with a real ark on wheels — and talked of nothing else for a year.", 1, null],
     ["Was taught letters by the parish priest, who thought {obj} quick.", 0.7, "literate"],
   ],
   ca: [
     ["Va agafar la verola i la va superar, tot i que li va deixar la cara marcada de per vida.", 1.2, null],
-    ["Va començar a treballar als set anys, espantant corbs del blat de sement i espigolant a l'estiu, com feien tots els infants del poble.", 1.5, null],
+    ["Va començar a treballar espantant corbs del blat de sement i espigolant a l'estiu, com feien tots els infants del poble.", 1.5, null],
     [
       "Gairebé es va negar al riu un estiu, i un veí {{el/la}} va treure a temps de l'aigua — es va fer, i complir, la promesa d'un ciri a Sant Nicolau.",
       0.8,

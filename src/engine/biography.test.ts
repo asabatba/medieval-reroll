@@ -205,6 +205,145 @@ describe("occupational-risk narrative consistency", () => {
   });
 });
 
+// § occupation marital gate: occupation is decided at a fixed early age
+// (13), before anyone in this model marries — an entry that presupposes a
+// husband or widowhood must only ever be selectable for someone whose
+// actual recorded life later bears that out, checked here against raw
+// envelope facts (not the Bio's own derived `widowed` count, so this isn't
+// just re-reading back what the implementation itself computed).
+function everMarriedRaw(env: ReturnType<typeof resolveVillage>, id: number): boolean {
+  return !!env.persons[id].unions?.length;
+}
+function everWidowedRaw(env: ReturnType<typeof resolveVillage>, id: number): boolean {
+  const p = env.persons[id];
+  return !!p.unions?.some((ci) => {
+    const c = env.couples[ci];
+    const spouseId = p.id === c.husband ? c.wife : c.husband;
+    return env.persons[spouseId].death.year < p.death.year;
+  });
+}
+
+describe("§ occupation marital gate", () => {
+  function scan(marker: string, gate: (env: ReturnType<typeof resolveVillage>, id: number) => boolean) {
+    let seen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          if (!bio.events.some((e) => e.text.includes(marker))) continue;
+          seen++;
+          expect(gate(env, p.id)).toBe(true);
+        }
+      }
+    }
+    return seen;
+  }
+
+  it('"carried on the workshop in widowhood" never appears unless she really was widowed', () => {
+    expect(scan("carried on the workshop in widowhood", everWidowedRaw)).toBeGreaterThan(0);
+  });
+
+  it('"kept the shop and the books when her husband travelled" never appears unless she actually married', () => {
+    expect(scan("kept the shop and the books when her husband travelled", everMarriedRaw)).toBeGreaterThan(0);
+  });
+
+  it('"ran the manor entirely during her husband\'s absences" never appears unless she actually married', () => {
+    expect(scan("ran the manor entirely during her husband's absences", everMarriedRaw)).toBeGreaterThan(0);
+  });
+});
+
+// § name links: an event's `refs` are metadata for the UI to turn a name
+// into a link — this checks the invariant the UI relies on (every ref's
+// name is a literal, findable substring of its own event's text) and that
+// refs actually resolve to a real, matching person.
+describe("§ name links (BioEvent.refs)", () => {
+  it("every ref's name is a literal substring of its own event's text, and resolves to a real matching person", () => {
+    let sawRefs = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let villageIdx = 0; villageIdx < 6; villageIdx++) {
+        const env = resolveVillage(1444, regionKey, villageIdx);
+        for (const p of env.persons.slice(0, 80)) {
+          const bio = decodePerson(env, p.id, "en")!;
+          for (const e of bio.events) {
+            if (!e.refs?.length) continue;
+            for (const r of e.refs) {
+              sawRefs++;
+              expect(e.text).toContain(r.name);
+              const refEnv = resolveVillage(1444, r.addr.regionKey, r.addr.villageIdx);
+              const target = refEnv.persons[r.id];
+              expect(target).toBeDefined();
+              expect(r.name === target.name || r.name === `${target.name} ${target.surname}`).toBe(true);
+            }
+          }
+        }
+      }
+    }
+    expect(sawRefs).toBeGreaterThan(0);
+  });
+
+  it("godparent, marriage, and stepfamily events carry refs somewhere in a scan", () => {
+    let sawGodparentRefs = 0;
+    let sawMarriageRefs = 0;
+    for (let villageIdx = 0; villageIdx < 10; villageIdx++) {
+      const env = resolveVillage(1444, "england", villageIdx);
+      for (const p of env.persons) {
+        const bio = decodePerson(env, p.id, "en")!;
+        for (const e of bio.events) {
+          if (e.text.includes("stood godparents") && e.refs?.length === 2) sawGodparentRefs++;
+          if (e.kind === "marriage" && e.refs?.length) sawMarriageRefs++;
+        }
+      }
+    }
+    expect(sawGodparentRefs).toBeGreaterThan(0);
+    expect(sawMarriageRefs).toBeGreaterThan(0);
+  });
+});
+
+// § age text removed: an event's own displayed age (already shown on the
+// timeline as "aet. N") must never ALSO be restated in the prose — some of
+// those restatements could go stale/mismatch the actual randomized year
+// (e.g. a texture event drawn anywhere in a multi-year window), so they
+// were removed outright rather than trusted to stay in sync.
+describe("§ age text removed from event prose", () => {
+  const BANNED = ["at seven,", "at twelve,", "at twelve, as", "at fourteen", "als set anys", "als dotze anys", "als catorze anys"];
+
+  it("none of the previously-hardcoded age phrases appear anywhere in a broad scan", () => {
+    let checked = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (const locale of LOCALES) {
+        for (let villageIdx = 0; villageIdx < 6; villageIdx++) {
+          const env = resolveVillage(1444, regionKey, villageIdx);
+          for (const p of env.persons) {
+            const bio = decodePerson(env, p.id, locale)!;
+            checked++;
+            for (const e of bio.events) {
+              for (const phrase of BANNED) expect(e.text).not.toContain(phrase);
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  }, 20000);
+
+  it("the wardship event no longer states the orphaned age (still fires, still dated correctly)", () => {
+    let seen = 0;
+    for (let villageIdx = 0; villageIdx < 15; villageIdx++) {
+      const env = resolveVillage(1444, "england", villageIdx);
+      for (const p of env.persons) {
+        const bio = decodePerson(env, p.id, "en")!;
+        const e = bio.events.find((e) => e.text.includes("Orphaned of both parents"));
+        if (!e) continue;
+        seen++;
+        expect(e.text).not.toMatch(/Orphaned of both parents at \d/);
+        expect(e.age).toBe(e.year - bio.birth);
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+});
+
 describe("§ godparents", () => {
   it("some native births are attended by two named godparents, at the birth year, with parents on record", () => {
     // NB: names are drawn from small per-region pools (village.ts), so a

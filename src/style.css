@@ -291,9 +291,24 @@ h1.name .init {
   margin-bottom: 6px;
 }
 .parent .pname {
+  display: block;
+  font-family: "Fraunces", serif;
   font-weight: 600;
   font-size: 17px;
   margin-bottom: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--bone);
+  text-align: left;
+  cursor: pointer;
+}
+.parent .pname:hover {
+  color: var(--gilt);
+}
+.parent .pname:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 2px;
 }
 .parent p {
   font-size: 14.5px;
@@ -361,6 +376,27 @@ h1.name .init {
 .entry .tx::first-letter {
   color: var(--rubric);
   font-weight: 640;
+}
+/* § name links: another person named inline within a chronicle entry */
+.namelink {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: rgba(201, 162, 39, 0.45);
+  text-underline-offset: 2px;
+}
+.namelink:hover {
+  color: var(--gilt);
+  text-decoration-color: var(--gilt);
+}
+.namelink:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 2px;
 }
 .entry.k-plague::before,
 .entry.k-grief::before,

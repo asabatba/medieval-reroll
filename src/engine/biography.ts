@@ -49,6 +49,7 @@ import type {
   Couple,
   DocumentKind,
   Envelope,
+  EventRef,
   Person,
   PersonAddress,
   RiskTrade,
@@ -71,6 +72,10 @@ interface OccEntry {
   literate?: boolean;
   /** Occupational hazard category this entry's trade actually carries — must match the person's own riskTrade (village.ts) so narrative and mortality agree. Untagged entries are the safe default. */
   risk?: RiskTrade;
+  /** Occupation is decided at a fixed early age (13), before anyone in this
+   * model marries — an entry that presupposes a husband or widowhood is
+   * only eligible if that's actually true SOMEWHERE in her recorded life. */
+  maritalGate?: "married" | "widowed";
 }
 const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> = {
   en: {
@@ -81,7 +86,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "kept the lord's sheep as a shepherd" },
         { text: "was sent to break stone in the lord's quarry, a service owed like any other", risk: "hazardous" },
       ],
-      F: [{ text: "worked the holding, the dairy, and the harvest alongside the family" }, { text: "went into service at the manor house at twelve" }],
+      F: [{ text: "worked the holding, the dairy, and the harvest alongside the family" }, { text: "went into service at the manor house" }],
     },
     freePeasant: {
       M: [
@@ -90,7 +95,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "leased extra strips and prospered as a yeoman" },
         { text: "fished the estuary for the household's table and the market", risk: "maritime" },
       ],
-      F: [{ text: "ran the dairy, the poultry, the garden, and the brewing" }, { text: "went into service in a townhouse at fourteen" }],
+      F: [{ text: "ran the dairy, the poultry, the garden, and the brewing" }, { text: "went into service in a townhouse" }],
     },
     artisan: {
       M: [
@@ -100,7 +105,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
       ],
       F: [
         { text: "worked in the family workshop, minding the shop and the accounts" },
-        { text: "carried on the workshop in widowhood, with journeymen under her" },
+        { text: "carried on the workshop in widowhood, with journeymen under her", maritalGate: "widowed" },
       ],
     },
     merchant: {
@@ -108,7 +113,10 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "rode to the fairs with the family's cloth and kept the books", literate: true },
         { text: "took ship with the trading fleet along the coast, buying and selling in foreign ports", literate: true, risk: "maritime" },
       ],
-      F: [{ text: "kept the shop and the books when her husband travelled", literate: true }],
+      F: [
+        { text: "helped keep the household accounts, alongside her mother", literate: true },
+        { text: "kept the shop and the books when her husband travelled", literate: true, maritalGate: "married" },
+      ],
     },
     clergyFamily: {
       M: [{ text: "was taught his letters and became a clerk", literate: true }],
@@ -120,7 +128,10 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "studied law and served at the sessions", literate: true },
         { text: "was raised chiefly to war, and rode in the retinue of a greater lord", risk: "military" },
       ],
-      F: [{ text: "was raised to needlework, estate accounts, and the marriage market" }, { text: "ran the manor entirely during her husband's absences" }],
+      F: [
+        { text: "was raised to needlework, estate accounts, and the marriage market" },
+        { text: "ran the manor entirely during her husband's absences", maritalGate: "married" },
+      ],
     },
   },
   ca: {
@@ -131,10 +142,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "va guardar les ovelles del senyor com a pastor" },
         { text: "va ser enviat a tallar pedra a la pedrera del senyor, una prestació deguda com qualsevol altra", risk: "hazardous" },
       ],
-      F: [
-        { text: "va treballar l'explotació, la lleteria i la collita al costat de la família" },
-        { text: "va entrar a servir a la casa senyorial als dotze anys" },
-      ],
+      F: [{ text: "va treballar l'explotació, la lleteria i la collita al costat de la família" }, { text: "va entrar a servir a la casa senyorial" }],
     },
     freePeasant: {
       M: [
@@ -143,7 +151,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "va arrendar terres addicionals i va prosperar com a pagès benestant" },
         { text: "va pescar a l'estuari per a la taula de la casa i el mercat", risk: "maritime" },
       ],
-      F: [{ text: "va portar la lleteria, els corrals, l'hort i la cervesa" }, { text: "va entrar a servir en una casa de vila als catorze anys" }],
+      F: [{ text: "va portar la lleteria, els corrals, l'hort i la cervesa" }, { text: "va entrar a servir en una casa de vila" }],
     },
     artisan: {
       M: [
@@ -153,7 +161,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
       ],
       F: [
         { text: "va treballar al taller familiar, cuidant la botiga i els comptes" },
-        { text: "va portar el taller en la viduïtat, amb oficials al seu càrrec" },
+        { text: "va portar el taller en la viduïtat, amb oficials al seu càrrec", maritalGate: "widowed" },
       ],
     },
     merchant: {
@@ -161,7 +169,10 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
         { text: "va anar a les fires amb els draps de la família i en va portar els comptes", literate: true },
         { text: "va anar a la mar amb la flota mercant al llarg de la costa, comprant i venent en ports estrangers", literate: true, risk: "maritime" },
       ],
-      F: [{ text: "va portar la botiga i els comptes quan el seu marit viatjava", literate: true }],
+      F: [
+        { text: "ajudava a portar els comptes de la casa, al costat de la seva mare", literate: true },
+        { text: "va portar la botiga i els comptes quan el seu marit viatjava", literate: true, maritalGate: "married" },
+      ],
     },
     clergyFamily: {
       M: [{ text: "va aprendre les lletres i es va fer clergue", literate: true }],
@@ -175,7 +186,7 @@ const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> 
       ],
       F: [
         { text: "va ser formada en la brodadora, els comptes de l'hisenda i el mercat matrimonial" },
-        { text: "va portar tot el senyoriu durant les absències del marit" },
+        { text: "va portar tot el senyoriu durant les absències del marit", maritalGate: "married" },
       ],
     },
   },
@@ -221,6 +232,15 @@ function placeNameOf(worldSeed: number, addr: Address | null | undefined, locale
 
 function addrOnly(a: Address): Address {
   return { regionKey: a.regionKey, villageIdx: a.villageIdx };
+}
+
+// § name links: a reference for the UI layer to turn a person's name — as
+// it literally appears in an event's own text — into a link to their
+// record. `full` uses "Name Surname" (most mentions); pass full=false for
+// the handful of spots (children, a birth event's mother) that name someone
+// by first name only.
+function nameRef(person: Person, addr: Address, full = true): EventRef {
+  return { id: person.id, name: full ? `${person.name} ${person.surname}` : person.name, addr: addrOnly(addr) };
 }
 
 function spouseRefOf(s: Person, addr: Address, worldSeed: number, locale: Locale): SpouseRef {
@@ -294,6 +314,13 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const own = unionCouples[0] ?? null;
   const spouse = own ? spouseOf(own) : null;
   const children = unionCouples.flatMap((c) => c.children.map((cid) => env.persons[cid]));
+  // § occupation marital gate: an occupation entry that presupposes she's
+  // married (or widowed) must only be eligible if that's actually true of
+  // her own recorded life — occupation is decided at a fixed early age
+  // (13), before marriage in every region, so it can only look at whether
+  // these things EVER happen across her whole recorded history, not "yet".
+  const everMarried = unionCouples.length > 0;
+  const widowedUnions = unionCouples.filter((c) => spouseOf(c).death.year < p.death.year);
 
   // § canonical identity: an emigrant decoded at her ORIGIN village may have
   // a real residence record in the destination register — resolve it (bounded:
@@ -310,8 +337,9 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const destChildren = destUnion && destEnv ? destUnion.children.map((cid) => destEnv.persons[cid]) : [];
 
   const events: BioEvent[] = [];
-  const ev = (year: number, text: string, kind: string, src?: string) => {
-    if (year <= p.death.year) events.push({ year, age: year - p.birth, text: gender(text, p.sex), kind, src: src || cite("reg") });
+  const ev = (year: number, text: string, kind: string, src?: string, refs?: EventRef[]) => {
+    if (year <= p.death.year)
+      events.push({ year, age: year - p.birth, text: gender(text, p.sex), kind, src: src || cite("reg"), refs: refs?.length ? refs : undefined });
   };
 
   // Birth
@@ -364,6 +392,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         : `Born in ${env.place[locale]}, ${region.name.en}, ${p.sex === "M" ? "son" : "daughter"} of ${father!.name} ${father!.surname} and ${mother!.name}${bNote}.`,
       "birth",
       cite("reg"),
+      [nameRef(father!, selfAddr), nameRef(mother!, selfAddr, false)],
     );
   }
 
@@ -389,6 +418,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Als peus de la pica, ${gf.name} ${gf.surname} i ${gm.name} ${gm.surname} en van ser els padrins, i van respondre per {{ell/ella}} davant el capellà.`
           : `At the font, ${gf.name} ${gf.surname} and ${gm.name} ${gm.surname} stood godparents, and answered for ${obj} before the priest.`,
         "life",
+        undefined,
+        [nameRef(gf, fatherEnvForOcc), nameRef(gm, fatherEnvForOcc)],
       );
     }
   }
@@ -472,11 +503,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         orphanedAt,
         wealth >= 4
           ? ca
-            ? `Orfe de pare i mare als ${orphanedAge} anys, la tutela de la seva persona i de la seva terra va ser atorgada per ${fief.lord} a un parent, que en cobraria els fruits fins que arribés a la majoria d'edat.`
-            : `Orphaned of both parents at ${orphanedAge}, wardship of ${pos} person and land was granted by ${fief.lord} to a kinsman, who would take the profits of the holding until ${obj} came of age.`
+            ? `Orfe de pare i mare, la tutela de la seva persona i de la seva terra va ser atorgada per ${fief.lord} a un parent, que en cobraria els fruits fins que arribés a la majoria d'edat.`
+            : `Orphaned of both parents, wardship of ${pos} person and land was granted by ${fief.lord} to a kinsman, who would take the profits of the holding until ${obj} came of age.`
           : ca
-            ? `Orfe de pare i mare als ${orphanedAge} anys, el van acollir uns parents, com va quedar constatat quan la cort del senyoriu va confirmar qui responia ara pels drets de la casa.`
-            : `Orphaned of both parents at ${orphanedAge}, ${p.name} was taken in by kin, as the manor court noted when it confirmed who now answered for the household's dues.`,
+            ? `Orfe de pare i mare, el van acollir uns parents, com va quedar constatat quan la cort del senyoriu va confirmar qui responia ara pels drets de la casa.`
+            : `Orphaned of both parents, ${p.name} was taken in by kin, as the manor court noted when it confirmed who now answered for the household's dues.`,
         "grief",
         cite("court"),
       );
@@ -510,6 +541,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `La seva mare es va tornar a casar, amb ${s.name} ${s.surname}, que va entrar a la casa com a padrastre.`
           : `${pos.charAt(0).toUpperCase() + pos.slice(1)} mother married again, to ${s.name} ${s.surname}, who came into the house as ${pos} stepfather.`,
         "life",
+        undefined,
+        [nameRef(s, selfAddr)],
       );
     }
   }
@@ -523,6 +556,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `El seu pare es va tornar a casar, amb ${s.name} ${s.surname}, que va entrar a la casa com a madrastra.`
           : `${pos.charAt(0).toUpperCase() + pos.slice(1)} father married again, to ${s.name} ${s.surname}, who came into the house as ${pos} stepmother.`,
         "life",
+        undefined,
+        [nameRef(s, selfAddr)],
       );
     }
   }
@@ -532,7 +567,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // preferentially narrated into a trade that actually carries that hazard,
   // never the reverse (a "normal" person never draws a risk-flavoured entry).
   if (p.death.age >= 12 && !p.inOrders) {
-    const fullPool = OCCUPATIONS[locale][p.cls][p.sex];
+    const eligible = OCCUPATIONS[locale][p.cls][p.sex].filter((o) => !o.maritalGate || (o.maritalGate === "married" ? everMarried : widowedUnions.length > 0));
+    const fullPool = eligible.length ? eligible : OCCUPATIONS[locale][p.cls][p.sex];
     const riskTrade = p.riskTrade ?? "normal";
     const matching = riskTrade === "normal" ? fullPool.filter((o) => !o.risk) : fullPool.filter((o) => o.risk === riskTrade);
     const pool = matching.length ? matching : fullPool;
@@ -560,8 +596,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     ev(
       p.service.from,
       ca
-        ? `Va entrar a servir en una altra casa als dotze anys, com era costum per als fills de cases humils, i hi va passar ${years > 1 ? `${years} anys` : "un any"} guanyant-se el llit, la taula i la soldada.`
-        : `Went into service in another household at twelve, as was the custom for children of humble houses, and spent ${years > 1 ? `${years} years` : "a year"} there earning bed, board, and a small wage.`,
+        ? `Va entrar a servir en una altra casa, com era costum per als fills de cases humils, i hi va passar ${years > 1 ? `${years} anys` : "un any"} guanyant-se el llit, la taula i la soldada.`
+        : `Went into service in another household, as was the custom for children of humble houses, and spent ${years > 1 ? `${years} years` : "a year"} there earning bed, board, and a small wage.`,
       "life",
       cite("account"),
     );
@@ -678,6 +714,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Es va casar amb ${sName}${older ? ", un home uns quants anys més gran, com era habitual" : ""}.${extra}`
           : `Married ${sName}${older ? ", a man some years older, as was usual" : ""}.${extra}`,
         "marriage",
+        undefined,
+        [nameRef(s, selfAddr)],
       );
     } else {
       // § remarriage
@@ -687,6 +725,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Es va tornar a casar, amb ${sName}: una casa no es podia portar sola, i el dol durava el que durava.`
           : `Married again, to ${sName}: a household could not be run alone, and mourning lasted only as long as it could afford to.`,
         "marriage",
+        undefined,
+        [nameRef(s, selfAddr)],
       );
     }
   });
@@ -703,7 +743,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             ? ` to ${destPlace}, in ${REGIONS[dest.regionKey].name.en}`
             : ` to ${destPlace}`
         : "";
-    if (destPerson && destUnion && destSpouse) {
+    if (destPerson && destUnion && destSpouse && destRecord) {
       // § canonical identity: the destination register really recorded her —
       // name the husband and the year, and let the Bio point at that record.
       ev(
@@ -712,6 +752,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Es va casar fora de la parròquia${destText}, amb ${destSpouse.name} ${destSpouse.surname}; el registre d'aquell poble la recull des d'aleshores, i la resta de la seva vida hi queda escrita.`
           : `Married out of the parish${destText}, to ${destSpouse.name} ${destSpouse.surname}; that village's register carries her from then on, and the rest of her life is written there.`,
         "marriage",
+        undefined,
+        [nameRef(destSpouse, destRecord)],
       );
     } else {
       ev(
@@ -737,7 +779,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             ? ` for ${destPlace}, in ${REGIONS[dest.regionKey].name.en}`
             : ` for ${destPlace}`
         : "";
-    if (destPerson && destUnion && destSpouse) {
+    if (destPerson && destUnion && destSpouse && destRecord) {
       // § canonical identity: the destination register really recorded him.
       ev(
         destUnion.year,
@@ -745,6 +787,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Va deixar la parròquia${destText} i allà es va casar amb ${destSpouse.name} ${destSpouse.surname}; el registre d'aquell poble el recull des d'aleshores, i la resta de la seva vida hi queda escrita.`
           : `Left the parish${destText} and there married ${destSpouse.name} ${destSpouse.surname}; that village's register carries him from then on, and the rest of his life is written there.`,
         "marriage",
+        undefined,
+        [nameRef(destSpouse, destRecord)],
       );
     } else {
       const heir = region.inheritance === "partible" || isFirstBornSon(env, id);
@@ -789,6 +833,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Va néixer ${c.sex === "M" ? "un fill" : "una filla"}, ${c.name}, i va morir abans de complir l'any, ${cp && c.death.cause === "plague" ? "de la pesta que aleshores feia estralls" : "com un de cada quatre nadons"}. Enterrat{{/da}} al cementiri, sense làpida.`
           : `A ${c.sex === "M" ? "son" : "daughter"}, ${c.name}, was born — and died within the year, ${cp && c.death.cause === "plague" ? "of the pestilence then raging" : "as one in four infants did"}. Buried in the churchyard, unmarked.`,
         "grief",
+        undefined,
+        [nameRef(c, selfAddr, false)],
       );
     } else {
       ev(
@@ -797,6 +843,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Va néixer ${c.sex === "M" ? "un fill" : "una filla"}, ${c.name}${c.death.age >= 16 ? ", que va viure" : ""}.`
           : `A ${c.sex === "M" ? "son" : "daughter"}, ${c.name}, was born${c.death.age >= 16 ? ", and lived" : ""}.`,
         "child",
+        undefined,
+        [nameRef(c, selfAddr, false)],
       );
       if (c.death.age < 16) {
         const cause =
@@ -813,6 +861,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             ? `${c.name} va morir als ${c.death.age} anys, ${cause}. Els pares van pagar ciris a l'altar de la Mare de Déu.`
             : `${c.name} died at ${c.death.age}, ${cause}. The parents paid for candles at the altar of the Virgin.`,
           "grief",
+          undefined,
+          [nameRef(c, selfAddr, false)],
         );
       }
     }
@@ -840,6 +890,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         ? `${s.name} ${s.surname} va morir${causeTxt}, deixant ${p.name} {{vidu/vídua}}${atHome ? ` amb ${atHome} fills encara a casa` : ""}.`
         : `${s.name} ${s.surname} died${causeTxt}, leaving ${p.name} ${p.sex === "F" ? "a widow" : "a widower"}${atHome ? ` with ${atHome} children still at home` : ""}.`,
       "grief",
+      undefined,
+      [nameRef(s, selfAddr)],
     );
   }
 
@@ -1035,7 +1087,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         : children.map((c) => ({ id: c.id, name: c.name, sex: c.sex, birth: c.birth, death: c.death, addr: selfAddr })),
     destRecord,
     events,
-    widowed: unionCouples.filter((c) => spouseOf(c).death.year < p.death.year).length,
+    widowed: widowedUnions.length,
     plaguesLived: PLAGUES.filter(
       (pl) => pl[0] >= p.birth && pl[1] <= p.death.year && !(p.death.cause === "plague" && p.death.year >= pl[0] && p.death.year <= pl[1]),
     ).length,

@@ -1,5 +1,5 @@
 import type * as Engine from "../engine/index.js";
-import type { Address, Death, Envelope, HouseholdState, PersonAddress } from "../engine/index.js";
+import type { Address, Death, Envelope, EventRef, HouseholdState, PersonAddress } from "../engine/index.js";
 import type { Locale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
 import { esc, KIND_LABEL } from "./dom.js";
@@ -20,6 +20,29 @@ export function fateStr(d: Death, birth: number): string {
 
 function addrStr(addr: Address, id: number): string {
   return `${addr.regionKey}:${addr.villageIdx}:${id}`;
+}
+
+// § name links: an event's own text is plain prose (biography.ts never
+// emits markup) — `refs` names exactly which substrings are other people,
+// so this is the one place that turns them into clickable goto buttons,
+// escaping everything else. Overlapping/unfound refs are simply skipped.
+export function linkifyEventText(text: string, refs: EventRef[] | undefined): string {
+  if (!refs?.length) return esc(text);
+  const matches = refs
+    .map((r) => ({ start: text.indexOf(r.name), ref: r }))
+    .filter((m) => m.start !== -1)
+    .sort((a, b) => a.start - b.start);
+  let out = "";
+  let cursor = 0;
+  for (const m of matches) {
+    if (m.start < cursor) continue; // overlapping with a previous match — skip
+    const end = m.start + m.ref.name.length;
+    out += esc(text.slice(cursor, m.start));
+    out += `<button class="namelink" data-goto="${addrStr(m.ref.addr, m.ref.id)}">${esc(text.slice(m.start, end))}</button>`;
+    cursor = end;
+  }
+  out += esc(text.slice(cursor));
+  return out;
 }
 
 interface RelCardPerson {
@@ -197,12 +220,12 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   html += `<div class="sect reveal"><h2>${esc(t.parentage)}</h2></div><div class="parents reveal">`;
   if (bio.father) {
     const fOcc = bio.fatherOccupation;
-    html += `<div class="parent"><div class="who">${t.father}${bio.father.foreign ? esc(t.ofPlace(bio.originPlace || "")) : ""}</div><div class="pname">${esc(bio.father.name)}</div><p>${esc(fOcc ? fOcc.charAt(0).toUpperCase() + fOcc.slice(1) : "")}.</p><button class="openrel plink" data-goto="${addrStr(bio.father.addr, bio.father.id)}">${esc(t.openHisRecord)}</button></div>`;
+    html += `<div class="parent"><div class="who">${t.father}${bio.father.foreign ? esc(t.ofPlace(bio.originPlace || "")) : ""}</div><button class="pname" data-goto="${addrStr(bio.father.addr, bio.father.id)}">${esc(bio.father.name)}</button><p>${esc(fOcc ? fOcc.charAt(0).toUpperCase() + fOcc.slice(1) : "")}.</p><button class="openrel plink" data-goto="${addrStr(bio.father.addr, bio.father.id)}">${esc(t.openHisRecord)}</button></div>`;
   } else {
     html += `<div class="parent"><div class="who">${t.father}</div><div class="pname">${bio.incomer ? t.ofAnotherParish : t.beforeRegister}</div><p>${bio.incomer ? t.fatherIncomerNote : t.fatherBeforeNote}</p></div>`;
   }
   if (bio.mother) {
-    html += `<div class="parent"><div class="who">${t.mother}${bio.mother.foreign ? esc(t.ofPlace(bio.originPlace || "")) : ""}</div><div class="pname">${esc(bio.mother.name)}</div><p>${bio.mother.dead.cause === "childbirth" ? t.motherChildbedNote : t.motherRaisedNote}</p><button class="openrel plink" data-goto="${addrStr(bio.mother.addr, bio.mother.id)}">${esc(t.openHerRecord)}</button></div>`;
+    html += `<div class="parent"><div class="who">${t.mother}${bio.mother.foreign ? esc(t.ofPlace(bio.originPlace || "")) : ""}</div><button class="pname" data-goto="${addrStr(bio.mother.addr, bio.mother.id)}">${esc(bio.mother.name)}</button><p>${bio.mother.dead.cause === "childbirth" ? t.motherChildbedNote : t.motherRaisedNote}</p><button class="openrel plink" data-goto="${addrStr(bio.mother.addr, bio.mother.id)}">${esc(t.openHerRecord)}</button></div>`;
   } else {
     html += `<div class="parent"><div class="who">${t.mother}</div><div class="pname">${bio.incomer ? t.ofAnotherParish : t.beforeRegister}</div><p>${t.motherIncomerNote}</p></div>`;
   }
@@ -223,7 +246,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     const label = KIND_LABEL[locale][e.kind] || "";
     html += `<div class="entry k-${e.kind} reveal" style="animation-delay:${Math.min(i * 55, 850)}ms">
       <div class="yr">${e.year}<span class="age">aet. ${e.age}</span></div>
-      <div class="tx">${esc(e.text)}${label ? `<span class="tag">${label}</span>` : ""}<span class="src">${esc(e.src)}</span></div>
+      <div class="tx">${linkifyEventText(e.text, e.refs)}${label ? `<span class="tag">${label}</span>` : ""}<span class="src">${esc(e.src)}</span></div>
     </div>`;
   });
   html += `</div>`;

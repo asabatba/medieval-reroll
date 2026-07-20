@@ -188,12 +188,24 @@ export interface DocumentContext {
 }
 
 // ---- Tier-2 decode shapes ----
+/** Another person named within a BioEvent's own text — the engine only ever
+ * emits plain prose (§ pure decode), so this is metadata for the UI layer to
+ * turn the exact `name` substring into a link, never markup embedded here. */
+export interface EventRef {
+  id: number;
+  /** The exact substring naming this person inside the event's own `text`. */
+  name: string;
+  addr: Address;
+}
+
 export interface BioEvent {
   year: number;
   age: number;
   text: string;
   kind: string;
   src: string;
+  /** Every other person named in `text`, if any (§ name links). */
+  refs?: EventRef[];
 }
 
 export interface RelativeRef {
