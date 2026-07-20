@@ -11,7 +11,6 @@ interface UiStrings {
   intro: string;
   trail: string;
   record: string;
-  allAgree: string;
   born: string;
   died: string;
   causeOfDeath: string;
@@ -57,8 +56,7 @@ interface UiStrings {
   founderTag: string;
   incomerTag: string;
   emigratedTag: string;
-  ledger: (age: number, plagues: number, widowed: boolean, literate: boolean, regionKey: string, villageIdx: number) => string;
-  footnote: string;
+  ledger: (age: number, plagues: number, widowed: boolean, literate: boolean) => string;
 }
 
 export const UI: Record<Locale, UiStrings> = {
@@ -74,7 +72,6 @@ export const UI: Record<Locale, UiStrings> = {
       "Every soul in this world already exists at a fixed address — <b>world · region · village · person</b> — waiting to be decoded. Roll to open one register at random, then follow the connections: every spouse, sibling, parent, and child is a real entry in the same records, and every path through them agrees. The odds are the historical ones; the ink was dry before you arrived.",
     trail: "Trail",
     record: "Record",
-    allAgree: "All persons below are entries in the same register — <b>every link agrees from both sides.</b>",
     born: "Born",
     died: "Died",
     causeOfDeath: "Cause of death",
@@ -120,10 +117,8 @@ export const UI: Record<Locale, UiStrings> = {
     founderTag: " (founder)",
     incomerTag: " (incomer)",
     emigratedTag: " (removed elsewhere)",
-    ledger: (age: number, plagues: number, widowed: boolean, literate: boolean, regionKey: string, villageIdx: number) =>
-      `lifespan <b>${age} years</b> · plagues lived through <b>${plagues}</b> · widowed <b>${widowed ? "yes" : "no"}</b> · literate <b>${literate ? "yes" : "no"}</b> · village <b>${regionKey}/${villageIdx}</b>`,
-    footnote:
-      "Nothing here is simulated on demand. The village is resolved once — its whole genealogy, every death and its cause, and the marriage matching — as a pure function of its address, and each person's chronicle is decoded from that shared record. Follow any chain of relatives in any order and return: the facts cannot disagree, because they are all read from the same envelope. Mortality after J.C. Russell's life tables; plagues 1347–1500; the Great Famine; the European marriage pattern.",
+    ledger: (age: number, plagues: number, widowed: boolean, literate: boolean) =>
+      `lifespan <b>${age} years</b> · plagues lived through <b>${plagues}</b> · widowed <b>${widowed ? "yes" : "no"}</b> · literate <b>${literate ? "yes" : "no"}</b>`,
   },
   ca: {
     brandSuffix: "REROLL",
@@ -137,7 +132,6 @@ export const UI: Record<Locale, UiStrings> = {
       "Cada ànima d'aquest món ja existeix en una adreça fixa — <b>món · regió · poble · persona</b> — a l'espera de ser desxifrada. Tira els daus per obrir un registre a l'atzar, i després segueix les connexions: cada cònjuge, germà, pare i fill és una entrada real en els mateixos registres, i qualsevol camí entre ells hi concorda. Les probabilitats són les històriques; la tinta ja era seca abans que hi arribessis.",
     trail: "Camí",
     record: "Registre",
-    allAgree: "Totes les persones que segueixen són entrades del mateix registre — <b>cada vincle hi concorda des de banda i banda.</b>",
     born: "Naixement",
     died: "Defunció",
     causeOfDeath: "Causa de la mort",
@@ -183,9 +177,7 @@ export const UI: Record<Locale, UiStrings> = {
     founderTag: " (fundador)",
     incomerTag: " (nouvingut)",
     emigratedTag: " (traslladat)",
-    ledger: (age: number, plagues: number, widowed: boolean, literate: boolean, regionKey: string, villageIdx: number) =>
-      `durada de vida <b>${age} anys</b> · pestes viscudes <b>${plagues}</b> · vidu/vídua <b>${widowed ? "sí" : "no"}</b> · alfabetitzat <b>${literate ? "sí" : "no"}</b> · poble <b>${regionKey}/${villageIdx}</b>`,
-    footnote:
-      "Res aquí no es simula sota demanda. El poble es resol una sola vegada — tota la seva genealogia, cada mort i la seva causa, i l'aparellament matrimonial — com a funció pura de la seva adreça, i la crònica de cada persona es desxifra d'aquell registre compartit. Segueix qualsevol cadena de parents en qualsevol ordre i torna: els fets no poden discrepar, perquè tots es llegeixen del mateix sobre. Mortalitat segons les taules de vida de J.C. Russell; pestes de 1347–1500; la Gran Fam; el patró matrimonial europeu.",
+    ledger: (age: number, plagues: number, widowed: boolean, literate: boolean) =>
+      `durada de vida <b>${age} anys</b> · pestes viscudes <b>${plagues}</b> · vidu/vídua <b>${widowed ? "sí" : "no"}</b> · alfabetitzat <b>${literate ? "sí" : "no"}</b>`,
   },
 };

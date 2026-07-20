@@ -94,8 +94,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     <h1 class="name"><span class="init">${esc(bio.name[0])}</span>${esc(bio.name.slice(1))} ${esc(bio.surname)}</h1>
     <div class="dates">natus <b>${bio.birth}</b> · <span class="obiit">obiit ${bio.death.year}</span> · ${esc(bio.place)}, ${esc(bio.region)}</div>
     <div class="vitals">${vitals.map((v) => `<div class="vital"><div class="k">${v[0]}</div><div class="v ${v[2]}">${esc(v[1])}</div></div>`).join("")}</div>
-  </article>
-  <p class="villhead reveal">${t.allAgree}</p>`;
+  </article>`;
 
   // Jurisdictions — the ecclesiastical and feudal trees, independent of the
   // civil region/village tree and of each other; a parish boundary rarely
@@ -179,9 +178,8 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     `</div></details>`;
 
   html += `<div class="ledger reveal">
-    ${t.ledger(bio.death.age, bio.plaguesLived, !!bio.widowed, bio.literate, node.regionKey, node.villageIdx)}
-  </div>
-  <p class="footnote reveal">${esc(t.footnote)}</p>`;
+    ${t.ledger(bio.death.age, bio.plaguesLived, !!bio.widowed, bio.literate)}
+  </div>`;
 
   return html;
 }

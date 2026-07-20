@@ -466,15 +466,6 @@ h1.name .init {
   color: var(--bone);
   font-weight: 500;
 }
-.footnote {
-  margin-top: 26px;
-  font-size: 12.5px;
-  color: #6d6046;
-  line-height: 1.7;
-  font-style: italic;
-  max-width: 68ch;
-}
-
 /* ---- Lineage ---- */
 .lineage {
   display: flex;
@@ -733,18 +724,6 @@ details.register summary::before {
 .k-plague .src {
   color: rgba(200, 69, 47, 0.7);
 }
-.villhead {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--bone-dim);
-  margin: -14px 0 20px;
-}
-.villhead b {
-  color: var(--verdigris);
-  font-weight: 500;
-}
-
 /* ---- Mobile / narrow viewports ---- */
 @media (max-width: 560px) {
   .card {
