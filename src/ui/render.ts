@@ -229,6 +229,29 @@ function renderVillageSection(E: typeof Engine, env: Envelope, year: number, loc
   </details>`;
 }
 
+// § nobility: the region's royal line as a collapsed register-style block —
+// every reign of the REAL sovereign line (data, not dice), with the reigns
+// this person actually lived under highlighted. Rows are plain rows, not
+// goto buttons: kings live in no village register to navigate to.
+function renderRoyalLineSection(E: typeof Engine, regionKey: string, bio: Bio, locale: Locale): string {
+  const t = UI[locale];
+  const line = E.royalLineOf(regionKey);
+  if (!line) return "";
+  const rows = line.reigns
+    .map((r) => {
+      // Lived-under = reign years overlap [birth, death]; the incoming reign
+      // owns its accession year, mirroring sovereignAt.
+      const lived = r.from <= bio.death.year && r.to >= bio.birth;
+      return `<div class="ryrow${lived ? " lived" : ""}${r.interregnum ? " interregnum" : ""}"${lived ? ` title="${esc(t.reignedInLifetime)}"` : ""}>
+      <span class="ry-years">${r.from}–${r.to}</span>
+      <span class="ry-style">${esc(r.style[locale])}</span>
+      <span class="ry-house">${r.house ? esc(r.house[locale]) : "—"}</span>
+    </div>`;
+    })
+    .join("");
+  return `<details class="register royal reveal"><summary>${esc(t.royalLineHeader(line.title[locale]))}</summary><div class="register-list royal-list">${rows}</div></details>`;
+}
+
 function renderLineageBar(stack: StackNode[], t: (typeof UI)[Locale]): string {
   if (stack.length <= 1) return "";
   let h = `<nav class="lineage reveal" aria-label="${esc(t.trail)}">`;
@@ -293,6 +316,9 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     <div class="vital"><div class="k">${t.lord}</div><div class="v">${esc(bio.fief.lord)}</div></div>
     <div class="vital"><div class="k">${t.sovereign}</div><div class="v">${esc(bio.sovereign)}</div></div>
   </div>`;
+
+  // Royal line — collapsed under the jurisdictions it crowns.
+  html += renderRoyalLineSection(E, node.regionKey, bio, locale);
 
   // Parentage
   html += `<div class="sect reveal"><h2>${esc(t.parentage)}</h2></div><div class="parents reveal">`;

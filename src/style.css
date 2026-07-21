@@ -775,6 +775,36 @@ details.register summary::before {
   color: var(--bone-dim);
   font-size: 12px;
 }
+/* ---- Royal line (§ nobility) ---- */
+details.royal {
+  margin-top: 14px;
+}
+.ryrow {
+  display: grid;
+  grid-template-columns: 110px 1fr 130px;
+  gap: 10px;
+  padding: 7px 18px;
+  color: var(--bone);
+  font-family: "Fraunces", serif;
+  font-size: 14px;
+}
+.ryrow .ry-years,
+.ryrow .ry-house {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--bone-dim);
+  align-self: center;
+}
+.ryrow.lived {
+  background: rgba(201, 162, 39, 0.08);
+}
+.ryrow.lived .ry-style {
+  color: var(--gilt);
+}
+.ryrow.interregnum .ry-style {
+  font-style: italic;
+  color: var(--bone-dim);
+}
 .entry .src {
   display: inline-block;
   font-family: "JetBrains Mono", monospace;

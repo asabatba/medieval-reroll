@@ -81,6 +81,20 @@ describe("buildRecordHTML", () => {
     expect(html).toContain('class="chronicle"');
   });
 
+  // § nobility: the royal line is rendered as a collapsed register-style
+  // block — every reign of the region's line, with the reigns overlapping
+  // this person's life marked `.lived`.
+  it("renders the royal line with every reign, highlighting exactly the lived-under ones", () => {
+    const bio = E.decodePerson(env, person.id, "en")!;
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    expect(html).toContain("Royal line — Kings of England");
+    const line = E.royalLineOf("england")!;
+    for (const r of line.reigns) expect(html).toContain(r.style.en);
+    const livedRows = (html.match(/class="ryrow lived/g) ?? []).length;
+    expect(livedRows).toBe(line.reigns.filter((r) => r.from <= bio.death.year && r.to >= bio.birth).length);
+    expect(livedRows).toBeGreaterThan(0);
+  });
+
   it("renders no breadcrumb trail bar for a single-node stack, and one for a multi-node stack", () => {
     const one = buildRecordHTML(E, 1444, stack, "en");
     expect(one).not.toContain('data-jump="0"');

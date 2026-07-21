@@ -34,6 +34,8 @@ interface UiStrings {
   honour: string;
   lord: string;
   sovereign: string;
+  royalLineHeader: (title: string) => string;
+  reignedInLifetime: string;
   parentage: string;
   father: string;
   mother: string;
@@ -120,6 +122,8 @@ export const UI: Record<Locale, UiStrings> = {
     honour: "Honour",
     lord: "Lord",
     sovereign: "Sovereign",
+    royalLineHeader: (title: string) => `Royal line — ${title}`,
+    reignedInLifetime: "Reigning during this life",
     parentage: "Parentage",
     father: "Father",
     mother: "Mother",
@@ -203,6 +207,8 @@ export const UI: Record<Locale, UiStrings> = {
     honour: "Honor",
     lord: "Senyor",
     sovereign: "Sobirà",
+    royalLineHeader: (title: string) => `Línia reial — ${title}`,
+    reignedInLifetime: "Regnant durant aquesta vida",
     parentage: "Filiació",
     father: "Pare",
     mother: "Mare",
