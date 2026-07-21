@@ -2,7 +2,19 @@ import { describe, expect, it } from "vitest";
 import { decodePerson } from "./biography.js";
 import { REGIONS } from "./data/regions.js";
 import { manorOf } from "./hierarchy.js";
-import { ANCHOR_YEAR, honourFamilyOf, honourLineOf, LINE_FROM, LINE_TO, lordOfManorAt, manorLineOf, ROYAL_LINES, sovereignAt } from "./nobility.js";
+import {
+  ANCHOR_YEAR,
+  honourFamilyOf,
+  honourLineOf,
+  LINE_FROM,
+  LINE_TO,
+  lordOfManorAt,
+  manorLineOf,
+  ROYAL_LINES,
+  reignIndexAt,
+  sovereignAt,
+  tenureIndexAt,
+} from "./nobility.js";
 import { resolveVillage } from "./village.js";
 
 const REGION_KEYS = Object.keys(REGIONS);
@@ -162,10 +174,11 @@ describe("§ nobility: biography integration", () => {
           const e = bio?.events.find((e) => e.text.includes("paid merchet to "));
           if (!bio || !e) continue;
           seen++;
-          const lord = lordOfManorAt(1444, rk, idx, e.year).name;
-          expect(e.text).toContain(lord);
-          // § nobility links: the lord is a route ref to the manor's house view
-          expect(e.refs?.some((r) => r.route === "house" && r.name === lord)).toBe(true);
+          const heads = manorLineOf(1444, rk, idx).heads;
+          const li = tenureIndexAt(heads, e.year);
+          expect(e.text).toContain(heads[li].name);
+          // § nobility links: the lord is a route ref to his OWN page
+          expect(e.refs?.some((r) => r.route === "lord" && r.routeIdx === li && r.name === heads[li].name)).toBe(true);
         }
       }
     }
@@ -187,8 +200,10 @@ describe("§ nobility: biography integration", () => {
           expect(i).toBeGreaterThan(0);
           expect(e.text).toContain(line.heads[i].name);
           expect(e.text).toContain(line.heads[i - 1].name);
-          // § nobility links: both lords are route refs to the house view
-          expect(e.refs?.filter((r) => r.route === "house").length).toBeGreaterThanOrEqual(2);
+          // § nobility links: both lords are route refs to their own pages
+          const lordRefs = e.refs?.filter((r) => r.route === "lord") ?? [];
+          expect(lordRefs.length).toBeGreaterThanOrEqual(2);
+          expect(lordRefs.map((r) => r.routeIdx)).toEqual(expect.arrayContaining([i - 1, i]));
           // The succession happened within the person's remembered life.
           expect(e.year).toBeGreaterThanOrEqual(p.birth + 10);
           expect(e.year).toBeLessThanOrEqual(p.death.year);
@@ -215,8 +230,9 @@ describe("§ nobility: biography integration", () => {
     expect(seen).toBeGreaterThan(0);
   });
 
-  it("every royal-route ref names an exact substring of its event's text (the linkify contract)", () => {
+  it("every route ref names an exact text substring and targets a real, year-plausible person", () => {
     for (const rk of REGION_KEYS) {
+      const reigns = ROYAL_LINES[rk].reigns;
       const env = resolveVillage(1444, rk, 0);
       for (const p of env.persons.slice(0, 60)) {
         const bio = decodePerson(env, p.id, "en");
@@ -225,6 +241,22 @@ describe("§ nobility: biography integration", () => {
             if (!r.route) continue;
             expect(e.text, `${rk}: "${r.name}"`).toContain(r.name);
             expect(r.id).toBe(-1);
+            expect(r.routeIdx).toBeGreaterThanOrEqual(0);
+            if (r.route === "royal") {
+              const reign = reigns[r.routeIdx!];
+              expect(reign, `${rk}: "${r.name}" -> ${r.routeIdx}`).toBeDefined();
+              // Year-aware resolution: if the sovereign in force at the
+              // event's year answers to the matched alias, the ref must
+              // point at THAT reign ("King Henry" in 1415 is Henry V).
+              const inForce = reignIndexAt(rk, e.year);
+              if (inForce >= 0) {
+                const f = reigns[inForce];
+                const answers = f.style.en.includes(r.name) || f.name.en.includes(r.name) || (f.aka ?? []).some((a) => a.en === r.name);
+                if (answers) expect(r.routeIdx, `${rk} ${e.year}: "${r.name}"`).toBe(inForce);
+              }
+            } else {
+              expect(manorLineOf(1444, r.addr.regionKey, r.addr.villageIdx).heads[r.routeIdx!]).toBeDefined();
+            }
           }
         }
       }

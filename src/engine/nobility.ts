@@ -38,10 +38,18 @@ export function royalLineOf(regionKey: string): RoyalLine | null {
 /** The reign in force in `year` — on a transition year the INCOMING reign
  * wins (1399 is Henry IV's year). Null outside the line's coverage. */
 export function sovereignAt(regionKey: string, year: number): Reign | null {
+  const i = reignIndexAt(regionKey, year);
+  return i < 0 ? null : ROYAL_LINES[regionKey].reigns[i];
+}
+
+/** Index of the reign in force in `year` within royalLineOf(regionKey)'s
+ * reigns — the address segment of that sovereign's own page. -1 outside
+ * the line's coverage. */
+export function reignIndexAt(regionKey: string, year: number): number {
   const line = ROYAL_LINES[regionKey];
-  if (!line) return null;
-  let found: Reign | null = null;
-  for (const reign of line.reigns) if (reign.from <= year && year <= reign.to) found = reign;
+  if (!line) return -1;
+  let found = -1;
+  for (let i = 0; i < line.reigns.length; i++) if (line.reigns[i].from <= year && year <= line.reigns[i].to) found = i;
   return found;
 }
 
@@ -114,7 +122,14 @@ function growLine(rng: Rng, surname: string, anchorFirst: string, region: Region
 }
 
 function headAt(heads: LordTenure[], year: number): LordTenure {
-  return heads.find((h) => year < h.died) ?? heads[heads.length - 1];
+  return heads[tenureIndexAt(heads, year)];
+}
+
+/** Index of the head holding in `year` — the address segment of that lord's
+ * own page. Clamped to the line's edges, mirroring lordOfManorAt. */
+export function tenureIndexAt(heads: LordTenure[], year: number): number {
+  const i = heads.findIndex((h) => year < h.died);
+  return i < 0 ? heads.length - 1 : i;
 }
 
 /** The baronial house holding the honour this village's manor belongs to. */
@@ -180,6 +195,20 @@ function genericAccession(prev: Reign, next: Reign, locale: Locale): string | nu
   return `News came with the carriers that ${o} was dead. ${cap(n)} was crowned in his place, and the priest said a mass for the old king's soul.`;
 }
 
+/** The accession-news text for reign `i` of a region's line — the
+ * hand-written story when one exists, the generic template otherwise.
+ * Null for the line's first reign or where no sensible text exists
+ * (republican transitions without a story). Shared by the world-event
+ * generation below and the sovereign's own page. */
+export function accessionTextOf(regionKey: string, i: number, locale: Locale): string | null {
+  const line = ROYAL_LINES[regionKey];
+  const next = line?.reigns[i];
+  if (!next) return null;
+  if (next.accession) return next.accession[locale];
+  if (i === 0) return null;
+  return genericAccession(line.reigns[i - 1], next, locale);
+}
+
 const royalEventsCache: Partial<Record<Locale, WorldEvent[]>> = {};
 
 /** Accession/deposition news as WORLD_EVENTS-shaped entries, generated from
@@ -191,10 +220,9 @@ export function royalWorldEvents(locale: Locale): WorldEvent[] {
   const events: WorldEvent[] = [];
   for (const [regionKey, line] of Object.entries(ROYAL_LINES)) {
     for (let i = 1; i < line.reigns.length; i++) {
-      const prev = line.reigns[i - 1];
       const next = line.reigns[i];
       if (next.from < EVENT_FROM || next.from > EVENT_TO) continue;
-      const text = next.accession ? next.accession[locale] : genericAccession(prev, next, locale);
+      const text = accessionTextOf(regionKey, i, locale);
       if (!text) continue;
       // Notable (hand-written) transitions travelled further and faster.
       events.push([next.from, next.from, [regionKey], 8, next.accession ? 0.5 : 0.35, "life", "chron", () => text]);

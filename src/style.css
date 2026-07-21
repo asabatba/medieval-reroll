@@ -830,6 +830,22 @@ button.ryrow:focus-visible {
   font-family: "Fraunces", serif;
   font-size: 15px;
 }
+/* reign headers double as links to each sovereign's own page */
+button.reign-head {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+button.reign-head:hover {
+  background: rgba(201, 162, 39, 0.06);
+}
+button.reign-head:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: -2px;
+}
 .reign.interregnum .reign-style {
   font-style: italic;
   color: var(--bone-dim);

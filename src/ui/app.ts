@@ -1,17 +1,30 @@
 import * as E from "../engine/index.js";
 import { getLocale, type Locale, setLocale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
-import { buildViewHTML, isPersonNode, locator, renderVillageBody, type StackNode } from "./render.js";
+import {
+  buildViewHTML,
+  type HouseNode,
+  isPersonNode,
+  type KingNode,
+  type LordNode,
+  locator,
+  type PersonNode,
+  renderVillageBody,
+  type StackNode,
+} from "./render.js";
 
 // A record's fixed URL is its locator in the hash: #worldseed:region:village:person.
 // Pasting such a URL opens the exact same life; internal navigation pushes
 // history entries so back/forward walk the visited records. The nobility
 // views (§ nobility routes) have fixed URLs of the same shape:
-// #worldseed:region:royal (the royal line) and
-// #worldseed:region:village:house (a manor's noble house).
+// #worldseed:region:royal (the royal line),
+// #worldseed:region:royal:reign (one sovereign's page),
+// #worldseed:region:village:house (a manor's noble house), and
+// #worldseed:region:village:lord|baron:head (one lord's page — the manor's
+// line or the honour's baronial line respectively).
 function parseLocator(s: string): { worldSeed: number; node: StackNode } | null {
   const parts = s.trim().replace(/^#/, "").split(":");
-  if (parts.length !== 3 && parts.length !== 4) return null;
+  if (parts.length < 3 || parts.length > 5) return null;
   const worldSeed = Number(parts[0]);
   // Object.hasOwn (not a bracket-truthy check): REGIONS is a plain object
   // literal, so a region segment of "__proto__"/"constructor"/"toString"
@@ -19,12 +32,22 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   // built-in and pass validation, then crash deep inside resolveVillage
   // once something tries to read a region-shaped property off it.
   if (!Number.isSafeInteger(worldSeed) || worldSeed < 0 || !Object.hasOwn(E.REGIONS, parts[1])) return null;
-  if (parts.length === 3) {
-    if (parts[2] !== "royal") return null;
-    return { worldSeed, node: { kind: "royal", regionKey: parts[1] } };
+  if (parts[2] === "royal") {
+    if (parts.length === 3) return { worldSeed, node: { kind: "royal", regionKey: parts[1] } };
+    if (parts.length !== 4) return null;
+    const reignIdx = Number(parts[3]);
+    if (!Number.isSafeInteger(reignIdx) || reignIdx < 0) return null;
+    return { worldSeed, node: { kind: "king", regionKey: parts[1], reignIdx } };
   }
   const villageIdx = Number(parts[2]);
   if (!Number.isSafeInteger(villageIdx) || villageIdx < 0) return null;
+  if (parts.length === 5) {
+    if (parts[3] !== "lord" && parts[3] !== "baron") return null;
+    const headIdx = Number(parts[4]);
+    if (!Number.isSafeInteger(headIdx) || headIdx < 0) return null;
+    return { worldSeed, node: { kind: parts[3], regionKey: parts[1], villageIdx, headIdx } };
+  }
+  if (parts.length !== 4) return null;
   if (parts[3] === "house") return { worldSeed, node: { kind: "house", regionKey: parts[1], villageIdx } };
   const personId = Number(parts[3]);
   if (!Number.isSafeInteger(personId) || personId < 0) return null;
@@ -69,17 +92,39 @@ export function initApp(): void {
   }
 
   function sameNode(a: StackNode, b: StackNode): boolean {
-    if (a.kind === "royal" || b.kind === "royal") return a.kind === b.kind && a.regionKey === b.regionKey;
-    if (a.kind === "house" || b.kind === "house") return a.kind === b.kind && a.regionKey === b.regionKey && a.villageIdx === b.villageIdx;
-    return a.regionKey === b.regionKey && a.villageIdx === b.villageIdx && a.personId === b.personId;
+    const kind = a.kind ?? "person";
+    if (kind !== (b.kind ?? "person") || a.regionKey !== b.regionKey) return false;
+    switch (kind) {
+      case "royal":
+        return true;
+      case "king":
+        return (a as KingNode).reignIdx === (b as KingNode).reignIdx;
+      case "house":
+        return (a as HouseNode).villageIdx === (b as HouseNode).villageIdx;
+      case "lord":
+      case "baron": {
+        const la = a as LordNode;
+        const lb = b as LordNode;
+        return la.villageIdx === lb.villageIdx && la.headIdx === lb.headIdx;
+      }
+      default: {
+        const pa = a as PersonNode;
+        const pb = b as PersonNode;
+        return pa.villageIdx === pb.villageIdx && pa.personId === pb.personId;
+      }
+    }
   }
 
   // data-goto forms: "region:village:person" (a record), "royal:region"
-  // (the royal line), "house:region:village" (a manor's noble house).
+  // (the royal line), "king:region:reign" (a sovereign's page),
+  // "house:region:village" (a manor's noble house), and
+  // "lord|baron:region:village:head" (a lord's page).
   function gotoNode(goto: string): StackNode {
     const parts = goto.split(":");
     if (parts[0] === "royal") return { kind: "royal", regionKey: parts[1] };
+    if (parts[0] === "king") return { kind: "king", regionKey: parts[1], reignIdx: +parts[2] };
     if (parts[0] === "house") return { kind: "house", regionKey: parts[1], villageIdx: +parts[2] };
+    if (parts[0] === "lord" || parts[0] === "baron") return { kind: parts[0], regionKey: parts[1], villageIdx: +parts[2], headIdx: +parts[3] };
     return { regionKey: parts[0], villageIdx: +parts[1], personId: +parts[2] };
   }
 
@@ -160,16 +205,26 @@ export function initApp(): void {
       seedbox.focus();
       return false;
     }
-    // Only a person locator needs an existence check — the nobility views
-    // are total functions of any valid (region, village) address.
+    // Existence checks per node kind: a person must be on the register, a
+    // king/lord index must fall inside its line. The line/house views are
+    // total functions of any valid (region, village) address.
+    const invalid = (): boolean => {
+      locatorError.textContent = UI[locale].locatorError;
+      seedbox.setAttribute("aria-invalid", "true");
+      seedbox.focus();
+      return false;
+    };
     if (isPersonNode(parsed.node)) {
       const env = E.resolveVillage(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx);
-      if (!env.persons[parsed.node.personId]) {
-        locatorError.textContent = UI[locale].locatorError;
-        seedbox.setAttribute("aria-invalid", "true");
-        seedbox.focus();
-        return false;
-      }
+      if (!env.persons[parsed.node.personId]) return invalid();
+    } else if (parsed.node.kind === "king") {
+      if (!E.royalLineOf(parsed.node.regionKey)?.reigns[parsed.node.reignIdx]) return invalid();
+    } else if (parsed.node.kind === "lord" || parsed.node.kind === "baron") {
+      const line =
+        parsed.node.kind === "lord"
+          ? E.manorLineOf(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx)
+          : E.honourLineOf(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx);
+      if (!line.heads[parsed.node.headIdx]) return invalid();
     }
     locatorError.textContent = "";
     seedbox.removeAttribute("aria-invalid");

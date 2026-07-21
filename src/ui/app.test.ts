@@ -113,13 +113,21 @@ describe("app navigation", () => {
 
   // § nobility routes: royal-line and noble-house views are first-class
   // navigation targets with fixed URLs of their own.
-  it("clicking the sovereign vital opens the region's royal line at its own URL, on the breadcrumb trail", async () => {
+  it("clicking the sovereign vital opens that sovereign's own page at its own URL, on the breadcrumb trail", async () => {
     await start();
-    const royalBtn = document.querySelector<HTMLButtonElement>('[data-goto^="royal:"]');
-    expect(royalBtn).not.toBeNull();
-    royalBtn!.click();
-    expect(location.hash).toMatch(/^#1444:[a-z]+:royal$/);
+    const kingBtn = document.querySelector<HTMLButtonElement>('[data-goto^="king:"]');
+    expect(kingBtn).not.toBeNull();
+    kingBtn!.click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:royal:\d+$/);
     expect(document.querySelectorAll(".crumb[data-jump]").length).toBe(2);
+  });
+
+  it("clicking the lord vital opens that lord's own page at its own URL", async () => {
+    await start();
+    const lordBtn = document.querySelector<HTMLButtonElement>('[data-goto^="lord:"]');
+    expect(lordBtn).not.toBeNull();
+    lordBtn!.click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:\d+:lord:\d+$/);
   });
 
   it("clicking a lord/manor vital opens the manor's noble-house view at its own URL", async () => {
@@ -144,10 +152,28 @@ describe("app navigation", () => {
     expect(location.hash).toBe("#1444:england:0:house");
   });
 
-  it("rejects malformed nobility locators (bad region, bad tail)", async () => {
+  it("opens pasted king, lord, and baron person-page locators", async () => {
     await start();
     const input = document.getElementById("seedbox") as HTMLInputElement;
-    for (const bad of ["1444:atlantis:royal", "1444:england:notaword", "1444:england:x:house"]) {
+    for (const loc of ["1444:england:royal:6", "1444:england:0:lord:0", "1444:england:0:baron:0"]) {
+      input.value = loc;
+      (document.getElementById("replay") as HTMLButtonElement).click();
+      expect(document.getElementById("locator-error")?.textContent, loc).toBe("");
+      expect(location.hash).toBe(`#${loc}`);
+    }
+  });
+
+  it("rejects malformed nobility locators (bad region, bad tail, out-of-range person index)", async () => {
+    await start();
+    const input = document.getElementById("seedbox") as HTMLInputElement;
+    for (const bad of [
+      "1444:atlantis:royal",
+      "1444:england:notaword",
+      "1444:england:x:house",
+      "1444:england:royal:999",
+      "1444:england:0:lord:999",
+      "1444:england:0:duke:0",
+    ]) {
       input.value = bad;
       (document.getElementById("replay") as HTMLButtonElement).click();
       expect(document.getElementById("locator-error")?.textContent, bad).not.toBe("");

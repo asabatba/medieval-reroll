@@ -35,13 +35,15 @@ describe("linkifyEventText", () => {
     expect(out).toBe("Never married.");
   });
 
-  // § nobility links: route refs target the royal-line / noble-house views
-  // instead of a person record.
-  it("a route ref links to the royal line or noble house, not a person record", () => {
-    const royal = linkifyEventText("News came that King Henry V was dead.", [{ id: -1, name: "King Henry V", addr: ADDR, route: "royal" }]);
-    expect(royal).toContain('data-goto="royal:england"');
-    const house = linkifyEventText("Paid merchet to Hugh atte Wode.", [{ id: -1, name: "Hugh atte Wode", addr: ADDR, route: "house" }]);
-    expect(house).toContain('data-goto="house:england:3"');
+  // § nobility links: route refs target a specific sovereign's or lord's
+  // own page; without an index they fall back to the line/house views.
+  it("a route ref links to the named sovereign's or lord's own page", () => {
+    const king = linkifyEventText("News came that King Henry V was dead.", [{ id: -1, name: "King Henry V", addr: ADDR, route: "royal", routeIdx: 6 }]);
+    expect(king).toContain('data-goto="king:england:6"');
+    const lord = linkifyEventText("Paid merchet to Hugh atte Wode.", [{ id: -1, name: "Hugh atte Wode", addr: ADDR, route: "lord", routeIdx: 2 }]);
+    expect(lord).toContain('data-goto="lord:england:3:2"');
+    const fallback = linkifyEventText("News came that King Henry V was dead.", [{ id: -1, name: "King Henry V", addr: ADDR, route: "royal" }]);
+    expect(fallback).toContain('data-goto="royal:england"');
   });
 
   it("an overlapping second match starting inside the first is skipped, not double-wrapped", () => {
@@ -104,11 +106,15 @@ describe("buildRecordHTML", () => {
     expect(livedRows).toBeGreaterThan(0);
   });
 
-  // § nobility routes: the fief vitals and the sovereign vital are links.
-  it("links the manor/honour/lord vitals to the noble-house view and the sovereign to the royal line", () => {
+  // § nobility routes: the fief vitals and the sovereign vital are links —
+  // the lord and sovereign to their OWN pages, not just the line views.
+  it("links the manor/honour vitals to the house view, and the lord/sovereign vitals to their person pages", () => {
     const html = buildRecordHTML(E, 1444, stack, "en");
+    const bio = E.decodePerson(env, person.id, "en")!;
     expect(html).toContain('data-goto="house:england:0"');
-    expect(html).toContain('data-goto="royal:england"');
+    const lordIdx = E.tenureIndexAt(E.manorLineOf(1444, "england", 0).heads, E.ANCHOR_YEAR);
+    expect(html).toContain(`data-goto="lord:england:0:${lordIdx}"`);
+    expect(html).toContain(`data-goto="king:england:${E.reignIndexAt("england", bio.birth)}"`);
   });
 
   it("renders no breadcrumb trail bar for a single-node stack, and one for a multi-node stack", () => {
@@ -147,11 +153,52 @@ describe("nobility views", () => {
     expect(html).toContain('data-goto="royal:england"');
   });
 
-  it("the two views resolve deterministic locator URLs", () => {
+  it("the views resolve deterministic locator URLs", () => {
     const royal = buildViewHTML(E, 1444, [{ kind: "royal", regionKey: "england" }], "en");
     expect(royal).toContain("1444:england:royal");
     const house = buildViewHTML(E, 1444, [{ kind: "house", regionKey: "england", villageIdx: 0 }], "en");
     expect(house).toContain("1444:england:0:house");
+    const king = buildViewHTML(E, 1444, [{ kind: "king", regionKey: "england", reignIdx: 6 }], "en");
+    expect(king).toContain("1444:england:royal:6");
+    const lord = buildViewHTML(E, 1444, [{ kind: "lord", regionKey: "england", villageIdx: 0, headIdx: 1 }], "en");
+    expect(lord).toContain("1444:england:0:lord:1");
+  });
+
+  // § nobility person pages
+  it("a sovereign's own page shows his reign, house, neighbours, and the reign's chronicle", () => {
+    // reign 6 of England is Henry V (1413–1422)
+    const html = buildViewHTML(E, 1444, [{ kind: "king", regionKey: "england", reignIdx: 6 }], "en");
+    expect(html).toContain("1413–1422");
+    expect(html).toContain("Lancaster");
+    expect(html).toContain('data-goto="king:england:5"'); // predecessor Henry IV
+    expect(html).toContain('data-goto="king:england:7"'); // successor Henry VI
+    expect(html).toContain("the plague of 1420"); // a plague that fell in the reign
+  });
+
+  it("a lord's own page shows tenure, succession, cause of death, and the sovereigns of his time", () => {
+    const line = E.manorLineOf(1444, "england", 0);
+    const html = buildViewHTML(E, 1444, [{ kind: "lord", regionKey: "england", villageIdx: 0, headIdx: 1 }], "en");
+    const h = line.heads[1];
+    expect(html).toContain(h.name);
+    expect(html).toContain(`${h.acceded}–${h.died}`);
+    expect(html).toContain('data-goto="lord:england:0:0"'); // predecessor
+    // every sovereign whose reign overlapped the tenure links to his page
+    const overlapping = E.royalLineOf("england")!.reigns.filter((r) => r.from <= h.died && r.to >= h.acceded);
+    expect(overlapping.length).toBeGreaterThan(0);
+    for (const r of overlapping) expect(html).toContain(r.style.en);
+    expect(html).toContain('data-goto="house:england:0"');
+  });
+
+  it("a baron's page reads from the honour line, not the manor line", () => {
+    const honour = E.honourLineOf(1444, "england", 0);
+    const html = buildViewHTML(E, 1444, [{ kind: "baron", regionKey: "england", villageIdx: 0, headIdx: 2 }], "en");
+    expect(html).toContain(honour.heads[2].name);
+    expect(html).toContain("1444:england:0:baron:2");
+  });
+
+  it("an out-of-range king or lord index renders empty rather than crashing", () => {
+    expect(buildViewHTML(E, 1444, [{ kind: "king", regionKey: "england", reignIdx: 999 }], "en")).toBe("");
+    expect(buildViewHTML(E, 1444, [{ kind: "lord", regionKey: "england", villageIdx: 0, headIdx: 999 }], "en")).toBe("");
   });
 });
 

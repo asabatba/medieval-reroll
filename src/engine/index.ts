@@ -41,15 +41,18 @@ export { famineAt, warAt } from "./mortality.js";
 // year-resolvable lord line, anchored to the fief card's static lord name.
 export {
   ANCHOR_YEAR,
+  accessionTextOf,
   honourFamilyOf,
   honourHeadAt,
   honourLineOf,
   lordOfManorAt,
   manorLineOf,
   ROYAL_LINES,
+  reignIndexAt,
   royalLineOf,
   royalWorldEvents,
   sovereignAt,
+  tenureIndexAt,
 } from "./nobility.js";
 export { randomCitizen, roster } from "./roster.js";
 export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";

@@ -42,6 +42,15 @@ interface UiStrings {
   honourHouseHeader: string;
   tenureRelation: Record<"founder" | "son" | "brother" | "nephew", string>;
   tenureCause: Record<"war" | "plague" | "oldage", string>;
+  reignedLabel: string;
+  houseLabel: string;
+  predecessor: string;
+  successor: string;
+  reignChronicle: string;
+  reignEnd: Record<"died" | "deposed" | "killed", (year: number) => string>;
+  tenureLabel: string;
+  successionLabel: string;
+  sovereignsOfTime: string;
   parentage: string;
   father: string;
   mother: string;
@@ -134,8 +143,26 @@ export const UI: Record<Locale, UiStrings> = {
     houseOf: (surname: string) => `The house of ${surname}`,
     lordsOfHeader: "Lords of the manor",
     honourHouseHeader: "The honour's baronial house",
-    tenureRelation: { founder: "first of the recorded line", son: "son of the last lord", brother: "brother of the last lord", nephew: "nephew of the last lord" },
+    tenureRelation: {
+      founder: "first of the recorded line",
+      son: "son of the last lord",
+      brother: "brother of the last lord",
+      nephew: "nephew of the last lord",
+    },
     tenureCause: { war: "fell in the wars", plague: "died in the pestilence", oldage: "died in his bed" },
+    reignedLabel: "Reigned",
+    houseLabel: "House",
+    predecessor: "Predecessor",
+    successor: "Successor",
+    reignChronicle: "Chronicle of the reign",
+    reignEnd: {
+      died: (year: number) => `Died in ${year}.`,
+      deposed: (year: number) => `Put down from the throne in ${year}.`,
+      killed: (year: number) => `Slain in ${year}.`,
+    },
+    tenureLabel: "Tenure",
+    successionLabel: "Succession",
+    sovereignsOfTime: "Sovereigns of his time",
     parentage: "Parentage",
     father: "Father",
     mother: "Mother",
@@ -225,8 +252,26 @@ export const UI: Record<Locale, UiStrings> = {
     houseOf: (surname: string) => `La casa de ${surname}`,
     lordsOfHeader: "Senyors del senyoriu",
     honourHouseHeader: "La casa baronial de l'honor",
-    tenureRelation: { founder: "primer del llinatge registrat", son: "fill del senyor anterior", brother: "germà del senyor anterior", nephew: "nebot del senyor anterior" },
+    tenureRelation: {
+      founder: "primer del llinatge registrat",
+      son: "fill del senyor anterior",
+      brother: "germà del senyor anterior",
+      nephew: "nebot del senyor anterior",
+    },
     tenureCause: { war: "caigué a les guerres", plague: "morí en la mortaldat", oldage: "morí al seu llit" },
+    reignedLabel: "Regnà",
+    houseLabel: "Casa",
+    predecessor: "Predecessor",
+    successor: "Successor",
+    reignChronicle: "Crònica del regnat",
+    reignEnd: {
+      died: (year: number) => `Morí el ${year}.`,
+      deposed: (year: number) => `Deposat del tron el ${year}.`,
+      killed: (year: number) => `Occís el ${year}.`,
+    },
+    tenureLabel: "Tinença",
+    successionLabel: "Successió",
+    sovereignsOfTime: "Sobirans del seu temps",
     parentage: "Filiació",
     father: "Pare",
     mother: "Mare",

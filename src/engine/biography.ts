@@ -42,7 +42,7 @@ import { manorOf, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
 import { famineAt, warAt } from "./mortality.js";
-import { lordOfManorAt, manorLineOf, royalLineOf, royalWorldEvents, sovereignAt } from "./nobility.js";
+import { lordOfManorAt, manorLineOf, royalLineOf, royalWorldEvents, sovereignAt, tenureIndexAt } from "./nobility.js";
 import { inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
@@ -530,9 +530,19 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             : `Orphaned of both parents, ${p.name} was taken in by kin, as the manor court noted when it confirmed who now answered for the household's dues.`,
         "grief",
         wardCite,
-        // The granting lord links to HIS manor's house — the origin
-        // village's for an immigrant ward, same as the citation.
-        wealth >= 4 ? [{ id: -1, name: wardLord, addr: addrOnly(wardEnv), route: "house" }] : undefined,
+        // The granting lord links to HIS OWN page under his manor's line —
+        // the origin village's for an immigrant ward, same as the citation.
+        wealth >= 4
+          ? [
+              {
+                id: -1,
+                name: wardLord,
+                addr: addrOnly(wardEnv),
+                route: "lord",
+                routeIdx: tenureIndexAt(manorLineOf(wardEnv.worldSeed, wardEnv.regionKey, wardEnv.villageIdx).heads, orphanedAt),
+              },
+            ]
+          : undefined,
       );
     }
   }
@@ -775,10 +785,17 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             : ` She came from the next parish, with a dowry of linen and a cow.`;
       }
       const older = p.sex === "F" && s.birth < p.birth - 3;
-      // § nobility links: the merchet lord is clickable — to his house, not
-      // to any register record (a lord has none).
+      // § nobility links: the merchet lord is clickable — to his own lord
+      // page, not to any register record (a lord has none).
       const mRefs = [nameRef(s, selfAddr)];
-      if (merchetPaid) mRefs.push({ id: -1, name: merchetLord, addr: selfAddr, route: "house" });
+      if (merchetPaid)
+        mRefs.push({
+          id: -1,
+          name: merchetLord,
+          addr: selfAddr,
+          route: "lord",
+          routeIdx: tenureIndexAt(manorLineOf(env.worldSeed, env.regionKey, env.villageIdx).heads, c.year),
+        });
       ev(
         c.year,
         ca
@@ -1078,6 +1095,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       .filter(({ h }) => h.acceded >= Math.max(p.birth + 10, 1292) && h.acceded <= p.death.year);
     if (succ.length && rng.chance(0.35)) {
       const { h, old } = rng.pick(succ);
+      const hIdx = line.heads.indexOf(h);
       const died =
         old.cause === "war"
           ? ca
@@ -1095,10 +1113,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           : `The old lord ${old.name} died${died}, and ${h.name} entered the lordship; the tenants did homage anew and the court took its reliefs.`,
         "life",
         cite("court"),
-        // Both lords link to the manor's house view.
+        // Both lords link to their own pages under the manor's line.
         [
-          { id: -1, name: old.name, addr: selfAddr, route: "house" },
-          { id: -1, name: h.name, addr: selfAddr, route: "house" },
+          { id: -1, name: old.name, addr: selfAddr, route: "lord", routeIdx: hIdx - 1 },
+          { id: -1, name: h.name, addr: selfAddr, route: "lord", routeIdx: hIdx },
         ],
       );
     }
@@ -1239,18 +1257,43 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
 
 // § nobility links: see the call site in decodePerson. Kept as a plain
 // module function — it reads only ROYAL_LINES data, never the rng.
+//
+// Each ref targets the SPECIFIC sovereign's page, so an alias shared or
+// shareable across reigns ("King Henry", "King John") is resolved
+// year-aware: if the reign in force at the event's year answers to the
+// matched string, it wins ("King Henry's war" in 1415 is Henry V);
+// otherwise the reign that explicitly claims the alias, preferring one
+// covering the event's year, else the nearest by accession — news usually
+// concerned the current king or his immediate neighbours.
 function addRoyalRefs(events: BioEvent[], regionKey: string, locale: Locale, addr: Address): void {
   const line = royalLineOf(regionKey);
   if (!line) return;
-  const candidates = new Set<string>();
-  for (const r of line.reigns) {
-    candidates.add(r.style[locale]);
-    candidates.add(r.name[locale]);
-    for (const aka of r.aka ?? []) candidates.add(aka[locale]);
-  }
+  const owners = new Map<string, number[]>();
+  const claim = (s: string, i: number) => {
+    const list = owners.get(s) ?? [];
+    list.push(i);
+    owners.set(s, list);
+  };
+  line.reigns.forEach((r, i) => {
+    claim(r.style[locale], i);
+    claim(r.name[locale], i);
+    for (const aka of r.aka ?? []) claim(aka[locale], i);
+  });
+  const answersTo = (i: number, s: string) =>
+    line.reigns[i].style[locale].includes(s) || line.reigns[i].name[locale].includes(s) || (line.reigns[i].aka ?? []).some((a) => a[locale] === s);
   for (const e of events) {
     const extra: EventRef[] = [];
-    for (const name of candidates) if (e.text.includes(name)) extra.push({ id: -1, name, addr, route: "royal" });
+    for (const [name, claimants] of owners) {
+      if (!e.text.includes(name)) continue;
+      let idx = -1;
+      // Last match wins, so on a transition year the incoming reign takes
+      // the alias — the same tie-break as sovereignAt.
+      for (let i = 0; i < line.reigns.length; i++) if (line.reigns[i].from <= e.year && e.year <= line.reigns[i].to && answersTo(i, name)) idx = i;
+      if (idx < 0) idx = claimants.find((i) => line.reigns[i].from <= e.year && e.year <= line.reigns[i].to) ?? -1;
+      if (idx < 0)
+        idx = claimants.reduce((best, i) => (Math.abs(line.reigns[i].from - e.year) < Math.abs(line.reigns[best].from - e.year) ? i : best), claimants[0]);
+      extra.push({ id: -1, name, addr, route: "royal", routeIdx: idx });
+    }
     if (extra.length) e.refs = [...(e.refs ?? []), ...extra];
   }
 }
