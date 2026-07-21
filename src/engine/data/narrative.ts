@@ -21,6 +21,17 @@ export const SRC: Record<Locale, Record<DocumentKind, string>> = {
   },
 };
 
+// Which `disease`-cause DEATH_DETAIL entries describe an accidental (not
+// merely morbid) death — the kind an actual coroner's inquest, not the
+// parish register, would have recorded. Matched by exact string identity
+// against the entry actually drawn (not its array position), so reordering
+// or inserting a DEATH_DETAIL.disease entry can never silently desync which
+// death gets cited to the coroner's roll.
+export const CORONER_DEATHS: Record<Locale, Set<string>> = {
+  en: new Set(["drowned crossing the river at the ford", "died of a fall from a cart"]),
+  ca: new Set(["es va negar travessant el riu pel gual", "va morir d'una caiguda del carro"]),
+};
+
 export const DEATH_DETAIL: Record<Locale, Record<DeathCause, string[]>> = {
   en: {
     plague: [
@@ -523,14 +534,12 @@ export const CHILD_EVENTS: Record<Locale, TextureEvent[]> = {
 };
 export const YOUTH_EVENTS: Record<Locale, TextureEvent[]> = {
   en: [
-    ["Was sent into service in another household, as was the custom — years of board, wages, and learning another family's ways.", 1.2, "nw"],
     ["A betrothal was arranged and then broken off when the families could not agree the dowry; there was bad blood over it for years.", 0.8, null],
     ["Was fined in the manor court for taking hares from the lord's warren with snares.", 0.8, "court"],
     ["Won the wrestling at the summer fair, and was remembered for it longer than for anything else.", 0.7, null],
     ["Practised at the butts every Sunday after mass, as the law required of every able man.", 0.6, "englandM"],
   ],
   ca: [
-    ["Va anar a servir a una altra casa, com era costum — anys de dispesa, jornal, i aprenent els costums d'una altra família.", 1.2, "nw"],
     [
       "Es va concertar un esponsalici que després es va desfer perquè les famílies no es van posar d'acord amb el dot; en va quedar mala sang durant anys.",
       0.8,

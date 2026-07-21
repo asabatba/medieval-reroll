@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Medieval Reroll</title>
+  <rect width="64" height="64" rx="10" fill="#171209"/>
+  <path d="M32 12 L32 52 M18 24 L46 24" stroke="#c9a227" stroke-width="6" stroke-linecap="square"/>
+</svg>

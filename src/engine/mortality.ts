@@ -1,6 +1,7 @@
 import type { Locale } from "../i18n/locale.js";
 import { demographyOf, periodMult, wealthIdx } from "./data/demography.js";
 import { plagueAt } from "./data/plagues.js";
+import { hashStr } from "./hash.js";
 import type { Death, DeathCause, Region, RiskTrade, Rng, Sex } from "./types.js";
 
 const FALLBACK_WAR: Record<Locale, string> = { en: "the wars", ca: "les guerres" };
@@ -80,7 +81,14 @@ export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, reg
       // compounding years of Black Death hazard kill ~70% of the living,
       // well past the 40–60% the sources support.
       const span = plague[1] - plague[0] + 1;
-      const exposureYear = plague[0] + ((birth * 31 + plague[0] * 7) % span);
+      // Regional stagger: without regionKey folded in, every person born in
+      // the same year anywhere in the modelled world hits a given wave's
+      // peak in the identical calendar year — collapsing the real
+      // west/south-to-north/east spread the region data otherwise implies.
+      // Omitted (falls back to 0) only for the regionKey-less isolated calls
+      // unit tests use to compare trades independent of any one region.
+      const regionOffset = regionKey ? hashStr(0, regionKey) : 0;
+      const exposureYear = plague[0] + ((birth * 31 + plague[0] * 7 + regionOffset) % span);
       if (span === 1 || year === exposureYear) {
         let mult = plague[2];
         if (plague[4] && age < 15) mult *= plague[4];

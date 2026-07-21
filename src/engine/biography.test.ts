@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Locale } from "../i18n/locale.js";
-import { decodePerson } from "./biography.js";
+import { decodePerson, fatherOccupation } from "./biography.js";
 import { CLASS_INFO } from "./data/classes.js";
 import { REGIONS } from "./data/regions.js";
 import { manorOf } from "./hierarchy.js";
@@ -715,6 +715,35 @@ describe("§ regional inheritance customs narrative", () => {
           const bio = decodePerson(env, p.id, "en")!;
           expect(bio.events.some((e) => e.text.includes("divided among the sons"))).toBe(false);
         }
+      }
+    }
+  });
+});
+
+describe("fatherOccupation", () => {
+  it("returns null for a person with no father on record", () => {
+    const env = resolveVillage(1444, "england", 0);
+    expect(fatherOccupation(env, -1, "en")).toBeNull();
+  });
+
+  it("is deterministic for the same (env, fatherId, locale)", () => {
+    const env = resolveVillage(1444, "england", 3);
+    const father = env.persons.find((p) => p.death.age >= 30)!;
+    expect(fatherOccupation(env, father.id, "en")).toBe(fatherOccupation(env, father.id, "en"));
+  });
+
+  it("every child of the same father agrees on his occupation (upward dependency only, never keyed off the child)", () => {
+    for (const regionKey of REGION_KEYS) {
+      const env = resolveVillage(1444, regionKey, 3);
+      const byFather = new Map<number, number[]>();
+      for (const p of env.persons) {
+        if (p.father < 0) continue;
+        (byFather.get(p.father) ?? byFather.set(p.father, []).get(p.father)!).push(p.id);
+      }
+      for (const [fatherId, kidIds] of byFather) {
+        if (kidIds.length < 2) continue;
+        const occs = kidIds.map((id) => decodePerson(env, id, "en")!.fatherOccupation);
+        for (const occ of occs) expect(occ).toBe(fatherOccupation(env, fatherId, "en"));
       }
     }
   });

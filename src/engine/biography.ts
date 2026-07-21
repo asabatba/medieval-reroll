@@ -22,6 +22,7 @@ import {
   ADULT_EVENTS,
   CAUSE_LABEL,
   CHILD_EVENTS,
+  CORONER_DEATHS,
   COURT_CAUSES,
   DEATH_DETAIL,
   FATHER_OCC,
@@ -36,7 +37,7 @@ import { placeOf } from "./data/placeNames.js";
 import { PLAGUES, plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
 import { citeDocument } from "./documents.js";
-import { makeRng, mix } from "./hash.js";
+import { makeRng, personStream } from "./hash.js";
 import { manorOf, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
@@ -268,7 +269,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const p = env.persons[id];
   if (!p) return null;
   const region = env.region;
-  const pHash = mix(env.vHash, 40000 + id);
+  const pHash = personStream(env.vHash, 40000, id);
   const rng = makeRng(pHash);
   const wealth = CLASS_INFO[p.cls].wealth;
   const pos = p.sex === "M" ? "his" : "her";
@@ -994,7 +995,6 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     for (const [tmpl, wgt, flag] of pool) {
       if (count >= n) break;
       if (flag === "englandM" && !(env.regionKey === "england" && p.sex === "M")) continue;
-      if (flag === "nw" && !["england", "germany"].includes(env.regionKey)) continue;
       // § texture marital gate: an entry that presupposes children of her
       // own (e.g. "raised them with {pos} own") must only ever be eligible
       // for someone who actually has any — otherwise it can fire for a
@@ -1063,8 +1063,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       ? RISK_DEATH_DETAIL[locale][p.riskTrade]
       : null;
   const deathPool = riskPool ?? DEATH_DETAIL[locale][p.death.cause];
-  const ddIdx = rng.int(0, deathPool.length - 1);
-  const dd = deathPool[ddIdx];
+  const dd = rng.pick(deathPool);
   let burialTxt: string;
   if (p.death.cause === "plague")
     burialTxt = ca
@@ -1078,7 +1077,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       ? "Enterrat{{/da}} a l'església parroquial davant l'altar, sota una llosa amb inscripció, amb misses fundades per la seva ànima."
       : "Buried in the parish church before the altar, beneath a marked stone, with masses endowed for the soul.";
   else burialTxt = rng.pick(BURIAL_PLAIN[locale]);
-  const dSrc = riskPool || (p.death.cause === "disease" && (ddIdx === 5 || ddIdx === 6)) ? cite("coroner") : cite("reg");
+  const dSrc = riskPool || (p.death.cause === "disease" && CORONER_DEATHS[locale].has(dd)) ? cite("coroner") : cite("reg");
   ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
 
   events.sort((a, b) => a.year - b.year || (a.kind === "birth" ? -1 : a.kind === "death" ? 1 : 0));
@@ -1170,7 +1169,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
 export function fatherOccupation(env: Envelope, fatherId: number, locale: Locale): string | null {
   if (fatherId < 0) return null;
   const f = env.persons[fatherId];
-  const rng = makeRng(mix(env.vHash, 60000 + fatherId));
+  const rng = makeRng(personStream(env.vHash, 60000, fatherId));
   const fief = manorOf(env.worldSeed, env.regionKey, env.villageIdx, locale);
   return rng
     .pick(FATHER_OCC[locale][f.cls])
