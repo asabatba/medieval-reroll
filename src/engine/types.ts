@@ -208,6 +208,10 @@ export interface Reign {
   republic?: boolean;
   /** Hand-written accession-news sentence, overriding the generic template. */
   accession?: LocalText;
+  /** Extra substrings that name this sovereign in prose ("Henry Tudor",
+   * "the mad king") — used to turn chronicle mentions into royal-line links.
+   * Keep them specific enough never to match a villager's name. */
+  aka?: LocalText[];
 }
 
 export interface RoyalLine {
@@ -241,14 +245,19 @@ export interface DocumentContext {
 }
 
 // ---- Tier-2 decode shapes ----
-/** Another person named within a BioEvent's own text — the engine only ever
- * emits plain prose (§ pure decode), so this is metadata for the UI layer to
- * turn the exact `name` substring into a link, never markup embedded here. */
+/** Another person — or, with `route`, a noble house / royal line (§ nobility)
+ * — named within a BioEvent's own text. The engine only ever emits plain
+ * prose (§ pure decode), so this is metadata for the UI layer to turn the
+ * exact `name` substring into a link, never markup embedded here. */
 export interface EventRef {
+  /** Person id; -1 for a route ref (a lord or king has no register record). */
   id: number;
-  /** The exact substring naming this person inside the event's own `text`. */
+  /** The exact substring naming this person/house/sovereign inside the event's own `text`. */
   name: string;
   addr: Address;
+  /** Link target kind: absent = the person `id` at `addr`; "house" = the
+   * noble-house view of `addr`'s manor; "royal" = `addr`'s region's royal line. */
+  route?: "house" | "royal";
 }
 
 /** Every category of life event biography.ts narrates — kept in sync with

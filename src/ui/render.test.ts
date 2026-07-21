@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { EventRef } from "../engine/index.js";
 import * as E from "../engine/index.js";
-import { buildRecordHTML, defaultVillageYear, linkifyEventText, renderVillageBody, type StackNode, VILLAGE_YEAR_MIN } from "./render.js";
+import { buildRecordHTML, buildViewHTML, defaultVillageYear, linkifyEventText, renderVillageBody, type StackNode, VILLAGE_YEAR_MIN } from "./render.js";
 
 const ADDR = { regionKey: "england", villageIdx: 3 };
 function ref(id: number, name: string): EventRef {
@@ -33,6 +33,15 @@ describe("linkifyEventText", () => {
   it("a ref whose name never appears in the text is silently skipped", () => {
     const out = linkifyEventText("Never married.", [ref(9, "Nobody Here")]);
     expect(out).toBe("Never married.");
+  });
+
+  // § nobility links: route refs target the royal-line / noble-house views
+  // instead of a person record.
+  it("a route ref links to the royal line or noble house, not a person record", () => {
+    const royal = linkifyEventText("News came that King Henry V was dead.", [{ id: -1, name: "King Henry V", addr: ADDR, route: "royal" }]);
+    expect(royal).toContain('data-goto="royal:england"');
+    const house = linkifyEventText("Paid merchet to Hugh atte Wode.", [{ id: -1, name: "Hugh atte Wode", addr: ADDR, route: "house" }]);
+    expect(house).toContain('data-goto="house:england:3"');
   });
 
   it("an overlapping second match starting inside the first is skipped, not double-wrapped", () => {
@@ -95,6 +104,13 @@ describe("buildRecordHTML", () => {
     expect(livedRows).toBeGreaterThan(0);
   });
 
+  // § nobility routes: the fief vitals and the sovereign vital are links.
+  it("links the manor/honour/lord vitals to the noble-house view and the sovereign to the royal line", () => {
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    expect(html).toContain('data-goto="house:england:0"');
+    expect(html).toContain('data-goto="royal:england"');
+  });
+
   it("renders no breadcrumb trail bar for a single-node stack, and one for a multi-node stack", () => {
     const one = buildRecordHTML(E, 1444, stack, "en");
     expect(one).not.toContain('data-jump="0"');
@@ -105,6 +121,37 @@ describe("buildRecordHTML", () => {
       const two = buildRecordHTML(E, 1444, twoStack, "en");
       expect(two).toContain("data-jump=");
     }
+  });
+});
+
+// § nobility routes: the two standalone views, dispatched via buildViewHTML.
+describe("nobility views", () => {
+  it("renders the royal-line view with every reign and its accession stories", () => {
+    const html = buildViewHTML(E, 1444, [{ kind: "royal", regionKey: "england" }], "en");
+    const line = E.royalLineOf("england")!;
+    // the h1 renders its first letter in a drop-cap span, so match the rest
+    expect(html).toContain("ings of England");
+    for (const r of line.reigns) expect(html).toContain(r.style.en);
+    // at least one hand-written accession story is on the page
+    expect(html).toContain("Bosworth");
+  });
+
+  it("renders the noble-house view with the manor's full lord line and the honour's baronial house", () => {
+    const html = buildViewHTML(E, 1444, [{ kind: "house", regionKey: "england", villageIdx: 0 }], "en");
+    const manorLine = E.manorLineOf(1444, "england", 0);
+    const honourLine = E.honourLineOf(1444, "england", 0);
+    expect(html).toContain(`The house of ${manorLine.surname}`);
+    for (const h of manorLine.heads) expect(html).toContain(h.name);
+    for (const h of honourLine.heads) expect(html).toContain(h.name);
+    // and it links onward to the royal line
+    expect(html).toContain('data-goto="royal:england"');
+  });
+
+  it("the two views resolve deterministic locator URLs", () => {
+    const royal = buildViewHTML(E, 1444, [{ kind: "royal", regionKey: "england" }], "en");
+    expect(royal).toContain("1444:england:royal");
+    const house = buildViewHTML(E, 1444, [{ kind: "house", regionKey: "england", villageIdx: 0 }], "en");
+    expect(house).toContain("1444:england:0:house");
   });
 });
 

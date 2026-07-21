@@ -400,6 +400,13 @@ describe("§ name links (BioEvent.refs)", () => {
             for (const r of e.refs) {
               sawRefs++;
               expect(e.text).toContain(r.name);
+              // § nobility links: a route ref points at a view (royal line /
+              // noble house), not a register record — id is the -1 sentinel
+              // and there is no person to resolve.
+              if (r.route) {
+                expect(r.id).toBe(-1);
+                continue;
+              }
               const refEnv = resolveVillage(1444, r.addr.regionKey, r.addr.villageIdx);
               const target = refEnv.persons[r.id];
               expect(target).toBeDefined();

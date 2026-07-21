@@ -42,7 +42,7 @@ import { manorOf, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
 import { famineAt, warAt } from "./mortality.js";
-import { lordOfManorAt, manorLineOf, royalWorldEvents, sovereignAt } from "./nobility.js";
+import { lordOfManorAt, manorLineOf, royalLineOf, royalWorldEvents, sovereignAt } from "./nobility.js";
 import { inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
@@ -530,6 +530,9 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             : `Orphaned of both parents, ${p.name} was taken in by kin, as the manor court noted when it confirmed who now answered for the household's dues.`,
         "grief",
         wardCite,
+        // The granting lord links to HIS manor's house — the origin
+        // village's for an immigrant ward, same as the citation.
+        wealth >= 4 ? [{ id: -1, name: wardLord, addr: addrOnly(wardEnv), route: "house" }] : undefined,
       );
     }
   }
@@ -757,8 +760,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       // the marriage year — a court roll dated that year names that head of
       // the line, not the fief card's mid-register anchor.
       const merchetLord = lordOfManorAt(env.worldSeed, env.regionKey, env.villageIdx, c.year).name;
-      if (p.cls === "serf" && p.sex === "F" && father && father.death.year > c.year)
+      let merchetPaid = false;
+      if (p.cls === "serf" && p.sex === "F" && father && father.death.year > c.year) {
         extra = ca ? ` El seu pare va pagar a ${merchetLord} el dret per casar-la.` : ` Her father paid merchet to ${merchetLord} for licence to marry.`;
+        merchetPaid = true;
+      }
       if (s.incomer && p.sex === "M") {
         extra = s.origin
           ? ca
@@ -769,6 +775,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             : ` She came from the next parish, with a dowry of linen and a cow.`;
       }
       const older = p.sex === "F" && s.birth < p.birth - 3;
+      // § nobility links: the merchet lord is clickable — to his house, not
+      // to any register record (a lord has none).
+      const mRefs = [nameRef(s, selfAddr)];
+      if (merchetPaid) mRefs.push({ id: -1, name: merchetLord, addr: selfAddr, route: "house" });
       ev(
         c.year,
         ca
@@ -776,7 +786,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           : `Married ${sName}${older ? ", a man some years older, as was usual" : ""}.${extra}`,
         "marriage",
         undefined,
-        [nameRef(s, selfAddr)],
+        mRefs,
       );
     } else {
       // § remarriage
@@ -1085,6 +1095,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           : `The old lord ${old.name} died${died}, and ${h.name} entered the lordship; the tenants did homage anew and the court took its reliefs.`,
         "life",
         cite("court"),
+        // Both lords link to the manor's house view.
+        [
+          { id: -1, name: old.name, addr: selfAddr, route: "house" },
+          { id: -1, name: h.name, addr: selfAddr, route: "house" },
+        ],
       );
     }
   }
@@ -1131,6 +1146,15 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
 
   events.sort((a, b) => a.year - b.year || (a.kind === "birth" ? -1 : a.kind === "death" ? 1 : 0));
+
+  // § nobility links: every sovereign named ANYWHERE in the chronicle —
+  // accession news, war names, whatever prose mentions a king — links to
+  // the region's royal line. Candidates are the reigns' styles, names, and
+  // akas; all of them lead to the same royal-line view, so an ambiguous
+  // "King Henry" can never link wrongly. Longest-match-first in the UI's
+  // linkify keeps a person ref ("Lorenzo di Nardo") beating a shorter
+  // royal candidate at the same position.
+  addRoyalRefs(events, env.regionKey, locale, selfAddr);
 
   return {
     id,
@@ -1211,6 +1235,24 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       (pl) => pl[0] >= p.birth && pl[1] <= p.death.year && !(p.death.cause === "plague" && p.death.year >= pl[0] && p.death.year <= pl[1]),
     ).length,
   };
+}
+
+// § nobility links: see the call site in decodePerson. Kept as a plain
+// module function — it reads only ROYAL_LINES data, never the rng.
+function addRoyalRefs(events: BioEvent[], regionKey: string, locale: Locale, addr: Address): void {
+  const line = royalLineOf(regionKey);
+  if (!line) return;
+  const candidates = new Set<string>();
+  for (const r of line.reigns) {
+    candidates.add(r.style[locale]);
+    candidates.add(r.name[locale]);
+    for (const aka of r.aka ?? []) candidates.add(aka[locale]);
+  }
+  for (const e of events) {
+    const extra: EventRef[] = [];
+    for (const name of candidates) if (e.text.includes(name)) extra.push({ id: -1, name, addr, route: "royal" });
+    if (extra.length) e.refs = [...(e.refs ?? []), ...extra];
+  }
 }
 
 // Father's occupation, decoded from the FATHER's own envelope address so all

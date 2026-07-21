@@ -36,6 +36,12 @@ interface UiStrings {
   sovereign: string;
   royalLineHeader: (title: string) => string;
   reignedInLifetime: string;
+  reignsHeader: string;
+  houseOf: (surname: string) => string;
+  lordsOfHeader: string;
+  honourHouseHeader: string;
+  tenureRelation: Record<"founder" | "son" | "brother" | "nephew", string>;
+  tenureCause: Record<"war" | "plague" | "oldage", string>;
   parentage: string;
   father: string;
   mother: string;
@@ -124,6 +130,12 @@ export const UI: Record<Locale, UiStrings> = {
     sovereign: "Sovereign",
     royalLineHeader: (title: string) => `Royal line — ${title}`,
     reignedInLifetime: "Reigning during this life",
+    reignsHeader: "Reigns",
+    houseOf: (surname: string) => `The house of ${surname}`,
+    lordsOfHeader: "Lords of the manor",
+    honourHouseHeader: "The honour's baronial house",
+    tenureRelation: { founder: "first of the recorded line", son: "son of the last lord", brother: "brother of the last lord", nephew: "nephew of the last lord" },
+    tenureCause: { war: "fell in the wars", plague: "died in the pestilence", oldage: "died in his bed" },
     parentage: "Parentage",
     father: "Father",
     mother: "Mother",
@@ -209,6 +221,12 @@ export const UI: Record<Locale, UiStrings> = {
     sovereign: "Sobirà",
     royalLineHeader: (title: string) => `Línia reial — ${title}`,
     reignedInLifetime: "Regnant durant aquesta vida",
+    reignsHeader: "Regnats",
+    houseOf: (surname: string) => `La casa de ${surname}`,
+    lordsOfHeader: "Senyors del senyoriu",
+    honourHouseHeader: "La casa baronial de l'honor",
+    tenureRelation: { founder: "primer del llinatge registrat", son: "fill del senyor anterior", brother: "germà del senyor anterior", nephew: "nebot del senyor anterior" },
+    tenureCause: { war: "caigué a les guerres", plague: "morí en la mortaldat", oldage: "morí al seu llit" },
     parentage: "Filiació",
     father: "Pare",
     mother: "Mare",

@@ -1,25 +1,33 @@
 import * as E from "../engine/index.js";
 import { getLocale, type Locale, setLocale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
-import { buildRecordHTML, locator, renderVillageBody, type StackNode } from "./render.js";
+import { buildViewHTML, isPersonNode, locator, renderVillageBody, type StackNode } from "./render.js";
 
 // A record's fixed URL is its locator in the hash: #worldseed:region:village:person.
 // Pasting such a URL opens the exact same life; internal navigation pushes
-// history entries so back/forward walk the visited records.
+// history entries so back/forward walk the visited records. The nobility
+// views (§ nobility routes) have fixed URLs of the same shape:
+// #worldseed:region:royal (the royal line) and
+// #worldseed:region:village:house (a manor's noble house).
 function parseLocator(s: string): { worldSeed: number; node: StackNode } | null {
   const parts = s.trim().replace(/^#/, "").split(":");
-  if (parts.length !== 4) return null;
+  if (parts.length !== 3 && parts.length !== 4) return null;
   const worldSeed = Number(parts[0]);
-  const villageIdx = Number(parts[2]);
-  const personId = Number(parts[3]);
   // Object.hasOwn (not a bracket-truthy check): REGIONS is a plain object
   // literal, so a region segment of "__proto__"/"constructor"/"toString"
   // etc. would otherwise resolve through the prototype chain to a truthy
   // built-in and pass validation, then crash deep inside resolveVillage
   // once something tries to read a region-shaped property off it.
-  if (!Number.isSafeInteger(worldSeed) || !Object.hasOwn(E.REGIONS, parts[1]) || !Number.isSafeInteger(villageIdx) || !Number.isSafeInteger(personId))
-    return null;
-  if (worldSeed < 0 || villageIdx < 0 || personId < 0) return null;
+  if (!Number.isSafeInteger(worldSeed) || worldSeed < 0 || !Object.hasOwn(E.REGIONS, parts[1])) return null;
+  if (parts.length === 3) {
+    if (parts[2] !== "royal") return null;
+    return { worldSeed, node: { kind: "royal", regionKey: parts[1] } };
+  }
+  const villageIdx = Number(parts[2]);
+  if (!Number.isSafeInteger(villageIdx) || villageIdx < 0) return null;
+  if (parts[3] === "house") return { worldSeed, node: { kind: "house", regionKey: parts[1], villageIdx } };
+  const personId = Number(parts[3]);
+  if (!Number.isSafeInteger(personId) || personId < 0) return null;
   return { worldSeed, node: { regionKey: parts[1], villageIdx, personId } };
 }
 
@@ -61,14 +69,24 @@ export function initApp(): void {
   }
 
   function sameNode(a: StackNode, b: StackNode): boolean {
+    if (a.kind === "royal" || b.kind === "royal") return a.kind === b.kind && a.regionKey === b.regionKey;
+    if (a.kind === "house" || b.kind === "house") return a.kind === b.kind && a.regionKey === b.regionKey && a.villageIdx === b.villageIdx;
     return a.regionKey === b.regionKey && a.villageIdx === b.villageIdx && a.personId === b.personId;
+  }
+
+  // data-goto forms: "region:village:person" (a record), "royal:region"
+  // (the royal line), "house:region:village" (a manor's noble house).
+  function gotoNode(goto: string): StackNode {
+    const parts = goto.split(":");
+    if (parts[0] === "royal") return { kind: "royal", regionKey: parts[1] };
+    if (parts[0] === "house") return { kind: "house", regionKey: parts[1], villageIdx: +parts[2] };
+    return { regionKey: parts[0], villageIdx: +parts[1], personId: +parts[2] };
   }
 
   function bindGoto(root: ParentNode): void {
     root.querySelectorAll<HTMLButtonElement>("[data-goto]").forEach((b) => {
       b.addEventListener("click", () => {
-        const [rk, vi, pid] = b.dataset.goto!.split(":");
-        const addr: StackNode = { regionKey: rk, villageIdx: +vi, personId: +pid };
+        const addr = gotoNode(b.dataset.goto!);
         const current = stack[stack.length - 1];
         // a household/register row also renders the record you're already
         // viewing (styled `.current`, but still clickable) — clicking it
@@ -85,8 +103,7 @@ export function initApp(): void {
 
   function render(pushUrl = true, announce = true): void {
     const node = stack[stack.length - 1];
-    const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
-    const html = buildRecordHTML(E, worldSeed, stack, locale);
+    const html = buildViewHTML(E, worldSeed, stack, locale);
     const loc = locator(worldSeed, node);
     seedbox.value = loc;
     worldseed.textContent = UI[locale].worldSeed(worldSeed);
@@ -115,10 +132,12 @@ export function initApp(): void {
     });
 
     // village-in-year slider: re-render only the household body on input
+    // (person records only — the nobility views have no village section)
     const slider = out.querySelector<HTMLInputElement>("#vyear");
     const yearOut = out.querySelector<HTMLOutputElement>("#vyearout");
     const vbody = out.querySelector<HTMLElement>("#vbody");
-    if (slider && yearOut && vbody) {
+    if (slider && yearOut && vbody && isPersonNode(node)) {
+      const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
       let frame: number | null = null;
       slider.addEventListener("input", () => {
         const year = +slider.value;
@@ -141,12 +160,16 @@ export function initApp(): void {
       seedbox.focus();
       return false;
     }
-    const env = E.resolveVillage(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx);
-    if (!env.persons[parsed.node.personId]) {
-      locatorError.textContent = UI[locale].locatorError;
-      seedbox.setAttribute("aria-invalid", "true");
-      seedbox.focus();
-      return false;
+    // Only a person locator needs an existence check — the nobility views
+    // are total functions of any valid (region, village) address.
+    if (isPersonNode(parsed.node)) {
+      const env = E.resolveVillage(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx);
+      if (!env.persons[parsed.node.personId]) {
+        locatorError.textContent = UI[locale].locatorError;
+        seedbox.setAttribute("aria-invalid", "true");
+        seedbox.focus();
+        return false;
+      }
     }
     locatorError.textContent = "";
     seedbox.removeAttribute("aria-invalid");

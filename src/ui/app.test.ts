@@ -111,6 +111,49 @@ describe("app navigation", () => {
     expect(document.querySelectorAll(".crumb[data-jump]")).toHaveLength(0);
   });
 
+  // § nobility routes: royal-line and noble-house views are first-class
+  // navigation targets with fixed URLs of their own.
+  it("clicking the sovereign vital opens the region's royal line at its own URL, on the breadcrumb trail", async () => {
+    await start();
+    const royalBtn = document.querySelector<HTMLButtonElement>('[data-goto^="royal:"]');
+    expect(royalBtn).not.toBeNull();
+    royalBtn!.click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:royal$/);
+    expect(document.querySelectorAll(".crumb[data-jump]").length).toBe(2);
+  });
+
+  it("clicking a lord/manor vital opens the manor's noble-house view at its own URL", async () => {
+    await start();
+    const houseBtn = document.querySelector<HTMLButtonElement>('[data-goto^="house:"]');
+    expect(houseBtn).not.toBeNull();
+    houseBtn!.click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:\d+:house$/);
+  });
+
+  it("opens a pasted royal-line locator, and a noble-house locator", async () => {
+    await start();
+    const input = document.getElementById("seedbox") as HTMLInputElement;
+    input.value = "1444:england:royal";
+    (document.getElementById("replay") as HTMLButtonElement).click();
+    expect(document.getElementById("locator-error")?.textContent).toBe("");
+    expect(location.hash).toBe("#1444:england:royal");
+
+    input.value = "1444:england:0:house";
+    (document.getElementById("replay") as HTMLButtonElement).click();
+    expect(document.getElementById("locator-error")?.textContent).toBe("");
+    expect(location.hash).toBe("#1444:england:0:house");
+  });
+
+  it("rejects malformed nobility locators (bad region, bad tail)", async () => {
+    await start();
+    const input = document.getElementById("seedbox") as HTMLInputElement;
+    for (const bad of ["1444:atlantis:royal", "1444:england:notaword", "1444:england:x:house"]) {
+      input.value = bad;
+      (document.getElementById("replay") as HTMLButtonElement).click();
+      expect(document.getElementById("locator-error")?.textContent, bad).not.toBe("");
+    }
+  });
+
   it("browser back restores the full breadcrumb trail, not just the single node being navigated to", async () => {
     await start();
     const firstHash = location.hash;

@@ -4,12 +4,36 @@ import type { Locale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
 import { esc, KIND_LABEL } from "./dom.js";
 
-export interface StackNode extends PersonAddress {
+// § nobility routes: besides person records, the navigation stack (and the
+// hash) can hold the two nobility views — a region's royal line and a
+// manor's noble house. `kind` is optional on person nodes so pre-existing
+// history state (plain PersonAddress objects) keeps working.
+export interface PersonNode extends PersonAddress {
+  kind?: "person";
   crumb?: string;
 }
+export interface RoyalNode {
+  kind: "royal";
+  regionKey: string;
+  crumb?: string;
+}
+export interface HouseNode {
+  kind: "house";
+  regionKey: string;
+  villageIdx: number;
+  crumb?: string;
+}
+export type StackNode = PersonNode | RoyalNode | HouseNode;
 
-export function locator(worldSeed: number, addr: PersonAddress): string {
-  return worldSeed + ":" + addr.regionKey + ":" + addr.villageIdx + ":" + addr.personId;
+export function isPersonNode(node: StackNode): node is PersonNode {
+  return node.kind == null || node.kind === "person";
+}
+
+export function locator(worldSeed: number, node: StackNode | PersonAddress): string {
+  if ("kind" in node && node.kind === "royal") return `${worldSeed}:${node.regionKey}:royal`;
+  if ("kind" in node && node.kind === "house") return `${worldSeed}:${node.regionKey}:${node.villageIdx}:house`;
+  const p = node as PersonAddress;
+  return worldSeed + ":" + p.regionKey + ":" + p.villageIdx + ":" + p.personId;
 }
 
 export function fateStr(d: Death, birth: number): string {
@@ -20,6 +44,20 @@ export function fateStr(d: Death, birth: number): string {
 
 function addrStr(addr: Address, id: number): string {
   return `${addr.regionKey}:${addr.villageIdx}:${id}`;
+}
+
+// data-goto targets for the nobility views (parsed in app.ts's bindGoto).
+function royalGoto(regionKey: string): string {
+  return `royal:${regionKey}`;
+}
+function houseGoto(addr: Address): string {
+  return `house:${addr.regionKey}:${addr.villageIdx}`;
+}
+
+function gotoOf(ref: EventRef): string {
+  if (ref.route === "royal") return royalGoto(ref.addr.regionKey);
+  if (ref.route === "house") return houseGoto(ref.addr);
+  return addrStr(ref.addr, ref.id);
 }
 
 // § name links: an event's own text is plain prose (biography.ts never
@@ -45,7 +83,7 @@ export function linkifyEventText(text: string, refs: EventRef[] | undefined): st
     }
     remaining.splice(match.index, 1);
     const end = cursor + match.ref.name.length;
-    out += `<button class="namelink" data-goto="${addrStr(match.ref.addr, match.ref.id)}">${esc(text.slice(cursor, end))}</button>`;
+    out += `<button class="namelink" data-goto="${gotoOf(match.ref)}">${esc(text.slice(cursor, end))}</button>`;
     cursor = end;
   }
   return out;
@@ -206,8 +244,10 @@ export function renderVillageBody(E: typeof Engine, env: Envelope, year: number,
         <span class="m-age">aet. ${st.age}</span></button>`;
       })
       .join("");
+    // § nobility links: the manor pseudo-household's title opens the house view.
+    const titleHtml = isManor ? `<button class="namelink" data-goto="${houseGoto({ regionKey: env.regionKey, villageIdx: env.villageIdx })}">${esc(title)}</button>` : esc(title);
     return `<div class="hh${orphan ? " orphan" : ""}${isManor || isChurch ? " pseudo" : ""}">
-      <div class="hh-title">${esc(title)}${orphan ? ` <i>${esc(t.orphanTag)}</i>` : ""}</div>
+      <div class="hh-title">${titleHtml}${orphan ? ` <i>${esc(t.orphanTag)}</i>` : ""}</div>
       <div class="hh-members">${rows}</div></div>`;
   }
 
@@ -240,13 +280,14 @@ function renderRoyalLineSection(E: typeof Engine, regionKey: string, bio: Bio, l
   const rows = line.reigns
     .map((r) => {
       // Lived-under = reign years overlap [birth, death]; the incoming reign
-      // owns its accession year, mirroring sovereignAt.
+      // owns its accession year, mirroring sovereignAt. Each row links to
+      // the royal-line view (§ everything that can be a link is a link).
       const lived = r.from <= bio.death.year && r.to >= bio.birth;
-      return `<div class="ryrow${lived ? " lived" : ""}${r.interregnum ? " interregnum" : ""}"${lived ? ` title="${esc(t.reignedInLifetime)}"` : ""}>
+      return `<button class="ryrow${lived ? " lived" : ""}${r.interregnum ? " interregnum" : ""}" data-goto="${royalGoto(regionKey)}"${lived ? ` title="${esc(t.reignedInLifetime)}"` : ""}>
       <span class="ry-years">${r.from}–${r.to}</span>
       <span class="ry-style">${esc(r.style[locale])}</span>
       <span class="ry-house">${r.house ? esc(r.house[locale]) : "—"}</span>
-    </div>`;
+    </button>`;
     })
     .join("");
   return `<details class="register royal reveal"><summary>${esc(t.royalLineHeader(line.title[locale]))}</summary><div class="register-list royal-list">${rows}</div></details>`;
@@ -264,11 +305,21 @@ function renderLineageBar(stack: StackNode[], t: (typeof UI)[Locale]): string {
   return h;
 }
 
+// Dispatches the current top of the navigation stack to its view builder —
+// person record, royal line, or noble house (§ nobility routes).
+export function buildViewHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], locale: Locale): string {
+  const node = stack[stack.length - 1];
+  if (node.kind === "royal") return buildRoyalLineHTML(E, worldSeed, stack, node, locale);
+  if (node.kind === "house") return buildNobleHouseHTML(E, worldSeed, stack, node, locale);
+  return buildRecordHTML(E, worldSeed, stack, locale);
+}
+
 // Builds the full record view for the current top of the navigation stack.
 // Mutates `node.crumb` (as the original did) so the lineage bar can label it.
 export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], locale: Locale): string {
   const t = UI[locale];
   const node = stack[stack.length - 1];
+  if (!isPersonNode(node)) return "";
   const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
   const bio = E.decodePerson(env, node.personId, locale);
   if (!bio) return "";
@@ -311,10 +362,10 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     <div class="vital"><div class="k">${t.parish}</div><div class="v">${esc(bio.jurisdiction.parish)}</div></div>
     <div class="vital"><div class="k">${t.deanery}</div><div class="v">${esc(bio.jurisdiction.deanery)}</div></div>
     <div class="vital"><div class="k">${t.diocese}</div><div class="v">${esc(bio.jurisdiction.diocese)}</div></div>
-    <div class="vital"><div class="k">${t.manor}</div><div class="v">${esc(bio.fief.manor)}</div></div>
-    <div class="vital"><div class="k">${t.honour}</div><div class="v">${esc(bio.fief.honour)}</div></div>
-    <div class="vital"><div class="k">${t.lord}</div><div class="v">${esc(bio.fief.lord)}</div></div>
-    <div class="vital"><div class="k">${t.sovereign}</div><div class="v">${esc(bio.sovereign)}</div></div>
+    <div class="vital"><div class="k">${t.manor}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(bio.fief.manor)}</button></div></div>
+    <div class="vital"><div class="k">${t.honour}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(bio.fief.honour)}</button></div></div>
+    <div class="vital"><div class="k">${t.lord}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(bio.fief.lord)}</button></div></div>
+    <div class="vital"><div class="k">${t.sovereign}</div><div class="v"><button class="namelink" data-goto="${royalGoto(node.regionKey)}">${esc(bio.sovereign)}</button></div></div>
   </div>`;
 
   // Royal line — collapsed under the jurisdictions it crowns.
@@ -324,7 +375,15 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   html += `<div class="sect reveal"><h2>${esc(t.parentage)}</h2></div><div class="parents reveal">`;
   if (bio.father) {
     const fOcc = bio.fatherOccupation;
-    html += `<div class="parent"><div class="who">${t.father}${bio.father.foreign ? esc(t.ofPlace(bio.originPlace || "")) : ""}</div><button class="pname" data-goto="${addrStr(bio.father.addr, bio.father.id)}">${esc(bio.father.name)}</button><p>${esc(fOcc ? fOcc.charAt(0).toUpperCase() + fOcc.slice(1) : "")}.</p><button class="openrel plink" data-goto="${addrStr(bio.father.addr, bio.father.id)}">${esc(t.openHisRecord)}</button></div>`;
+    // § nobility links: the lord the father held of (fatherOccupation's
+    // {lord}, resolved at his working prime — same formula as biography.ts)
+    // links to that manor's house; for an immigrant this is the ORIGIN
+    // village's manor, which is exactly what bio.father.addr carries.
+    const fLord = E.lordOfManorAt(worldSeed, bio.father.addr.regionKey, bio.father.addr.villageIdx, Math.min(bio.father.death.year, bio.father.birth + 30)).name;
+    const fOccHtml = fOcc
+      ? linkifyEventText(fOcc.charAt(0).toUpperCase() + fOcc.slice(1), [{ id: -1, name: fLord, addr: bio.father.addr, route: "house" }])
+      : "";
+    html += `<div class="parent"><div class="who">${t.father}${bio.father.foreign ? esc(t.ofPlace(bio.originPlace || "")) : ""}</div><button class="pname" data-goto="${addrStr(bio.father.addr, bio.father.id)}">${esc(bio.father.name)}</button><p>${fOccHtml}.</p><button class="openrel plink" data-goto="${addrStr(bio.father.addr, bio.father.id)}">${esc(t.openHisRecord)}</button></div>`;
   } else {
     html += `<div class="parent"><div class="who">${t.father}</div><div class="pname">${bio.incomer ? t.ofAnotherParish : t.beforeRegister}</div><p>${bio.incomer ? t.fatherIncomerNote : t.fatherBeforeNote}</p></div>`;
   }
@@ -397,5 +456,84 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
 
   html += renderFamilyTree(t, bio);
 
+  return html;
+}
+
+// ---- § nobility routes: the two nobility views ----
+
+// The royal line of a region: every reign with years, style, house, and the
+// hand-written accession story where one exists. The page every king link
+// in the app resolves to.
+function buildRoyalLineHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: RoyalNode, locale: Locale): string {
+  const t = UI[locale];
+  const line = E.royalLineOf(node.regionKey);
+  if (!line) return "";
+  const title = line.title[locale];
+  node.crumb = title;
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(E.REGIONS[node.regionKey].name[locale])}</div>
+  </article>`;
+
+  html += `<div class="sect reveal"><h2>${esc(t.reignsHeader)}</h2></div><div class="reigns reveal">`;
+  for (const r of line.reigns) {
+    html += `<div class="reign${r.interregnum ? " interregnum" : ""}">
+      <div class="reign-head">
+        <span class="ry-years">${r.from}–${r.to}</span>
+        <span class="reign-style">${esc(r.style[locale])}</span>
+        <span class="ry-house">${r.house ? esc(r.house[locale]) : "—"}</span>
+      </div>
+      ${r.accession ? `<p class="reign-note">${esc(r.accession[locale])}</p>` : ""}
+    </div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+// A manor's noble house: the lord line of the manor itself and the baronial
+// house of the honour it belongs to — the destination of every lord link.
+function buildNobleHouseHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: HouseNode, locale: Locale): string {
+  const t = UI[locale];
+  const fief = E.manorOf(worldSeed, node.regionKey, node.villageIdx, locale);
+  const manorLine = E.manorLineOf(worldSeed, node.regionKey, node.villageIdx);
+  const honourLine = E.honourLineOf(worldSeed, node.regionKey, node.villageIdx);
+  const royal = E.royalLineOf(node.regionKey);
+  const title = t.houseOf(manorLine.surname);
+  node.crumb = title;
+
+  const tenureRows = (line: { surname: string; heads: Engine.LordTenure[] }): string =>
+    line.heads
+      .map(
+        (h) => `<div class="ryrow tenure">
+      <span class="ry-years">${h.acceded}–${h.died}</span>
+      <span class="ry-style">${esc(h.name)}</span>
+      <span class="ry-house">${esc(t.tenureRelation[h.relation])} · ${esc(t.tenureCause[h.cause])}</span>
+    </div>`,
+      )
+      .join("");
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(fief.manor)} · ${esc(fief.honour)} · ${esc(fief.earldom)}</div>
+  </article>`;
+
+  html += `<div class="sect reveal"><h2>${esc(t.lordsOfHeader)}</h2></div><div class="reigns reveal">${tenureRows(manorLine)}</div>`;
+
+  // The honour's own baronial family — the same family as the manor's when
+  // the manor is held by a cadet (same surname), a different one otherwise.
+  html += `<div class="sect reveal"><h2>${esc(t.honourHouseHeader)}</h2></div>
+  <div class="honour-note reveal">${esc(t.houseOf(honourLine.surname))} · ${esc(fief.earldom)}</div>
+  <div class="reigns reveal">${tenureRows(honourLine)}</div>`;
+
+  if (royal) {
+    html += `<div class="royal-link reveal"><button class="namelink" data-goto="${royalGoto(node.regionKey)}">${esc(t.royalLineHeader(royal.title[locale]))}</button></div>`;
+  }
   return html;
 }

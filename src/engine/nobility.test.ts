@@ -162,7 +162,10 @@ describe("§ nobility: biography integration", () => {
           const e = bio?.events.find((e) => e.text.includes("paid merchet to "));
           if (!bio || !e) continue;
           seen++;
-          expect(e.text).toContain(lordOfManorAt(1444, rk, idx, e.year).name);
+          const lord = lordOfManorAt(1444, rk, idx, e.year).name;
+          expect(e.text).toContain(lord);
+          // § nobility links: the lord is a route ref to the manor's house view
+          expect(e.refs?.some((r) => r.route === "house" && r.name === lord)).toBe(true);
         }
       }
     }
@@ -184,6 +187,8 @@ describe("§ nobility: biography integration", () => {
           expect(i).toBeGreaterThan(0);
           expect(e.text).toContain(line.heads[i].name);
           expect(e.text).toContain(line.heads[i - 1].name);
+          // § nobility links: both lords are route refs to the house view
+          expect(e.refs?.filter((r) => r.route === "house").length).toBeGreaterThanOrEqual(2);
           // The succession happened within the person's remembered life.
           expect(e.year).toBeGreaterThanOrEqual(p.birth + 10);
           expect(e.year).toBeLessThanOrEqual(p.death.year);
@@ -193,17 +198,37 @@ describe("§ nobility: biography integration", () => {
     expect(seen).toBeGreaterThan(0);
   });
 
-  it("royal accession news reaches villagers (Bosworth, 1485, England)", () => {
+  it("royal accession news reaches villagers (Bosworth, 1485, England), with royal-line refs", () => {
     let seen = 0;
     for (let idx = 0; idx < 8 && !seen; idx++) {
       const env = resolveVillage(1444, "england", idx);
       for (const p of env.persons) {
         if (p.death.year < 1485 || p.birth > 1477) continue;
         const bio = decodePerson(env, p.id, "en");
-        if (bio?.events.some((e) => e.text.includes("Bosworth"))) seen++;
+        const e = bio?.events.find((e) => e.text.includes("Bosworth"));
+        if (!e) continue;
+        seen++;
+        // § nobility links: the kings named in the news link to the royal line
+        expect(e.refs?.some((r) => r.route === "royal")).toBe(true);
       }
     }
     expect(seen).toBeGreaterThan(0);
+  });
+
+  it("every royal-route ref names an exact substring of its event's text (the linkify contract)", () => {
+    for (const rk of REGION_KEYS) {
+      const env = resolveVillage(1444, rk, 0);
+      for (const p of env.persons.slice(0, 60)) {
+        const bio = decodePerson(env, p.id, "en");
+        for (const e of bio?.events ?? []) {
+          for (const r of e.refs ?? []) {
+            if (!r.route) continue;
+            expect(e.text, `${rk}: "${r.name}"`).toContain(r.name);
+            expect(r.id).toBe(-1);
+          }
+        }
+      }
+    }
   });
 
   it("royal news never leaks across regions (no English king crowned in a Catalan chronicle)", () => {

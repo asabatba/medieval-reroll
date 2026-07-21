@@ -49,11 +49,13 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         house: { en: "Plantagenet", ca: "Plantagenet" },
         style: { en: "King Richard II", ca: "el rei Ricard II" },
         end: "deposed",
+        aka: [{ en: "King Richard", ca: "el rei Ricard" }],
       }),
       r(1399, 1413, {
         name: { en: "Henry IV", ca: "Enric IV" },
         house: { en: "Lancaster", ca: "Lancaster" },
         style: { en: "King Henry IV", ca: "el rei Enric IV" },
+        aka: [{ en: "Henry of Lancaster", ca: "Enric de Lancaster" }],
         accession: {
           en: "News came that King Richard had been put down from his throne, and Henry of Lancaster crowned in his place. The lawyers said the oath to the old king was void; the old men shook their heads at a crowned king pulled down by a subject.",
           ca: "Va arribar la nova que el rei Ricard havia estat deposat del tron, i que Enric de Lancaster havia estat coronat al seu lloc. Els homes de lleis deien que el jurament al vell rei ja no valia; els vells brandaven el cap davant d'un rei coronat abatut per un vassall.",
@@ -69,11 +71,13 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         house: { en: "Lancaster", ca: "Lancaster" },
         style: { en: "King Henry VI", ca: "el rei Enric VI" },
         end: "deposed",
+        aka: [{ en: "King Henry", ca: "el rei Enric" }],
       }),
       r(1461, 1483, {
         name: { en: "Edward IV", ca: "Eduard IV" },
         house: { en: "York", ca: "York" },
         style: { en: "King Edward IV", ca: "el rei Eduard IV" },
+        aka: [{ en: "Edward of York", ca: "Eduard de York" }],
         accession: {
           en: "After the great slaughter in the snow at Towton, word came that young Edward of York was king, and that King Henry had fled into the north. Men who had sworn to both houses kept their counsel.",
           ca: "Després de la gran matança sota la neu a Towton, va arribar la nova que el jove Eduard de York era rei, i que el rei Enric havia fugit cap al nord. Els qui havien jurat a totes dues cases callaven.",
@@ -84,6 +88,7 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         house: { en: "York", ca: "York" },
         style: { en: "King Edward V", ca: "el rei Eduard V" },
         end: "deposed",
+        aka: [{ en: "boy king Edward", ca: "rei infant Eduard" }],
       }),
       r(1483, 1485, {
         name: { en: "Richard III", ca: "Ricard III" },
@@ -99,6 +104,7 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "Henry VII", ca: "Enric VII" },
         house: { en: "Tudor", ca: "Tudor" },
         style: { en: "King Henry VII", ca: "el rei Enric VII" },
+        aka: [{ en: "Henry Tudor", ca: "Enric Tudor" }],
         accession: {
           en: "Riders brought news of a battle at Bosworth: King Richard slain in the press of it, and the crown, found on the field, set on the head of Henry Tudor. He would wed the old king Edward's daughter, and so, men said, the two roses were joined.",
           ca: "Els correus dugueren noves d'una batalla a Bosworth: el rei Ricard mort enmig de la brega, i la corona, trobada al camp, posada al cap d'Enric Tudor. Es casaria amb la filla del vell rei Eduard, i així, deia la gent, les dues roses quedaven unides.",
@@ -144,11 +150,13 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "Charles IV", ca: "Carles IV" },
         house: { en: "Capet", ca: "Capet" },
         style: { en: "King Charles IV", ca: "el rei Carles IV" },
+        aka: [{ en: "King Charles", ca: "el rei Carles" }],
       }),
       r(1328, 1350, {
         name: { en: "Philip VI", ca: "Felip VI" },
         house: { en: "Valois", ca: "Valois" },
         style: { en: "King Philip VI", ca: "el rei Felip VI" },
+        aka: [{ en: "Philip of Valois", ca: "Felip de Valois" }],
         accession: {
           en: "King Charles died leaving no son, and the crown passed to his cousin Philip of Valois — though the King of England claimed it through his mother. A quarrel of kings, men said, that common folk would pay for; and so it proved.",
           ca: "El rei Carles morí sense deixar fill, i la corona passà al seu cosí Felip de Valois — encara que el rei d'Anglaterra la reclamava per part de mare. Una baralla de reis, deia la gent, que pagaria el poble menut; i així fou.",
@@ -158,11 +166,13 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "John II", ca: "Joan II" },
         house: { en: "Valois", ca: "Valois" },
         style: { en: "King John II", ca: "el rei Joan II" },
+        aka: [{ en: "King John", ca: "el rei Joan" }],
       }),
       r(1364, 1380, {
         name: { en: "Charles V", ca: "Carles V" },
         house: { en: "Valois", ca: "Valois" },
         style: { en: "King Charles V, the Wise", ca: "el rei Carles V, el Savi" },
+        aka: [{ en: "Charles the Wise", ca: "Carles el Savi" }],
         accession: {
           en: "King John died a prisoner in London, whither he had returned of his own will to keep his given word, and his son Charles the Wise was crowned at Reims.",
           ca: "El rei Joan morí presoner a Londres, on havia tornat per pròpia voluntat per mantenir la paraula donada, i el seu fill Carles el Savi fou coronat a Reims.",
@@ -172,11 +182,16 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "Charles VI", ca: "Carles VI" },
         house: { en: "Valois", ca: "Valois" },
         style: { en: "King Charles VI", ca: "el rei Carles VI" },
+        aka: [{ en: "the mad king", ca: "el rei boig" }],
       }),
       r(1422, 1461, {
         name: { en: "Charles VII", ca: "Carles VII" },
         house: { en: "Valois", ca: "Valois" },
         style: { en: "King Charles VII", ca: "el rei Carles VII" },
+        aka: [
+          { en: "Dauphin Charles", ca: "Delfí Carles" },
+          { en: "the Dauphin", ca: "el Delfí" },
+        ],
         accession: {
           en: "The mad king died, and there were two who called themselves King of France: the infant Henry of England, proclaimed at Paris, and the Dauphin Charles, south of the Loire. Every parish prayed for a king, and few had seen either.",
           ca: "El rei boig morí, i n'hi hagué dos que es deien rei de França: l'infant Enric d'Anglaterra, proclamat a París, i el Delfí Carles, al sud del Loira. Cada parròquia pregava per un rei, i pocs n'havien vist cap dels dos.",
@@ -242,6 +257,7 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "Martin I", ca: "Martí l'Humà" },
         house: { en: "Barcelona", ca: "Barcelona" },
         style: { en: "King Martin, the Humane", ca: "el rei Martí l'Humà" },
+        aka: [{ en: "King Martin", ca: "el rei Martí" }],
       }),
       r(1410, 1412, {
         name: { en: "the Interregnum", ca: "l'Interregne" },
@@ -257,6 +273,7 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "Ferdinand I", ca: "Ferran I" },
         house: { en: "Trastámara", ca: "Trastàmara" },
         style: { en: "King Ferdinand I", ca: "el rei Ferran I" },
+        aka: [{ en: "Ferdinand of Trastámara", ca: "Ferran de Trastàmara" }],
         accession: {
           en: "The nine compromissaries met at Caspe and gave the crown to Ferdinand of Trastámara, of Castile. The interregnum was ended, though not all the land was glad of the choosing.",
           ca: "Els nou compromissaris es reuniren a Casp i donaren la corona a Ferran de Trastàmara, castellà. L'interregne s'havia acabat, encara que no tota la terra s'alegrà de l'elecció.",
@@ -271,6 +288,7 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "John II", ca: "Joan II" },
         house: { en: "Trastámara", ca: "Trastàmara" },
         style: { en: "King John II", ca: "el rei Joan II" },
+        aka: [{ en: "King John", ca: "el rei Joan" }],
       }),
       r(1479, 1516, {
         name: { en: "Ferdinand II", ca: "Ferran II" },
@@ -355,6 +373,10 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         house: null,
         style: { en: "the Republic, under the friar Savonarola", ca: "la República, sota fra Savonarola" },
         republic: true,
+        aka: [
+          { en: "the friar Savonarola", ca: "fra Savonarola" },
+          { en: "Savonarola", ca: "Savonarola" },
+        ],
         accession: {
           en: "The French king came over the mountains with an army such as Italy had not seen, Piero de' Medici fled the city, and the friar Savonarola preached that Florence should take Christ alone for its king. The great bonfires of vanities followed.",
           ca: "El rei francès passà les muntanyes amb un exèrcit com Itàlia no n'havia vist, Piero de' Medici fugí de la ciutat, i fra Savonarola predicà que Florència havia de prendre Crist per únic rei. Seguiren les grans fogueres de les vanitats.",
@@ -418,11 +440,13 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         name: { en: "Louis IV", ca: "Lluís IV" },
         house: { en: "Wittelsbach", ca: "Wittelsbach" },
         style: { en: "the Emperor Louis the Bavarian", ca: "l'emperador Lluís el Bavarès" },
+        aka: [{ en: "The Emperor Louis", ca: "L'emperador Lluís" }],
       }),
       r(1347, 1378, {
         name: { en: "Charles IV", ca: "Carles IV" },
         house: { en: "Luxembourg", ca: "Luxemburg" },
         style: { en: "the Emperor Charles IV", ca: "l'emperador Carles IV" },
+        aka: [{ en: "Charles of Luxembourg", ca: "Carles de Luxemburg" }],
         accession: {
           en: "The Emperor Louis fell from his horse and died a-hunting, and Charles of Luxembourg, King of Bohemia, was king in his place — the same years the great mortality began its march through the world.",
           ca: "L'emperador Lluís caigué del cavall i morí caçant, i Carles de Luxemburg, rei de Bohèmia, fou rei al seu lloc — els mateixos anys que la gran mortaldat començava el seu camí pel món.",
@@ -433,11 +457,13 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
         house: { en: "Luxembourg", ca: "Luxemburg" },
         style: { en: "King Wenceslas of the Romans", ca: "el rei Venceslau dels Romans" },
         end: "deposed",
+        aka: [{ en: "King Wenceslas", ca: "el rei Venceslau" }],
       }),
       r(1400, 1410, {
         name: { en: "Rupert", ca: "Rupert" },
         house: { en: "Wittelsbach", ca: "Wittelsbach" },
         style: { en: "King Rupert of the Romans", ca: "el rei Rupert dels Romans" },
+        aka: [{ en: "Count Palatine Rupert", ca: "comte palatí Rupert" }],
         accession: {
           en: "The Electors, meeting on the Rhine, put down King Wenceslas for idleness and drunkenness, and chose the Count Palatine Rupert in his stead. Two men now called themselves King of the Romans, and the roads were no safer for it.",
           ca: "Els Electors, reunits vora el Rin, deposaren el rei Venceslau per peresa i embriaguesa, i escolliren el comte palatí Rupert al seu lloc. Dos homes es deien ara rei dels Romans, i els camins no eren pas més segurs per això.",

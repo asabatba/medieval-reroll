@@ -775,7 +775,7 @@ details.register summary::before {
   color: var(--bone-dim);
   font-size: 12px;
 }
-/* ---- Royal line (§ nobility) ---- */
+/* ---- Royal line & noble houses (§ nobility) ---- */
 details.royal {
   margin-top: 14px;
 }
@@ -787,6 +787,71 @@ details.royal {
   color: var(--bone);
   font-family: "Fraunces", serif;
   font-size: 14px;
+}
+/* rows double as links to the royal-line view */
+button.ryrow {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+button.ryrow:hover {
+  background: rgba(201, 162, 39, 0.06);
+}
+button.ryrow:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: -2px;
+}
+.ryrow.tenure {
+  grid-template-columns: 110px 1fr 1.2fr;
+  padding: 7px 0;
+}
+/* the standalone royal-line / noble-house pages */
+.reigns {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: 10px 18px;
+}
+.reign {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.reign:last-child {
+  border-bottom: none;
+}
+.reign-head {
+  display: grid;
+  grid-template-columns: 110px 1fr 130px;
+  gap: 10px;
+  align-items: center;
+  color: var(--bone);
+  font-family: "Fraunces", serif;
+  font-size: 15px;
+}
+.reign.interregnum .reign-style {
+  font-style: italic;
+  color: var(--bone-dim);
+}
+.reign-note {
+  margin: 6px 0 2px 110px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(201, 162, 39, 0.35);
+  color: var(--bone-dim);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.honour-note {
+  margin: -6px 0 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+}
+.royal-link {
+  margin-top: 22px;
 }
 .ryrow .ry-years,
 .ryrow .ry-house {
