@@ -1069,7 +1069,15 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     if (succ.length && rng.chance(0.35)) {
       const { h, old } = rng.pick(succ);
       const died =
-        old.cause === "war" ? (ca ? " a la guerra del rei" : " in the king's wars") : old.cause === "plague" ? (ca ? " en la mortaldat" : " in the pestilence") : "";
+        old.cause === "war"
+          ? ca
+            ? " a la guerra del rei"
+            : " in the king's wars"
+          : old.cause === "plague"
+            ? ca
+              ? " en la mortaldat"
+              : " in the pestilence"
+            : "";
       ev(
         h.acceded,
         ca
