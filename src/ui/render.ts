@@ -291,6 +291,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     <div class="vital"><div class="k">${t.manor}</div><div class="v">${esc(bio.fief.manor)}</div></div>
     <div class="vital"><div class="k">${t.honour}</div><div class="v">${esc(bio.fief.honour)}</div></div>
     <div class="vital"><div class="k">${t.lord}</div><div class="v">${esc(bio.fief.lord)}</div></div>
+    <div class="vital"><div class="k">${t.sovereign}</div><div class="v">${esc(bio.sovereign)}</div></div>
   </div>`;
 
   // Parentage

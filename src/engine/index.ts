@@ -36,6 +36,21 @@ export type { AncestorNode, DescendantNode, ParentRecord } from "./lineage.js";
 // Lineage traversal (§ family tree): multi-generation ancestors/descendants.
 export { ancestorsOf, descendantsOf, parentsOf } from "./lineage.js";
 export { famineAt, warAt } from "./mortality.js";
+// Nobility (§ nobility): real royal lines (sovereignAt is a data lookup) and
+// generated noble houses — the honour's baronial line and each manor's
+// year-resolvable lord line, anchored to the fief card's static lord name.
+export {
+  ANCHOR_YEAR,
+  honourFamilyOf,
+  honourHeadAt,
+  honourLineOf,
+  lordOfManorAt,
+  manorLineOf,
+  ROYAL_LINES,
+  royalLineOf,
+  royalWorldEvents,
+  sovereignAt,
+} from "./nobility.js";
 export { randomCitizen, roster } from "./roster.js";
 export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";
 // Temporal resolver (§ year layer): the village population/households AS OF a year.
@@ -53,12 +68,16 @@ export type {
   EventRef,
   Fief,
   Jurisdiction,
+  LordTenure,
+  NobleLine,
   Person,
   PersonAddress,
   Region,
+  Reign,
   RelativeRef,
   Rng,
   RosterRow,
+  RoyalLine,
   Sex,
   SocialClass,
   SolveDiagnostics,

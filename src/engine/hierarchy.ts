@@ -18,8 +18,8 @@
 import type { Locale } from "../i18n/locale.js";
 import { JURISDICTIONS, SAINTS } from "./data/jurisdictions.js";
 import { placeShortOf } from "./data/placeNames.js";
-import { REGIONS } from "./data/regions.js";
 import { addrHash, makeRng } from "./hash.js";
+import { ANCHOR_YEAR, honourFamilyOf, lordOfManorAt } from "./nobility.js";
 import type { Fief, Jurisdiction } from "./types.js";
 
 // ---- ecclesiastical tree: province > diocese > deanery > parish ----
@@ -60,20 +60,14 @@ export function parishOf(worldSeed: number, regionKey: string, villageIdx: numbe
 // ---- feudal tree: earldom > honour > manor ----
 // Manors are one-per-village (the usual case); honours cluster a
 // neighbourhood of manors under one baronial family, independently of
-// where parish boundaries fall — the whole point of the exercise.
-const HONOUR_CLUSTER = 9;
-
+// where parish boundaries fall — the whole point of the exercise. The
+// family draws themselves live in nobility.ts (§ nobility) now, which
+// grows them into full dynastic lines; the fief card's `lord` is the
+// mid-register (ANCHOR_YEAR) head of the manor's line, which by the
+// anchoring contract is the exact name this function always produced.
 export function manorOf(worldSeed: number, regionKey: string, villageIdx: number, locale: Locale): Fief {
-  const region = REGIONS[regionKey];
-  const j = JURISDICTIONS[regionKey];
-  const block = Math.floor(villageIdx / HONOUR_CLUSTER);
-  const hRng = makeRng(addrHash(worldSeed, [regionKey, "honour-block", block]));
-  const earldom = hRng.pick(j.earldoms);
-  const honourLord = hRng.pick(region.surnames);
-  const mRng = makeRng(addrHash(worldSeed, [regionKey, "manor", villageIdx]));
-  const lordFirst = mRng.pick(region.maleNames);
-  const lordSurname = mRng.chance(0.5) ? honourLord : mRng.pick(region.surnames);
-  const lord = `${lordFirst} ${lordSurname}`;
+  const { earldom, surname: honourLord } = honourFamilyOf(worldSeed, regionKey, villageIdx);
+  const lord = lordOfManorAt(worldSeed, regionKey, villageIdx, ANCHOR_YEAR).name;
   const place = placeShortOf(worldSeed, regionKey, villageIdx);
   return locale === "ca"
     ? { manor: `la senyoria de ${place}`, honour: `l'honor de ${honourLord}`, earldom: `el comtat de ${earldom}`, lord }

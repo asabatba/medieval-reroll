@@ -42,6 +42,7 @@ import { manorOf, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
 import { famineAt, warAt } from "./mortality.js";
+import { lordOfManorAt, manorLineOf, royalWorldEvents, sovereignAt } from "./nobility.js";
 import { inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
@@ -510,6 +511,9 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       // a lord she in fact never lived under as a child.
       const wardEnv = fatherEnvForOcc ?? env;
       const wardFief = manorOf(wardEnv.worldSeed, wardEnv.regionKey, wardEnv.villageIdx, locale);
+      // § nobility: the granting lord is the head of that manor's line in
+      // the orphaning year, not the fief card's mid-register anchor.
+      const wardLord = lordOfManorAt(wardEnv.worldSeed, wardEnv.regionKey, wardEnv.villageIdx, orphanedAt).name;
       const wardCite = citeDocument(
         "court",
         { jurisdiction: parishOf(wardEnv.worldSeed, wardEnv.regionKey, wardEnv.villageIdx, locale), fief: wardFief, place: wardEnv.place[locale] },
@@ -519,8 +523,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         orphanedAt,
         wealth >= 4
           ? ca
-            ? `Orfe de pare i mare, la tutela de la seva persona i de la seva terra va ser atorgada per ${wardFief.lord} a un parent, que en cobraria els fruits fins que arribés a la majoria d'edat.`
-            : `Orphaned of both parents, wardship of ${pos} person and land was granted by ${wardFief.lord} to a kinsman, who would take the profits of the holding until ${obj} came of age.`
+            ? `Orfe de pare i mare, la tutela de la seva persona i de la seva terra va ser atorgada per ${wardLord} a un parent, que en cobraria els fruits fins que arribés a la majoria d'edat.`
+            : `Orphaned of both parents, wardship of ${pos} person and land was granted by ${wardLord} to a kinsman, who would take the profits of the holding until ${obj} came of age.`
           : ca
             ? `Orfe de pare i mare, el van acollir uns parents, com va quedar constatat quan la cort del senyoriu va confirmar qui responia ara pels drets de la casa.`
             : `Orphaned of both parents, ${p.name} was taken in by kin, as the manor court noted when it confirmed who now answered for the household's dues.`,
@@ -749,8 +753,12 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       // recorded somewhere earlier in her life (same-shape fix as the
       // maritalGate occupation entries above: a fact tied to a real event
       // must be checked against that event's own year, not "ever true").
+      // § nobility: the lord named is the one actually holding the manor in
+      // the marriage year — a court roll dated that year names that head of
+      // the line, not the fief card's mid-register anchor.
+      const merchetLord = lordOfManorAt(env.worldSeed, env.regionKey, env.villageIdx, c.year).name;
       if (p.cls === "serf" && p.sex === "F" && father && father.death.year > c.year)
-        extra = ca ? ` El seu pare va pagar a ${fief.lord} el dret per casar-la.` : ` Her father paid merchet to ${fief.lord} for licence to marry.`;
+        extra = ca ? ` El seu pare va pagar a ${merchetLord} el dret per casar-la.` : ` Her father paid merchet to ${merchetLord} for licence to marry.`;
       if (s.incomer && p.sex === "M") {
         extra = s.origin
           ? ca
@@ -1039,6 +1047,40 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
   }
 
+  // § nobility: royal accessions and depositions, derived from ROYAL_LINES
+  // (real history, not dice) — same shape and gating as the world events
+  // above, appended after them so their rng draws stay in a fixed order.
+  for (const w of royalWorldEvents(locale)) {
+    if (w[1] < p.birth + w[3] || w[0] > p.death.year) continue;
+    if (w[2] && !w[2].includes(env.regionKey)) continue;
+    if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
+  }
+
+  // § nobility: a change of lord was parish news — homage sworn anew, the
+  // relief taken, the court held under a new name. The successions are read
+  // from the manor's own lord line, so every villager who mentions one
+  // agrees on who died and who entered.
+  {
+    const line = manorLineOf(env.worldSeed, env.regionKey, env.villageIdx);
+    const succ = line.heads
+      .slice(1)
+      .map((h, i) => ({ h, old: line.heads[i] }))
+      .filter(({ h }) => h.acceded >= Math.max(p.birth + 10, 1292) && h.acceded <= p.death.year);
+    if (succ.length && rng.chance(0.35)) {
+      const { h, old } = rng.pick(succ);
+      const died =
+        old.cause === "war" ? (ca ? " a la guerra del rei" : " in the king's wars") : old.cause === "plague" ? (ca ? " en la mortaldat" : " in the pestilence") : "";
+      ev(
+        h.acceded,
+        ca
+          ? `El vell senyor ${old.name} morí${died}, i ${h.name} entrà en la senyoria; els tinents renovaren l'homenatge i la cort cobrà els seus drets.`
+          : `The old lord ${old.name} died${died}, and ${h.name} entered the lordship; the tenants did homage anew and the court took its reliefs.`,
+        "life",
+        cite("court"),
+      );
+    }
+  }
+
   // Pilgrimage
   if (p.death.age >= 28 && rng.chance(0.18)) {
     const y = p.birth + rng.int(25, Math.min(55, p.death.age - 1));
@@ -1096,6 +1138,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     wealth,
     place: env.place[locale],
     region: region.name[locale],
+    sovereign: sovereignAt(env.regionKey, p.birth)?.style[locale] ?? "",
     literate,
     inOrders: !!p.inOrders,
     incomer: !!p.incomer,
@@ -1170,10 +1213,12 @@ export function fatherOccupation(env: Envelope, fatherId: number, locale: Locale
   if (fatherId < 0) return null;
   const f = env.persons[fatherId];
   const rng = makeRng(personStream(env.vHash, 60000, fatherId));
-  const fief = manorOf(env.worldSeed, env.regionKey, env.villageIdx, locale);
+  // § nobility: the lord he held of is the head of the manor's line in his
+  // own working prime, not the fief card's mid-register anchor.
+  const lord = lordOfManorAt(env.worldSeed, env.regionKey, env.villageIdx, Math.min(f.death.year, f.birth + 30)).name;
   return rng
     .pick(FATHER_OCC[locale][f.cls])
     .replace("{land}", rng.int(CLASS_INFO[f.cls].wealth >= 2 ? 12 : 5, CLASS_INFO[f.cls].wealth >= 2 ? 40 : 15) + " " + env.region.landUnit[locale])
     .replace("{craft}", rng.pick(CRAFTS[locale]))
-    .replace(/\{lord\}/g, fief.lord);
+    .replace(/\{lord\}/g, lord);
 }

@@ -33,6 +33,7 @@ interface UiStrings {
   manor: string;
   honour: string;
   lord: string;
+  sovereign: string;
   parentage: string;
   father: string;
   mother: string;
@@ -118,6 +119,7 @@ export const UI: Record<Locale, UiStrings> = {
     manor: "Manor",
     honour: "Honour",
     lord: "Lord",
+    sovereign: "Sovereign",
     parentage: "Parentage",
     father: "Father",
     mother: "Mother",
@@ -200,6 +202,7 @@ export const UI: Record<Locale, UiStrings> = {
     manor: "Senyoriu",
     honour: "Honor",
     lord: "Senyor",
+    sovereign: "Sobirà",
     parentage: "Filiació",
     father: "Pare",
     mother: "Mare",

@@ -3,7 +3,7 @@ import type { Locale } from "../i18n/locale.js";
 import { decodePerson, fatherOccupation } from "./biography.js";
 import { CLASS_INFO } from "./data/classes.js";
 import { REGIONS } from "./data/regions.js";
-import { manorOf } from "./hierarchy.js";
+import { lordOfManorAt } from "./nobility.js";
 import { isFirstBornSon } from "./succession.js";
 import { resolveVillage } from "./village.js";
 
@@ -489,15 +489,17 @@ describe("§ age text removed from event prose", () => {
           const originEnv = resolveVillage(1444, p.origin.regionKey, p.origin.villageIdx);
           const native = originEnv.persons[p.originId];
           if (!native || native.father < 0 || native.mother < 0) continue;
-          const destFief = manorOf(1444, regionKey, villageIdx, "en");
-          const originFief = manorOf(1444, p.origin.regionKey, p.origin.villageIdx, "en");
-          if (destFief.lord === originFief.lord) continue; // can't distinguish by name; skip
           const bio = decodePerson(env, p.id, "en")!;
           const e = bio.events.find((e) => e.text.includes("wardship of"));
           if (!e) continue;
+          // § nobility: the granting lord is year-resolved from the manor's
+          // lord line — compare at the event's own (orphaning) year.
+          const destLord = lordOfManorAt(1444, regionKey, villageIdx, e.year).name;
+          const originLord = lordOfManorAt(1444, p.origin.regionKey, p.origin.villageIdx, e.year).name;
+          if (destLord === originLord) continue; // can't distinguish by name; skip
           seen++;
-          expect(e.text).toContain(originFief.lord);
-          expect(e.text).not.toContain(destFief.lord);
+          expect(e.text).toContain(originLord);
+          expect(e.text).not.toContain(destLord);
         }
       }
     }

@@ -188,6 +188,50 @@ export interface Fief {
   lord: string;
 }
 
+// ---- nobility (§ nobility): kings, noble houses, royal lines ----
+/** How a reign ended — picks the generic accession-news template when no
+ * hand-written `accession` text overrides it. */
+export type ReignEnd = "died" | "deposed" | "killed";
+
+export interface Reign {
+  /** First and last regnal year (inclusive). On a transition year the incoming reign wins the lookup. */
+  from: number;
+  to: number;
+  name: LocalText;
+  /** Dynasty; null for interregna and republican regimes. */
+  house: LocalText | null;
+  /** Full style usable mid-sentence: "King Edward III" / "el rei Eduard III". */
+  style: LocalText;
+  end?: ReignEnd;
+  interregnum?: boolean;
+  /** Republican regime (Florence) — suppresses king-shaped generic accession text. */
+  republic?: boolean;
+  /** Hand-written accession-news sentence, overriding the generic template. */
+  accession?: LocalText;
+}
+
+export interface RoyalLine {
+  title: LocalText;
+  reigns: Reign[];
+}
+
+/** One head of a generated noble line; holds the lordship over [acceded, died). */
+export interface LordTenure {
+  name: string;
+  born: number;
+  acceded: number;
+  died: number;
+  /** Relation to the previous head ("founder" for the first). */
+  relation: "founder" | "son" | "brother" | "nephew";
+  cause: "war" | "plague" | "oldage";
+}
+
+/** A generated noble family: the honour's baronial house or a manor's lord line. */
+export interface NobleLine {
+  surname: string;
+  heads: LordTenure[];
+}
+
 export type DocumentKind = "reg" | "court" | "account" | "will" | "chron" | "coroner";
 
 export interface DocumentContext {
@@ -264,6 +308,8 @@ export interface Bio {
   wealth: number;
   place: string;
   region: string;
+  /** Style of the sovereign reigning in the birth year (§ nobility) — "King Edward III", or Florence's regime. */
+  sovereign: string;
   literate: boolean;
   inOrders: boolean;
   incomer: boolean;
