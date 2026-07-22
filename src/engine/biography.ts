@@ -1274,6 +1274,28 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const dSrc = riskPool || (p.death.cause === "disease" && CORONER_DEATHS[locale].has(dd)) ? cite("coroner") : cite("reg");
   ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
 
+  // § record scarcity: sometimes texture, world events, and marriage all
+  // simply fail to roll — a genuine gap, not a bug, since the same is true
+  // of real parish registers. Left silent it reads as a broken/empty
+  // biography rather than the record scarcity it actually is. A longer
+  // life had more chances to pick up entries, so "thin" is relative to
+  // age, not a flat count: floor rises by one roughly every 20 years lived
+  // (capped at +3), so this only flags genuine bottom-of-the-barrel luck,
+  // not the ordinary short record of someone who simply died young — the
+  // same move already made for founders (§ pre-register) and incomers (§
+  // recorded elsewhere), extended to cover "recorded nowhere in between".
+  const thinFloor = 2 + Math.min(3, Math.floor(p.death.age / 20));
+  if (events.length <= thinFloor && p.death.age >= 15) {
+    ev(
+      p.birth + Math.ceil((p.death.age + 1) / 2),
+      ca
+        ? `El registre no diu res més de la seva vida entre l'entrada de naixement i la d'enterrament — un temps ordinari que ningú no va creure que calgués anotar.`
+        : `The register says nothing more of ${pos} life between the entry of birth and the one of burial — an ordinary span nobody thought worth a line.`,
+      "life",
+      cite("reg"),
+    );
+  }
+
   events.sort((a, b) => a.year - b.year || (a.kind === "birth" ? -1 : a.kind === "death" ? 1 : 0));
 
   // § nobility links: every sovereign named ANYWHERE in the chronicle —
