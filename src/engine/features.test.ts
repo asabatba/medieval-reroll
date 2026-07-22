@@ -92,9 +92,9 @@ describe("§ illegitimacy", () => {
     }
   });
 
-  it("is excluded from heirOf, even when chronologically the eldest son", () => {
+  it("is excluded from heirOf UNLESS legitimated outside England (§ legitimation)", () => {
     for (const { env, p } of allIllegitimate()) {
-      if (p.sex !== "M") continue;
+      if (p.sex !== "M" || (p.legitimated && env.regionKey !== "england")) continue;
       const father = env.persons[p.father];
       // father must actually predecease this person for heirOf(father) to be checkable
       if (father.death.year >= p.death.year) continue;
@@ -103,9 +103,9 @@ describe("§ illegitimacy", () => {
     }
   });
 
-  it("isFirstBornSon is always false for a natural son, regardless of birth order among his father's other sons", () => {
+  it("isFirstBornSon is always false for an UNLEGITIMATED natural son, regardless of birth order among his father's other sons", () => {
     for (const { env, p } of allIllegitimate()) {
-      if (p.sex !== "M") continue;
+      if (p.sex !== "M" || (p.legitimated && env.regionKey !== "england")) continue;
       expect(isFirstBornSon(env, p.id)).toBe(false);
     }
   });
@@ -266,5 +266,164 @@ describe("§ nobility crosslink (gentry kinship to the manor's lord line)", () =
       }
     }
     expect(sawKinship).toBeGreaterThan(0);
+  });
+});
+
+describe("§ legitimation (per subsequens matrimonium)", () => {
+  function allLegitimated(regionKey: string, n: number): { env: Envelope; p: Envelope["persons"][number] }[] {
+    const out: { env: Envelope; p: Envelope["persons"][number] }[] = [];
+    for (const env of sampleEnvs(regionKey, n)) for (const p of env.persons) if (p.legitimated) out.push({ env, p });
+    return out;
+  }
+
+  it("some legitimations happen across a wide sample", () => {
+    expect(allLegitimated("england", 300).length).toBeGreaterThan(0);
+  });
+
+  it("her parents are actually married to each other, and she is spliced into that couple's own children", () => {
+    for (const { env, p } of allLegitimated("england", 300)) {
+      expect(p.illegitimate).toBe(true); // the birth itself stays a historical fact
+      expect(p.legitimatedYear).toBeGreaterThan(p.birth);
+      const father = env.persons[p.father];
+      const marriageCouple = (father.unions ?? []).map((ci) => env.couples[ci]).find((c) => c.wife === p.mother);
+      expect(marriageCouple).toBeDefined();
+      expect(marriageCouple!.year).toBe(p.legitimatedYear);
+      expect(marriageCouple!.children).toContain(p.id);
+    }
+  });
+
+  it("is excluded from childrenOf's separate illegitimate-scan (never listed twice)", () => {
+    for (const { env, p } of allLegitimated("england", 300)) {
+      const viaMother = childrenOf(env, p.mother).filter((c) => c.id === p.id);
+      expect(viaMother.length).toBe(1);
+    }
+  });
+
+  it("restores heir eligibility outside England, but NOT inside it (Statute of Merton, 1236)", () => {
+    // Castile: legitimation should be able to actually win heirOf when she's
+    // the eldest surviving child and her father predeceases her.
+    let sawRestoredHeir = 0;
+    for (const { env, p } of allLegitimated("castile", 300)) {
+      const father = env.persons[p.father];
+      if (father.death.year >= p.death.year || p.emigrated || p.inOrders) continue;
+      if (heirOf(env, father.id)?.id === p.id) sawRestoredHeir++;
+    }
+    expect(sawRestoredHeir).toBeGreaterThan(0);
+
+    // England: never — even legitimated, she can never win heirOf there.
+    for (const { env, p } of allLegitimated("england", 300)) {
+      const father = env.persons[p.father];
+      if (father.death.year >= p.death.year) continue;
+      expect(heirOf(env, father.id)?.id).not.toBe(p.id);
+    }
+  });
+
+  it("her biography narrates the parents' later marriage, with England's carve-out worded distinctly", () => {
+    // ev() (biography.ts) suppresses any event dated after the subject's own
+    // death — skip the rare case where she died before her parents' wedding
+    // (the `legitimated` flag is still set, harmlessly, but there's nothing
+    // to narrate on a page that ends before that year).
+    const candidates = allLegitimated("england", 100)
+      .concat(allLegitimated("castile", 100))
+      .filter(({ p }) => p.legitimatedYear! <= p.death.year);
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const { env, p } of candidates) {
+      const bio = decodePerson(env, p.id, "en")!;
+      const eventText = bio.events.find((e) => e.year === p.legitimatedYear && e.text.includes("married"))?.text ?? "";
+      expect(eventText.length).toBeGreaterThan(0);
+      if (env.regionKey === "england") expect(eventText).toContain("English law recognized no inheritance right");
+      else expect(eventText).toContain("legitimate");
+    }
+  });
+});
+
+describe("§ affinity (in-law marriage impediment)", () => {
+  function allAffinalCouples(regionKey: string, n: number): { env: Envelope; couple: Envelope["couples"][number] }[] {
+    const out: { env: Envelope; couple: Envelope["couples"][number] }[] = [];
+    for (const env of sampleEnvs(regionKey, n)) for (const couple of env.couples) if (couple.affinal) out.push({ env, couple });
+    return out;
+  }
+
+  it("some affinal remarriages exist across a wide sample", () => {
+    expect(allAffinalCouples("england", 300).length).toBeGreaterThan(0);
+  });
+
+  it("the new spouse genuinely shares a parent with the OTHER spouse's own previous union partner", () => {
+    for (const { env, couple } of allAffinalCouples("england", 300)) {
+      const H = env.persons[couple.husband];
+      const W = env.persons[couple.wife];
+      // one of them must have an earlier union (this being a remarriage for at least one side)
+      const hPrevUnions = (H.unions ?? []).filter((ci) => ci !== env.couples.indexOf(couple));
+      const wPrevUnions = (W.unions ?? []).filter((ci) => ci !== env.couples.indexOf(couple));
+      const sharesParent = (a: Envelope["persons"][number], b: Envelope["persons"][number]) =>
+        (a.father !== -1 && a.father === b.father) || (a.mother !== -1 && a.mother === b.mother);
+      const hSideMatch = wPrevUnions.some((ci) => {
+        const prevSpouse = env.persons[env.couples[ci].husband === W.id ? env.couples[ci].wife : env.couples[ci].husband];
+        return sharesParent(H, prevSpouse);
+      });
+      const wSideMatch = hPrevUnions.some((ci) => {
+        const prevSpouse = env.persons[env.couples[ci].husband === H.id ? env.couples[ci].wife : env.couples[ci].husband];
+        return sharesParent(W, prevSpouse);
+      });
+      expect(hSideMatch || wSideMatch).toBe(true);
+    }
+  });
+
+  it("the marriage narrative names the affinity and the dispensation", () => {
+    let checked = 0;
+    for (const { env, couple } of allAffinalCouples("england", 300)) {
+      const H = env.persons[couple.husband];
+      const bio = decodePerson(env, H.id, "en")!;
+      const marriageEvent = bio.events.find((e) => e.kind === "marriage" && e.year === couple.year);
+      expect(marriageEvent?.text.toLowerCase()).toContain("dispensation");
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe("§ multiple births: elevated twin infant mortality", () => {
+  it("twins die in infancy at a noticeably higher rate than singleton siblings, across a wide sample", () => {
+    let twinBirths = 0,
+      twinInfantDeaths = 0,
+      singletonBirths = 0,
+      singletonInfantDeaths = 0;
+    for (let villageIdx = 0; villageIdx < 300; villageIdx++) {
+      const env = resolveVillage(SEED, "france", villageIdx);
+      for (const p of env.persons) {
+        if (p.founder || p.father < 0) continue;
+        if (p.twinOf != null) {
+          twinBirths++;
+          if (p.death.age === 0) twinInfantDeaths++;
+        } else {
+          singletonBirths++;
+          if (p.death.age === 0) singletonInfantDeaths++;
+        }
+      }
+    }
+    expect(twinBirths).toBeGreaterThan(30);
+    const twinRate = twinInfantDeaths / twinBirths;
+    const singletonRate = singletonInfantDeaths / singletonBirths;
+    expect(twinRate).toBeGreaterThan(singletonRate);
+  });
+});
+
+describe("§ miscarriage/stillbirth texture", () => {
+  it("appears for some married women, including some with no live children at all", () => {
+    let sawLoss = 0;
+    let sawChildlessLoss = 0;
+    for (let villageIdx = 0; villageIdx < 100; villageIdx++) {
+      const env = resolveVillage(SEED, "england", villageIdx);
+      for (const p of env.persons) {
+        if (p.sex !== "F" || !p.unions?.length) continue;
+        const bio = decodePerson(env, p.id, "en")!;
+        const lossEvent = bio.events.find((e) => /lost a child before its time|stillborn/.test(e.text));
+        if (!lossEvent) continue;
+        sawLoss++;
+        if (bio.children.length === 0) sawChildlessLoss++;
+      }
+    }
+    expect(sawLoss).toBeGreaterThan(0);
+    expect(sawChildlessLoss).toBeGreaterThan(0);
   });
 });

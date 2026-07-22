@@ -11,30 +11,43 @@
 // =====================================================================
 import type { Envelope, Person } from "./types.js";
 
+/** § legitimation: whether `q` counts as heir-eligible in `env`'s region —
+ * either never illegitimate, or illegitimate but legitimated by her natural
+ * parents' later marriage, EXCEPT in England, where the Statute of Merton
+ * (1236) had common law refuse to recognize legitimation per subsequens
+ * matrimonium for inheritance (village.ts's heirEligible is the Tier-1
+ * mirror of this same rule). */
+function heirEligible(q: Person, env: Envelope): boolean {
+  return !q.illegitimate || !!(q.legitimated && env.regionKey !== "england");
+}
+
 /** All children of a person across every union, in birth order — plus any
- * § illegitimate child (village.ts's rollIllegitimateBirths), found by a
- * direct father/mother scan since a natural child's parents were never
- * actually married and so belong to no Couple at all. Genealogically a real
- * child either way (siblings, descendantsOf); heirOf below is what actually
- * excludes her from inheritance. */
+ * § illegitimate child NOT already covered by a union (village.ts's
+ * rollIllegitimateBirths), found by a direct father/mother scan since an
+ * unlegitimated natural child's parents were never actually married and so
+ * belongs to no Couple at all. A LEGITIMATED child (her parents did marry)
+ * is already spliced into that marriage's own Couple.children by village.ts,
+ * so she's excluded from this second scan to avoid listing her twice.
+ * Genealogically a real child either way (siblings, descendantsOf); heirOf
+ * below is what actually excludes an unlegitimated one from inheritance. */
 export function childrenOf(env: Envelope, id: number): Person[] {
   const p = env.persons[id];
   if (!p) return [];
   const out: Person[] = [];
   if (p.unions) for (const ci of p.unions) for (const cid of env.couples[ci].children) out.push(env.persons[cid]);
-  for (const q of env.persons) if (q.illegitimate && (q.father === id || q.mother === id)) out.push(q);
+  for (const q of env.persons) if (q.illegitimate && !q.legitimated && (q.father === id || q.mother === id)) out.push(q);
   out.sort((a, b) => a.birth - b.birth || a.id - b.id);
   return out;
 }
 
 /** The heir to `deceasedId`'s holding at the moment of their death, or null
- * (no surviving issue — the holding passes to the spouse or escheats). A
- * § illegitimate child is never the heir absent a formal legitimation this
- * model doesn't represent. */
+ * (no surviving issue — the holding passes to the spouse or escheats). An
+ * unlegitimated § illegitimate child is never the heir; a legitimated one is
+ * treated exactly like any other child, except in England (heirEligible). */
 export function heirOf(env: Envelope, deceasedId: number): Person | null {
   const p = env.persons[deceasedId];
   if (!p) return null;
-  const kids = childrenOf(env, deceasedId).filter((c) => c.death.year > p.death.year && !c.emigrated && !c.inOrders && !c.illegitimate);
+  const kids = childrenOf(env, deceasedId).filter((c) => c.death.year > p.death.year && !c.emigrated && !c.inOrders && heirEligible(c, env));
   const son = kids.find((c) => c.sex === "M");
   if (son) return son;
   return kids[0] ?? null;
@@ -59,10 +72,10 @@ export function inheritedFromFather(env: Envelope, personId: number): boolean {
 export function isFirstBornSon(env: Envelope, personId: number): boolean {
   const p = env.persons[personId];
   if (p?.sex !== "M") return true;
-  if (p.illegitimate) return false; // § illegitimacy: never the presumed heir
+  if (!heirEligible(p, env)) return false; // § illegitimacy/legitimation
   if (p.father < 0) return true; // no father on record: no inheritance question
   for (const q of env.persons) {
-    if (q.id === p.id || q.father !== p.father || q.sex !== "M" || q.illegitimate) continue;
+    if (q.id === p.id || q.father !== p.father || q.sex !== "M" || !heirEligible(q, env)) continue;
     if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
   }
   return true;

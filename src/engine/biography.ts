@@ -306,7 +306,15 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
 
   // Natal couple: with remarriage a father can head several couples, so
   // find the one whose wife is this person's own mother.
-  const natalIdx = p.father >= 0 ? (env.persons[p.father].unions ?? []).find((ci) => env.couples[ci].wife === p.mother) : undefined;
+  // § illegitimacy/legitimation: an unlegitimated natural child belongs to
+  // no Couple of her parents', even if they happen to marry EACH OTHER
+  // later for unrelated reasons (the ordinary market, not village.ts's own
+  // immediate legitimation check) — without this guard the lookup below
+  // would find that unrelated marriage by pure (father, mother) id match and
+  // wrongly hand her its actual children as "siblings" (snapshot.ts's
+  // orphan-grouping has the identical guard, for the identical reason).
+  const natalIdx =
+    p.father >= 0 && !(p.illegitimate && !p.legitimated) ? (env.persons[p.father].unions ?? []).find((ci) => env.couples[ci].wife === p.mother) : undefined;
   const natal = natalIdx != null ? env.couples[natalIdx] : null;
   const siblings = natal ? natal.children.filter((cid) => cid !== id).map((cid) => env.persons[cid]) : [];
 
@@ -408,6 +416,28 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       cite("court"),
       [nameRef(mother!, selfAddr), nameRef(father!, selfAddr, false)],
     );
+    // § legitimation: her parents married each other after all (village.ts's
+    // rollIllegitimateBirths) — canon law and most secular custom treated
+    // her as legitimate from that day (per subsequens matrimonium), EXCEPT
+    // in England, where the Statute of Merton (1236) had English common law
+    // refuse to recognize it for inheritance — she'd still be reckoned
+    // legitimate by the Church, but never by the manor court that decided
+    // who took the holding.
+    if (p.legitimated && p.legitimatedYear != null) {
+      ev(
+        p.legitimatedYear,
+        env.regionKey === "england"
+          ? ca
+            ? `El seu pare i la seva mare es van casar l'any ${p.legitimatedYear}. L'Església la tenia per legítima des d'aquell dia — però la cort del senyor, no: la llei anglesa no reconeixia cap dret d'herència a un fill nascut abans de les noces.`
+            : `Her parents married in ${p.legitimatedYear}. The Church accounted her legitimate from that day — the manor court did not: English law recognized no inheritance right in a child born before the wedding.`
+          : ca
+            ? `El seu pare i la seva mare es van casar l'any ${p.legitimatedYear}, i des d'aquell dia va ser tinguda per legítima, com qualsevol altre fill del matrimoni.`
+            : `Her parents married in ${p.legitimatedYear}, and from that day she was accounted legitimate, fit to inherit like any other child of the marriage.`,
+        "fortune",
+        cite("court"),
+        [nameRef(father!, selfAddr), nameRef(mother!, selfAddr, false)],
+      );
+    }
   } else {
     // Native-born, non-founder: both parents are guaranteed present by
     // construction (only founders/fabricated incomers have father/mother -1).
@@ -819,6 +849,18 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         extra += ca
           ? ` Eren cosins germans; calgué una dispensa del bisbe per casar-los.`
           : ` They were first cousins; a bishop's dispensation was needed for the match.`;
+      // § affinity: this is P's own FIRST marriage (i===0), but it can still
+      // be S's REMARRIAGE — meaning P himself is the one who turns out to be
+      // a sibling of S's own late first spouse (village.ts's isAffinal put
+      // the "new" party in that role either way). Symmetric to the
+      // remarriage-branch wording further down, just from the other side.
+      if (c.affinal) {
+        const sibWord = p.sex === "M" ? (ca ? "germà" : "brother") : ca ? "germana" : "sister";
+        const lateWord = s.sex === "F" ? (ca ? "del seu difunt marit" : "of her late husband") : ca ? "de la seva difunta esposa" : "of his late wife";
+        extra += ca
+          ? ` {{Ell/Ella}} era ${sibWord} ${lateWord}; calgué una dispensa per aquest parentiu.`
+          : ` {{He/She}} was a ${sibWord} ${lateWord}; a dispensation was needed for the match.`;
+      }
       // § nobility links: the merchet lord is clickable — to his own lord
       // page, not to any register record (a lord has none).
       const mRefs = [nameRef(s, selfAddr)];
@@ -864,11 +906,23 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? ` Eren cosins germans; calgué una dispensa del bisbe per casar-los.`
           : ` They were first cousins; a bishop's dispensation was needed for the match.`
         : "";
+      // § affinity: `s` is a sibling of p's own LATE spouse (village.ts's
+      // isAffinal) — kin by marriage, not blood, but canon law still
+      // required a dispensation for it, same as consanguinity above.
+      const affinalText = c.affinal
+        ? (() => {
+            const sibWord = s.sex === "M" ? (ca ? "germà" : "brother") : ca ? "germana" : "sister";
+            const lateWord = p.sex === "M" ? (ca ? "de la seva difunta esposa" : "of his late wife") : ca ? "del seu difunt marit" : "of her late husband";
+            return ca
+              ? ` ${sName} era ${sibWord} ${lateWord}; calgué una dispensa per aquest parentiu.`
+              : ` ${sName} was a ${sibWord} ${lateWord}; a dispensation was needed for the match.`;
+          })()
+        : "";
       ev(
         c.year,
         ca
-          ? `Es va tornar a casar, amb ${sName}: una casa no es podia portar sola, i el dol durava el que durava.${consangText}`
-          : `Married again, to ${sName}: a household could not be run alone, and mourning lasted only as long as it could afford to.${consangText}`,
+          ? `Es va tornar a casar, amb ${sName}: una casa no es podia portar sola, i el dol durava el que durava.${consangText}${affinalText}`
+          : `Married again, to ${sName}: a household could not be run alone, and mourning lasted only as long as it could afford to.${consangText}${affinalText}`,
         "marriage",
         undefined,
         [nameRef(s, selfAddr)],

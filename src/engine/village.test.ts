@@ -169,14 +169,18 @@ describe("resolveVillage invariants", () => {
     }
   });
 
-  it("children are born after their parents' marriage and before either parent dies", () => {
+  it("children are born after their parents' marriage and before either parent dies (except a § legitimation splice, born before by definition)", () => {
     for (const env of envs) {
       for (const c of env.couples) {
         const H = env.persons[c.husband];
         const W = env.persons[c.wife];
         for (const cid of c.children) {
           const child = env.persons[cid];
-          expect(child.birth).toBeGreaterThan(c.year);
+          if (child.legitimated) {
+            expect(child.birth).toBeLessThan(c.year); // she predates the marriage that legitimated her, by definition
+          } else {
+            expect(child.birth).toBeGreaterThan(c.year);
+          }
           expect(child.birth).toBeLessThan(H.death.year);
           expect(child.birth).toBeLessThan(W.death.year);
         }

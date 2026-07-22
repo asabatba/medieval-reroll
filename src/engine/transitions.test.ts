@@ -69,12 +69,16 @@ describe("§ male out-migration", () => {
     for (const env of envs) {
       const byFather = new Map<number, number[]>();
       for (const p of env.persons) {
-        // § illegitimacy: a natural son is unconditionally excluded from
-        // presumed-heir birth-order reckoning (isFirstBornSon returns false
-        // for him regardless of birth year) — an orthogonal exclusion this
-        // birth-order sanity check isn't about, so he's left out of the
-        // competing group entirely rather than expected to satisfy it.
-        if (p.sex !== "M" || p.father < 0 || p.illegitimate) continue;
+        // § illegitimacy/legitimation: an unlegitimated natural son is
+        // unconditionally excluded from presumed-heir birth-order reckoning
+        // (isFirstBornSon returns false regardless of birth year) — an
+        // orthogonal exclusion this birth-order sanity check isn't about, so
+        // he's left out of the competing group entirely rather than expected
+        // to satisfy it. A LEGITIMATED son (outside England — the Statute of
+        // Merton carve-out), though, is fully back in the birth-order
+        // reckoning, so he stays in the group like any other son.
+        const heirEligible = !p.illegitimate || (p.legitimated && env.regionKey !== "england");
+        if (p.sex !== "M" || p.father < 0 || !heirEligible) continue;
         (byFather.get(p.father) ?? byFather.set(p.father, []).get(p.father)!).push(p.id);
       }
       for (const [, sons] of byFather) {
@@ -177,7 +181,7 @@ describe("§ regional inheritance customs (partible vs impartible)", () => {
         // in the non-heir bucket that would dilute this specifically
         // birth-order-driven comparison.
         if (p.sex !== "M" || p.founder || p.father < 0 || p.illegitimate) continue;
-        if (isHeir(env.persons, region, p)) {
+        if (isHeir(env.persons, region, regionKey, p)) {
           heirTotal++;
           if (p.emigrated) heirEmig++;
         } else {

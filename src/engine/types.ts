@@ -86,6 +86,19 @@ export interface Person {
    * inheritance (heirOf) or birth-order heir reckoning (isFirstBornSon,
    * eldestSonOf) — the historical default absent a formal legitimation. */
   illegitimate?: boolean;
+  /** § legitimation: her natural parents (illegitimate=true) later actually
+   * married each other ("per subsequens matrimonium") — canon law and most
+   * secular custom then treated her as legitimate from birth. Recorded as a
+   * separate flag rather than clearing `illegitimate` (the birth itself
+   * stays a historical fact) because ENGLAND is a deliberate exception: the
+   * Statute of Merton (1236) had English common law refuse to recognize
+   * this for inheritance, so heirOf/isFirstBornSon/eldestSonOf must still
+   * read `env.regionKey` to know whether `legitimated` actually restores
+   * heir eligibility here or not. */
+  legitimated?: boolean;
+  /** § legitimation: the year her parents actually married — dates the
+   * narrative event distinctly from her birth. */
+  legitimatedYear?: number;
   /** § multiple births: the co-twin's id, when this person was one of a pair
    * born in the same year to the same couple. Symmetric — set on both. */
   twinOf?: number;
@@ -101,6 +114,12 @@ export interface Couple {
    * property in the family — just flagged so Tier 2 can narrate the
    * dispensation a marriage this close actually required after Lateran IV. */
   consanguineous?: boolean;
+  /** § affinity: one spouse is a sibling of the OTHER's own deceased first
+   * spouse (marrying a dead wife's sister / a dead husband's brother) — a
+   * remarriage-only impediment, canonically treated like consanguinity
+   * (dispensation required) despite there being no blood tie at all. Not
+   * blocked, same as consanguineous. */
+  affinal?: boolean;
 }
 
 export interface Region {

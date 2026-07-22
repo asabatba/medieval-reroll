@@ -624,6 +624,13 @@ export const FEMALE_EVENTS: Record<Locale, TextureEvent[]> = {
       1,
       "court",
     ],
+    // § miscarriage/stillbirth: pure texture — no Person, no place in the
+    // birth tally, gated the same as every other entry here (married, an
+    // adult woman) rather than on having any live children at all, so a
+    // childless married woman gets some narrative account of it rather than
+    // unexplained silence.
+    ["Lost a child before its time — the pregnancy came to nothing, and no name was ever given it.", 0.8, null],
+    ["Was brought to bed of a stillborn child, whom the priest would not baptize; it was buried outside the churchyard wall, unblessed.", 0.5, null],
   ],
   ca: [
     ["Va ser beneïda a l'església després de cada part, amb ciris i un àpat — el seu retorn al món marcat, com el de totes les mares.", 1, "hasChildren"],
@@ -632,6 +639,8 @@ export const FEMALE_EVENTS: Record<Locale, TextureEvent[]> = {
       1,
       "court",
     ],
+    ["Va perdre una criatura abans d'hora — l'embaràs no va arribar a bon terme, i no se li va arribar a donar cap nom.", 0.8, null],
+    ["Va infantar una criatura nascuda morta, que el rector no va voler batejar; la van enterrar fora del mur del cementiri, sense beneir.", 0.5, null],
   ],
 };
 export const OLD_EVENTS: Record<Locale, TextureEvent[]> = {

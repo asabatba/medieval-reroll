@@ -161,7 +161,7 @@ export function villageStateAt(env: Envelope, year: number): VillageState {
 
   // Pass 2 — the unmarried: orders, service, a living parent's roof, or an
   // orphaned sibling group holding the natal tenement.
-  const orphanGroups = new Map<number, Person[]>();
+  const orphanHids = new Set<number>();
   for (const p of unassigned) {
     const age = year - p.birth;
     const st: PersonState = {
@@ -191,21 +191,33 @@ export function villageStateAt(env: Envelope, year: number): VillageState {
     const mother = p.mother >= 0 ? env.persons[p.mother] : null;
     const parent = (father && states.has(father.id) ? father : null) ?? (mother && states.has(mother.id) ? mother : null);
     if (parent) {
-      // a parent always has a union (they had this child), so pass 1 housed them
+      // Usually a parent has a union (they had this child) and so was
+      // housed by pass 1 — but § illegitimacy means an unmarried mother can
+      // reach this same branch already housed by PASS 2 instead (her own
+      // orphan/solo household), which is exactly why headship below reads
+      // the household's actual membership rather than a separately-tracked
+      // list that only this branch's own natalIdx path used to populate.
       const ph = states.get(parent.id)!;
       st.householdId = ph.householdId;
       joinHousehold(ph.householdId, households.get(ph.householdId)?.headId ?? parent.id, p.id);
       continue;
     }
-    if (p.father >= 0) {
+    // § illegitimacy/legitimation: an unlegitimated natural child belongs to
+    // no Couple of her parents' — even if they happen to marry EACH OTHER
+    // later for unrelated reasons (the ordinary market, not village.ts's own
+    // immediate legitimation check), that marriage's `children` are a
+    // separate group she isn't spliced into, so the natalIdx lookup below
+    // would otherwise wrongly find that couple by pure (father, mother) id
+    // match and group her with children who aren't really her father-and-
+    // mother-holding siblings. A legitimated child (already spliced into her
+    // parents' real marriage) is unaffected by this guard.
+    if (p.father >= 0 && !(p.illegitimate && !p.legitimated)) {
       // full orphan: group with siblings on the natal holding
       const natalIdx = (env.persons[p.father].unions ?? []).find((ci) => env.couples[ci].wife === p.mother);
       if (natalIdx != null) {
         const hid = ORPHAN_BASE + natalIdx;
         st.householdId = hid;
-        const g = orphanGroups.get(natalIdx) ?? [];
-        g.push(p);
-        orphanGroups.set(natalIdx, g);
+        orphanHids.add(hid);
         joinHousehold(hid, -1, p.id);
         continue;
       }
@@ -215,12 +227,18 @@ export function villageStateAt(env: Envelope, year: number): VillageState {
   }
 
   // Orphan-group headship: eldest brother of age, else the eldest sibling.
-  for (const [natalIdx, group] of orphanGroups) {
-    const hid = ORPHAN_BASE + natalIdx;
-    const sorted = group.slice().sort((a, b) => a.birth - b.birth || a.id - b.id);
-    const head = sorted.find((m) => m.sex === "M" && year - m.birth >= 14) ?? sorted[0];
+  // Reads the household's ACTUAL membership (not a separately-tracked list
+  // built only from the direct-orphan branch above) — § illegitimacy means
+  // an unmarried mother can herself be a member of one of these households
+  // (her own orphan/solo one) with her own unmarried child then following
+  // HER into it via the `parent` branch above, never touching this branch
+  // at all, but still a real member whose age/sex the headship pick must see.
+  for (const hid of orphanHids) {
     const h = households.get(hid);
-    if (h) h.headId = head.id;
+    if (!h) continue;
+    const sorted = h.members.map((id) => env.persons[id]).sort((a, b) => a.birth - b.birth || a.id - b.id);
+    const head = sorted.find((m) => m.sex === "M" && year - m.birth >= 14) ?? sorted[0];
+    h.headId = head.id;
   }
 
   // headOfHousehold flags

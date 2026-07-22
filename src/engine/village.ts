@@ -136,19 +136,30 @@ function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: Sex): R
 // to have died before the father never actually stood between a younger
 // son and the holding, and is excluded here rather than wrongly blocking
 // him from being treated as the presumed heir.
-// § illegitimacy: a natural son was never in the running for the tenement —
+// § illegitimacy / § legitimation: a natural son is never in the running for
+// the tenement UNLESS his parents later actually married each other AND
+// the region isn't England — the Statute of Merton (1236) had English
+// common law refuse to recognize legitimation per subsequens matrimonium
+// for inheritance, unlike canon law and most Continental custom. Read by
+// both the subject check and the competing-brother scan, so a legitimated
+// son (elsewhere) both can be, and can be blocked by, an elder brother
+// exactly like any other son born in wedlock.
+function heirEligible(q: Person, regionKey: string): boolean {
+  return !q.illegitimate || !!(q.legitimated && regionKey !== "england");
+}
+
 // he neither counts as a competing elder brother against a legitimate son,
 // nor (checked first) can he himself ever be presumed the heir: false, not
 // the "no father on record" true, since here the non-heir penalty mechanics
 // (out-migration, downward mobility) SHOULD apply, exactly as for any other
 // non-heir son.
-function eldestSonOf(persons: readonly Person[], p: Person): boolean {
+function eldestSonOf(persons: readonly Person[], p: Person, regionKey: string): boolean {
   if (p.sex !== "M") return true;
-  if (p.illegitimate) return false;
+  if (!heirEligible(p, regionKey)) return false;
   if (p.father < 0) return true;
   const father = persons[p.father];
   for (const q of persons) {
-    if (q.id === p.id || q.father !== p.father || q.sex !== "M" || q.illegitimate) continue;
+    if (q.id === p.id || q.father !== p.father || q.sex !== "M" || !heirEligible(q, regionKey)) continue;
     if (q.death.year <= father.death.year) continue; // predeceased the father: never actually in the running
     if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
   }
@@ -162,8 +173,8 @@ function eldestSonOf(persons: readonly Person[], p: Person): boolean {
 // downward mobility) read THIS, not eldestSonOf directly, so they simply
 // never apply in a partible region rather than needing a separate flag at
 // every call site.
-export function isHeir(persons: readonly Person[], region: Region, p: Person): boolean {
-  return region.inheritance === "partible" || eldestSonOf(persons, p);
+export function isHeir(persons: readonly Person[], region: Region, regionKey: string, p: Person): boolean {
+  return region.inheritance === "partible" || eldestSonOf(persons, p, regionKey);
 }
 
 function solveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
@@ -384,7 +395,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // always reflects the child's FINAL class, never a stale pre-transition
     // one (occupation narrative in biography.ts reads p.cls fresh anyway,
     // but riskTrade is rolled once here and must agree with it).
-    const nonHeirSon = child.sex === "M" && !isHeir(persons, region, child);
+    const nonHeirSon = child.sex === "M" && !isHeir(persons, region, regionKey, child);
     rollDownwardMobility(child, nonHeirSon);
     child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
     child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
@@ -403,6 +414,20 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // namespace 980000, mirroring riskTradeOf/rollMobility's own streams) so
   // adding this never perturbs the existing birth-spacing/matching sequence.
   const TWIN_RATE = 0.012;
+  // § multiple births: elevated infant mortality. Twins faced a real excess
+  // risk over singletons (lower birth weight, harder delivery) that the
+  // shared hazard model (mortality.ts) has no notion of twinning to apply —
+  // so this is a modest ADDITIONAL chance layered on afterward, on each
+  // twin independently, and only ever turns an already-rolled survival into
+  // an infancy death, never the reverse. A deliberately mild bump (see
+  // demography.ts's own header comment on preferring mild multipliers over
+  // dramatic ones), not a claim to a precise historical excess-mortality rate.
+  const TWIN_EXCESS_INFANT_MORTALITY = 0.08;
+  function applyTwinExcessMortality(twin: Person): void {
+    if (twin.death.age === 0) return;
+    const r = makeRng(personStream(vHash, 981000, twin.id));
+    if (r.chance(TWIN_EXCESS_INFANT_MORTALITY)) twin.death = { year: twin.birth, age: 0, cause: "infancy" };
+  }
   function maybeTwin(c: Couple, H: Person, W: Person, y: number, firstborn: Person): void {
     if (c.children.length >= 11) return;
     const r = makeRng(personStream(vHash, 980000, firstborn.id));
@@ -410,6 +435,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const twin = makeChild(c, H, W, y);
     firstborn.twinOf = twin.id;
     twin.twinOf = firstborn.id;
+    applyTwinExcessMortality(firstborn);
+    applyTwinExcessMortality(twin);
   }
 
   function genChildren(c: Couple, capYear: number): void {
@@ -492,7 +519,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         // ~10% of real villages deserted by 1500).
         // § male out-migration: an heir had a tenement to offer a bride and
         // marries reliably; a non-heir is a somewhat less attractive match.
-        const heir = isHeir(persons, region, M);
+        const heir = isHeir(persons, region, regionKey, M);
         if (rng.chance(heir ? 0.07 : 0.12)) continue; // never marries
         if (M.cls === "clergyFamily" && rng.chance(0.35)) {
           M.inOrders = true;
@@ -660,6 +687,25 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       });
       child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
       child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
+      // § legitimation: a substantial share of these were exactly a betrothed
+      // or courting couple whose child simply arrived before the wedding —
+      // if the father happens to still be unmarried, roll whether they go on
+      // to actually marry each other. Splicing the child into the resulting
+      // Couple's own children (not just leaving her found by childrenOf's
+      // separate illegitimate-scan) means she's now indistinguishable from
+      // any other child of that marriage to siblings/snapshot/succession —
+      // exactly the point, since per subsequens matrimonium treated her as
+      // legitimate from birth (bar England — see heirEligible above).
+      if (fatherP.spouse == null && r.chance(0.5)) {
+        const marriageYear = y + r.int(1, 2); // strictly after the birth year, never the same year
+        const c = marry(fatherP, W, marriageYear);
+        if (c) {
+          c.children.unshift(child.id);
+          child.legitimated = true;
+          child.legitimatedYear = marriageYear;
+          genChildren(c, 1495);
+        }
+      }
     }
   }
   rollIllegitimateBirths();
@@ -725,7 +771,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   for (const M of persons) {
     if (M.sex !== "M" || M.founder || M.spouse != null || M.emigrated || M.inOrders) continue;
     if (M.death.age < region.marriageM[1]) continue;
-    const heir = isHeir(persons, region, M);
+    const heir = isHeir(persons, region, regionKey, M);
     const atYear = M.birth + region.marriageM[1];
     const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
     const chance = pressured ? demo.maleOutMigration.pressured : heir ? demo.maleOutMigration.heirBase : demo.maleOutMigration.nonHeirBase;
@@ -751,6 +797,22 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   function isCurrentlyUnmarried(p: Person): boolean {
     if (!p.unions?.length) return p.spouse == null;
     return latestWidowedAt(p) != null;
+  }
+
+  // § affinity: the spouse of p's MOST RECENT union, dead or alive — used to
+  // detect a remarriage candidate who is a sibling of that spouse (marrying
+  // a dead wife's sister / a dead husband's brother). A real canon-law
+  // impediment distinct from consanguinity (no blood tie at all) but
+  // requiring the same kind of dispensation — flagged, not blocked, same
+  // as isConsanguineous above.
+  function lastSpouseOf(p: Person): Person | null {
+    if (!p.unions?.length) return null;
+    const c = couples[p.unions[p.unions.length - 1]];
+    return persons[p.id === c.husband ? c.wife : c.husband];
+  }
+  function isAffinal(a: Person, b: Person): boolean {
+    const lastA = lastSpouseOf(a);
+    return !!lastA && ((lastA.father !== -1 && lastA.father === b.father) || (lastA.mother !== -1 && lastA.mother === b.mother));
   }
 
   function matchWidowers(takenSpouse: Set<number>): boolean {
@@ -798,10 +860,18 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       }
       if (!best) continue;
       if (latestWidowedAt(best) != null && !rng.chance(Math.min(1, demo.remarry.F / Math.max(demo.remarry.M, 0.01)))) continue;
+      // § affinity: computed BEFORE marry() — marry() pushes the NEW union
+      // onto m.unions immediately, so isAffinal called after it would read
+      // lastSpouseOf(m) as `best` herself (a trivial self-comparison,
+      // nearly always true) instead of m's actual previous, deceased wife.
+      const affinal = isAffinal(m, best);
       takenSpouse.add(best.id);
       takenSpouse.add(m.id);
       const c = marry(m, best, year);
-      if (c) genChildren(c, 1495);
+      if (c) {
+        if (affinal) c.affinal = true; // she's a sister of his own late wife
+        genChildren(c, 1495);
+      }
       any = true;
     }
     return any;
@@ -841,10 +911,15 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         }
       }
       if (!best) continue;
+      // § affinity: computed BEFORE marry(), same reason as matchWidowers above.
+      const affinal = isAffinal(w, best);
       takenSpouse.add(best.id);
       takenSpouse.add(w.id);
       const c = marry(best, w, year);
-      if (c) genChildren(c, 1495);
+      if (c) {
+        if (affinal) c.affinal = true; // he's a brother of her own late husband
+        genChildren(c, 1495);
+      }
       any = true;
     }
     return any;
