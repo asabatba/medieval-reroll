@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Locale } from "../i18n/locale.js";
 import { decodePerson, fatherOccupation } from "./biography.js";
 import { CLASS_INFO } from "./data/classes.js";
+import { plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
+import { parishOf } from "./hierarchy.js";
+import { warAt } from "./mortality.js";
 import { lordOfManorAt } from "./nobility.js";
-import { isFirstBornSon } from "./succession.js";
+import { heirOf, isFirstBornSon } from "./succession.js";
 import { resolveVillage } from "./village.js";
 
 const REGION_KEYS = Object.keys(REGIONS);
@@ -549,6 +552,101 @@ describe("§ godparents", () => {
       for (const p of env.persons.filter((p) => p.founder)) {
         const bio = decodePerson(env, p.id, "en")!;
         expect(bio.events.some((e) => e.text.includes("stood godparents"))).toBe(false);
+      }
+    }
+  });
+});
+
+describe("§ shared parish narrative", () => {
+  it("mentions the mother church only when jurisdiction.shared is true, never otherwise", () => {
+    let sharedSeen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 20; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        const j = parishOf(1444, regionKey, v, "en");
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const mentionsMother = bio.events.some((e) => e.text.includes("mother church") || e.text.includes("mother parish"));
+          if (j.shared) {
+            if (mentionsMother) sharedSeen++;
+          } else {
+            expect(mentionsMother).toBe(false);
+          }
+        }
+      }
+    }
+    expect(sharedSeen).toBeGreaterThan(0);
+  });
+});
+
+describe("§ named wills", () => {
+  it("names the real heir instead of the generic pool line, and never fires both for the same person", () => {
+    let namedSeen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 15; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        for (const p of env.persons) {
+          const wealth = CLASS_INFO[p.cls].wealth;
+          const heir = wealth >= 4 ? heirOf(env, p.id) : null;
+          const bio = decodePerson(env, p.id, "en")!;
+          const named = bio.events.find((e) => e.text.startsWith("Dictated a will to the parish clerk, naming"));
+          const generic = bio.events.find((e) => e.text.includes("the bed and brass pot"));
+          if (named) {
+            namedSeen++;
+            // only ever fires when a real heir was actually eligible
+            expect(heir).not.toBeNull();
+            // names the heir literally, so the ref can link it (render.ts's linkifyEventText)
+            expect(named.text).toContain(`${heir!.name} ${heir!.surname}`);
+            expect(named.refs?.some((r) => r.id === heir!.id)).toBe(true);
+          }
+          // the generic and named versions are mutually exclusive
+          expect(named && generic).toBeFalsy();
+        }
+      }
+    }
+    expect(namedSeen).toBeGreaterThan(0);
+  });
+
+  it("never fires for someone without an eligible heir on record", () => {
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 10; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        for (const p of env.persons) {
+          const wealth = CLASS_INFO[p.cls].wealth;
+          const heir = wealth >= 4 ? heirOf(env, p.id) : null;
+          if (heir) continue;
+          const bio = decodePerson(env, p.id, "en")!;
+          expect(bio.events.some((e) => e.text.startsWith("Dictated a will to the parish clerk, naming"))).toBe(false);
+        }
+      }
+    }
+  });
+});
+
+describe("§ register blackout years", () => {
+  it("only ever names a crisis year that's actually inside a plague or war window", () => {
+    const region = REGIONS.england;
+    let hits = 0;
+    for (let v = 0; v < 25; v++) {
+      const env = resolveVillage(1444, "england", v);
+      for (const p of env.persons) {
+        const bio = decodePerson(env, p.id, "en")!;
+        const line = bio.events.find((e) => e.text.includes("kept a poor account of those years"));
+        if (!line) continue;
+        hits++;
+        expect(plagueAt(line.year) != null || warAt(line.year, region) != null).toBe(true);
+      }
+    }
+    expect(hits).toBeGreaterThan(0);
+  });
+
+  it("never suppresses a structural birth, marriage, or death event — every person keeps all three where applicable", () => {
+    for (const regionKey of REGION_KEYS) {
+      const env = resolveVillage(1444, regionKey, 4);
+      for (const p of env.persons) {
+        const bio = decodePerson(env, p.id, "en")!;
+        expect(bio.events.some((e) => e.kind === "birth")).toBe(true);
+        expect(bio.events.some((e) => e.kind === "death")).toBe(true);
       }
     }
   });

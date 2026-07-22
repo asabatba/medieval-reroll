@@ -33,17 +33,17 @@ import {
   WORLD_EVENTS,
   YOUTH_EVENTS,
 } from "./data/narrative.js";
-import { placeOf } from "./data/placeNames.js";
+import { placeOf, placeShortOf } from "./data/placeNames.js";
 import { PLAGUES, plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
 import { citeDocument } from "./documents.js";
 import { makeRng, personStream } from "./hash.js";
-import { manorOf, parishOf } from "./hierarchy.js";
+import { manorOf, parishMotherVillageIdx, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
-import { famineAt, warAt } from "./mortality.js";
+import { famineAt, registerBlackoutAt, warAt } from "./mortality.js";
 import { lordOfManorAt, manorLineOf, royalLineOf, royalWorldEvents, sovereignAt, tenureIndexAt } from "./nobility.js";
-import { childrenOf, inheritedFromFather, isFirstBornSon } from "./succession.js";
+import { childrenOf, heirOf, inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
   Bio,
@@ -288,6 +288,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const jurisdiction = parishOf(env.worldSeed, env.regionKey, env.villageIdx, locale);
   const fief = manorOf(env.worldSeed, env.regionKey, env.villageIdx, locale);
   const cite = (kind: DocumentKind) => citeDocument(kind, { jurisdiction, fief, place: env.place[locale] }, locale);
+  // § shared parish: this village has no church of its own — the block's
+  // mother parish (hierarchy.ts's parishOf) covers several villages at
+  // once, so birth/burial entries can name the walk to it.
+  const motherVillage = jurisdiction.shared ? placeShortOf(env.worldSeed, env.regionKey, parishMotherVillageIdx(env.villageIdx)) : null;
 
   // --- family lookups (all from the envelope; symmetric by construction) ---
   // An immigrant's local record has no local parents (father/mother = -1),
@@ -330,6 +334,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // descendantsOf, which also calls childrenOf, never disagrees with this Bio
   // about who counts as this person's child.
   const children = childrenOf(env, id);
+  // § named wills: an eligible heir (succession.ts's own tenancy-succession
+  // pick) is only worth dictating a will over for someone who actually had
+  // wealth to leave — the poor died intestate in practice, their few goods
+  // passing by custom, not by document.
+  const heir = wealth >= 4 ? heirOf(env, id) : null;
   // § occupation marital gate: an occupation entry that presupposes she's
   // married (or widowed) must only be eligible if that's actually true of
   // her own recorded life — occupation is decided at a fixed early age
@@ -356,6 +365,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const destChildren = destUnion && destEnv && destPerson ? childrenOf(destEnv, destPerson.id) : [];
 
   const events: BioEvent[] = [];
+  // § register blackout: years the crisis-year check below actually
+  // suppressed a texture entry — surfaced afterward as one explicit line
+  // rather than leaving the gap unexplained (see the texture() loop and
+  // the summary note pushed after it).
+  const blackoutYears = new Set<number>();
   const ev = (year: number, text: string, kind: BioEventKind, src?: string, refs?: EventRef[]) => {
     if (year <= p.death.year)
       events.push({ year, age: year - p.birth, text: gender(text, p.sex), kind, src: src || cite("reg"), refs: refs?.length ? refs : undefined });
@@ -443,11 +457,16 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     // construction (only founders/fabricated incomers have father/mother -1).
     const twin = p.twinOf != null ? env.persons[p.twinOf] : null;
     const twinNote = twin ? (ca ? ` Va néixer {{bessó/bessona}}, junt amb ${twin.name}.` : ` Born a twin, alongside ${twin.name}.`) : "";
+    const sharedNote = motherVillage
+      ? ca
+        ? ` {{Batejat/Batejada}} a ${motherVillage}, on la parròquia mare rep els fills d'uns quants pobles del voltant.`
+        : ` Christened at ${motherVillage}, whose mother church takes in the children of several villages roundabout.`
+      : "";
     ev(
       p.birth,
       ca
-        ? `Va néixer a ${env.place[locale]}, ${region.name.ca}, ${p.sex === "M" ? "fill" : "filla"} de ${father!.name} ${father!.surname} i ${mother!.name}${bNote}.${twinNote}`
-        : `Born in ${env.place[locale]}, ${region.name.en}, ${p.sex === "M" ? "son" : "daughter"} of ${father!.name} ${father!.surname} and ${mother!.name}${bNote}.${twinNote}`,
+        ? `Va néixer a ${env.place[locale]}, ${region.name.ca}, ${p.sex === "M" ? "fill" : "filla"} de ${father!.name} ${father!.surname} i ${mother!.name}${bNote}.${twinNote}${sharedNote}`
+        : `Born in ${env.place[locale]}, ${region.name.en}, ${p.sex === "M" ? "son" : "daughter"} of ${father!.name} ${father!.surname} and ${mother!.name}${bNote}.${twinNote}${sharedNote}`,
       "birth",
       cite("reg"),
       twin
@@ -1147,11 +1166,23 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       // childless adult or even a celibate priest (§ occupation above
       // already excludes inOrders from having any union/children at all).
       if (flag === "hasChildren" && earliestChildBirth == null) continue;
+      // § named wills: when a real heir is on record, the dedicated
+      // named-heir event (below, after the OLD_EVENTS pass) replaces this
+      // generic pool line rather than firing alongside it.
+      if (flag === "will" && heir) continue;
       if (!rng.chance(wgt * 0.16)) continue;
       count++;
       // Never date it earlier than the year it's actually true: she has to
       // have a child ("her own") before she can raise one alongside it.
       const y = Math.max(p.birth + lo + rng.int(0, span), flag === "hasChildren" && earliestChildBirth != null ? earliestChildBirth : -Infinity);
+      // § register blackout: only the parish-register-sourced entries
+      // (the default, unflagged case) can go missing this way — a manor
+      // court roll or a will has its own separate keeper, unaffected by
+      // whatever befell the parish clerk.
+      if (flag !== "court" && flag !== "will" && registerBlackoutAt(env.worldSeed, env.regionKey, env.villageIdx, y, region)) {
+        blackoutYears.add(y);
+        continue;
+      }
       const text = tmpl
         .replace("{pos}", pos)
         .replace("{obj}", obj)
@@ -1169,6 +1200,41 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   texture(ADULT_EVENTS[locale], 21, 58, 3);
   if (p.sex === "F" && own) texture(FEMALE_EVENTS[locale], 20, 45, 1);
   texture(OLD_EVENTS[locale], 58, 90, 2);
+
+  // § register blackout: name the crisis once, rather than leaving the
+  // texture-entry suppression above as an unexplained gap.
+  if (blackoutYears.size) {
+    const year = Math.min(...blackoutYears);
+    const plague = plagueAt(year);
+    const crisis = plague ? plague[3][locale] : warAt(year, region, locale) || (ca ? "aquells anys" : "those years");
+    ev(
+      year,
+      ca
+        ? `El registre porta mal compte d'aquells anys — ${crisis} — quan la mà del clergue no era lliure, o no era viva, per escriure.`
+        : `The register kept a poor account of those years — ${crisis} — when the clerk's hand was not free, or not living, to write.`,
+      "life",
+      cite("reg"),
+    );
+  }
+
+  // § named wills: same age window and rough weight as the generic
+  // OLD_EVENTS "will" pool line it replaces (texture()'s skip above keeps
+  // the two from ever firing for the same person) — but this one, having a
+  // real heir on record, names the holding's actual destination instead of
+  // an anonymous bed and brass pot.
+  if (heir && p.death.age > 58 && rng.chance(1.2 * 0.16)) {
+    const y = p.birth + 58 + rng.int(0, Math.min(90, p.death.age) - 58);
+    const heirName = `${heir.name} ${heir.surname}`;
+    ev(
+      y,
+      ca
+        ? `Va dictar testament al clergue de la parròquia, deixant la casa a ${heirName}: diners per a la fàbrica de l'església, i pa per als pobres a l'enterrament.`
+        : `Dictated a will to the parish clerk, naming ${heirName} to the holding: pence for the church fabric, and bread for the poor at the funeral.`,
+      "life",
+      cite("will"),
+      [nameRef(heir, selfAddr)],
+    );
+  }
 
   // World events — run AFTER the texture passes above (not before): a
   // world event's text can read `literate`, and childhood literacy is only
@@ -1271,6 +1337,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       ? "Enterrat{{/da}} a l'església parroquial davant l'altar, sota una llosa amb inscripció, amb misses fundades per la seva ànima."
       : "Buried in the parish church before the altar, beneath a marked stone, with masses endowed for the soul.";
   else burialTxt = rng.pick(BURIAL_PLAIN[locale]);
+  if (motherVillage && p.death.cause !== "plague" && p.death.age > 0)
+    burialTxt += ca
+      ? ` Portat a ${motherVillage}, a la parròquia mare que serveix aquests pobles.`
+      : ` Carried to ${motherVillage}, to the mother parish that serves these villages.`;
   const dSrc = riskPool || (p.death.cause === "disease" && CORONER_DEATHS[locale].has(dd)) ? cite("coroner") : cite("reg");
   ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
 

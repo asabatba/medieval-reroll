@@ -1,7 +1,7 @@
 import type { Locale } from "../i18n/locale.js";
 import { demographyOf, periodMult, wealthIdx } from "./data/demography.js";
 import { plagueAt } from "./data/plagues.js";
-import { hashStr } from "./hash.js";
+import { addrHash, hashStr, makeRng } from "./hash.js";
 import type { Death, DeathCause, Region, RiskTrade, Rng, Sex } from "./types.js";
 
 const FALLBACK_WAR: Record<Locale, string> = { en: "the wars", ca: "les guerres" };
@@ -28,6 +28,22 @@ export function famineAt(year: number, region: Region): boolean {
 export function warAt(year: number, region: Region, locale: Locale = "en"): string | null {
   for (const [a, b] of region.warYears) if (year >= a && year <= b) return region.warNames[a]?.[locale] || FALLBACK_WAR[locale];
   return null;
+}
+
+// § register blackout: real parish registers went dark for everyone in a
+// village at once during a crisis — the scribe himself could die of plague
+// or flee before soldiers, not just any one villager having bad luck. Seeded
+// per (village, year), not per person, so every villager alive that year
+// agrees on whether the register kept its count — same deterministic,
+// non-memoized pattern as hierarchy.ts's parishOf/manorOf. Famine is
+// deliberately excluded: it starves a household, it doesn't kill or scatter
+// the scribe.
+export function registerBlackoutAt(worldSeed: number, regionKey: string, villageIdx: number, year: number, region: Region): boolean {
+  const plague = plagueAt(year);
+  const war = warAt(year, region);
+  if (!plague && !war) return false;
+  const rng = makeRng(addrHash(worldSeed, [regionKey, villageIdx, "register-blackout", year]));
+  return rng.chance(plague ? 0.4 : 0.15);
 }
 
 // § maternal mortality: rollDeath is called before marriage is resolved, so

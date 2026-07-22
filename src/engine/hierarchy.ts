@@ -29,6 +29,14 @@ import type { Fief, Jurisdiction } from "./types.js";
 // resolved once per block, deterministically).
 const PARISH_CLUSTER = 5;
 
+// The anchor village of a shared block — the one whose own parish (slot 0)
+// every other village in the block is baptized/buried under when
+// `parishOf(...).shared` is true. Exported so callers never have to
+// duplicate the block math to name that village.
+export function parishMotherVillageIdx(villageIdx: number): number {
+  return Math.floor(villageIdx / PARISH_CLUSTER) * PARISH_CLUSTER;
+}
+
 export function parishOf(worldSeed: number, regionKey: string, villageIdx: number, locale: Locale): Jurisdiction {
   const j = JURISDICTIONS[regionKey];
   const block = Math.floor(villageIdx / PARISH_CLUSTER);
