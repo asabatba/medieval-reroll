@@ -11,22 +11,30 @@
 // =====================================================================
 import type { Envelope, Person } from "./types.js";
 
-/** All children of a person across every union, in birth order. */
+/** All children of a person across every union, in birth order — plus any
+ * § illegitimate child (village.ts's rollIllegitimateBirths), found by a
+ * direct father/mother scan since a natural child's parents were never
+ * actually married and so belong to no Couple at all. Genealogically a real
+ * child either way (siblings, descendantsOf); heirOf below is what actually
+ * excludes her from inheritance. */
 export function childrenOf(env: Envelope, id: number): Person[] {
   const p = env.persons[id];
-  if (!p?.unions) return [];
+  if (!p) return [];
   const out: Person[] = [];
-  for (const ci of p.unions) for (const cid of env.couples[ci].children) out.push(env.persons[cid]);
+  if (p.unions) for (const ci of p.unions) for (const cid of env.couples[ci].children) out.push(env.persons[cid]);
+  for (const q of env.persons) if (q.illegitimate && (q.father === id || q.mother === id)) out.push(q);
   out.sort((a, b) => a.birth - b.birth || a.id - b.id);
   return out;
 }
 
 /** The heir to `deceasedId`'s holding at the moment of their death, or null
- * (no surviving issue — the holding passes to the spouse or escheats). */
+ * (no surviving issue — the holding passes to the spouse or escheats). A
+ * § illegitimate child is never the heir absent a formal legitimation this
+ * model doesn't represent. */
 export function heirOf(env: Envelope, deceasedId: number): Person | null {
   const p = env.persons[deceasedId];
   if (!p) return null;
-  const kids = childrenOf(env, deceasedId).filter((c) => c.death.year > p.death.year && !c.emigrated && !c.inOrders);
+  const kids = childrenOf(env, deceasedId).filter((c) => c.death.year > p.death.year && !c.emigrated && !c.inOrders && !c.illegitimate);
   const son = kids.find((c) => c.sex === "M");
   if (son) return son;
   return kids[0] ?? null;
@@ -50,9 +58,11 @@ export function inheritedFromFather(env: Envelope, personId: number): boolean {
  * biography's departure narrative wants to explain. */
 export function isFirstBornSon(env: Envelope, personId: number): boolean {
   const p = env.persons[personId];
-  if (p?.sex !== "M" || p.father < 0) return true; // no father on record: no inheritance question
+  if (p?.sex !== "M") return true;
+  if (p.illegitimate) return false; // § illegitimacy: never the presumed heir
+  if (p.father < 0) return true; // no father on record: no inheritance question
   for (const q of env.persons) {
-    if (q.id === p.id || q.father !== p.father || q.sex !== "M") continue;
+    if (q.id === p.id || q.father !== p.father || q.sex !== "M" || q.illegitimate) continue;
     if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
   }
   return true;

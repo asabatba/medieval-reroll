@@ -84,6 +84,13 @@ export interface RegionDemography {
     /** Chance, per matching round, that a local woman without a local match marries a real immigrant groom instead of waiting. */
     groomPullChance: number;
   };
+  /** § illegitimacy: chance an adult woman who ends her days never formally
+   * married (village.ts's own final outcome, not a mid-solve guess) bore one
+   * child out of wedlock at some point regardless — the commonest documented
+   * form (a service woman's child by a named or unnamed man), not an attempt
+   * at a precise historical rate, which varied enormously by parish and is
+   * poorly attested for most of these regions. */
+  illegitimacyRate: number;
 }
 
 const SHARED_PERIODS: PeriodMult[] = [
@@ -114,6 +121,7 @@ const NW_DEFAULT: RegionDemography = {
   },
   maternalMortalityPerBirth: 0.012,
   maleOutMigration: { nonHeirBase: 0.42, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.3 },
+  illegitimacyRate: 0.03,
 };
 
 export const DEMOGRAPHY: Record<string, RegionDemography> = {
@@ -134,6 +142,7 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     service: { M: 0.3, F: 0.34 },
     maternalMortalityPerBirth: 0.0075,
     maleOutMigration: { nonHeirBase: 0.4, heirBase: 0.08, pressured: 0.65, groomPullChance: 0.28 }, // war retinues an ever-present outlet, but disrupt heirs too
+    illegitimacyRate: 0.035, // war-displaced households, garrison towns
   },
   catalonia: {
     ...NW_DEFAULT,
@@ -155,6 +164,7 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     },
     maternalMortalityPerBirth: 0.0052,
     maleOutMigration: { nonHeirBase: 0.32, heirBase: 0.05, pressured: 0.5, groomPullChance: 0.22 }, // stronger land ties, less rural out-migration
+    illegitimacyRate: 0.02, // tighter dowry-regime household surveillance
   },
   italy: {
     ...NW_DEFAULT,
@@ -179,6 +189,18 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     },
     maternalMortalityPerBirth: 0.0068,
     maleOutMigration: { nonHeirBase: 0.3, heirBase: 0.05, pressured: 0.48, groomPullChance: 0.2 }, // urban guild apprenticeship more local than rural flight
+    illegitimacyRate: 0.035, // urban Tuscany's documented foundling/illegitimacy registers (Florence's Innocenti, founded 1445) ran higher than the rural NW-European norm
+  },
+  castile: {
+    ...NW_DEFAULT,
+    hazardMult: 1.02,
+    birthSpacing: [2, 3],
+    remarry: { M: 0.5, F: 0.22 },
+    emigration: { base: 0.45, pressured: 0.65 }, // the Reconquista frontier pulled settlers south
+    service: { M: 0.22, F: 0.26 },
+    maternalMortalityPerBirth: 0.0065,
+    maleOutMigration: { nonHeirBase: 0.36, heirBase: 0.06, pressured: 0.58, groomPullChance: 0.26 }, // frontier repoblación an outlet for younger sons, alongside the standing war
+    illegitimacyRate: 0.028,
   },
 };
 

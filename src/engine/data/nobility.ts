@@ -491,4 +491,120 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
       }),
     ],
   },
+
+  castile: {
+    title: { en: "Kings and Queens of Castile", ca: "Reis i reines de Castella" },
+    reigns: [
+      r(1217, 1252, {
+        name: { en: "Ferdinand III", ca: "Ferran III" },
+        house: { en: "Castile", ca: "Castella" },
+        style: { en: "King Ferdinand III, the Saint", ca: "el rei Ferran III, el Sant" },
+      }),
+      r(1252, 1284, {
+        name: { en: "Alfonso X", ca: "Alfons X" },
+        house: { en: "Castile", ca: "Castella" },
+        style: { en: "King Alfonso X, the Wise", ca: "el rei Alfons X, el Savi" },
+      }),
+      r(1284, 1295, {
+        name: { en: "Sancho IV", ca: "Sanç IV" },
+        house: { en: "Castile", ca: "Castella" },
+        style: { en: "King Sancho IV, the Brave", ca: "el rei Sanç IV, el Brau" },
+      }),
+      r(1295, 1312, {
+        name: { en: "Ferdinand IV", ca: "Ferran IV" },
+        house: { en: "Castile", ca: "Castella" },
+        style: { en: "King Ferdinand IV, the Summoned", ca: "el rei Ferran IV, l'Emplaçat" },
+      }),
+      r(1312, 1350, {
+        name: { en: "Alfonso XI", ca: "Alfons XI" },
+        house: { en: "Castile", ca: "Castella" },
+        style: { en: "King Alfonso XI", ca: "el rei Alfons XI" },
+      }),
+      r(1350, 1369, {
+        name: { en: "Peter I", ca: "Pere I" },
+        house: { en: "Castile", ca: "Castella" },
+        style: { en: "King Peter I, the Cruel", ca: "el rei Pere I, el Cruel" },
+        end: "killed",
+        accession: {
+          en: "Word reached the parish that King Alfonso had died of the pestilence before the walls of Gibraltar, and that his young son Peter reigned in his place — a king the years would come to call the Cruel.",
+          ca: "Va arribar a la parròquia la nova que el rei Alfons havia mort de la pesta davant els murs de Gibraltar, i que el seu jove fill Pere regnava al seu lloc — un rei que els anys acabarien anomenant el Cruel.",
+        },
+      }),
+      r(1369, 1379, {
+        name: { en: "Henry II", ca: "Enric II" },
+        house: { en: "Trastámara", ca: "Trastàmara" },
+        style: { en: "King Henry II", ca: "el rei Enric II" },
+        aka: [{ en: "Henry of Trastámara", ca: "Enric de Trastàmara" }],
+        accession: {
+          en: "After years of civil war between the brothers, word came that King Peter had been slain with his own hand by Henry of Trastámara at Montiel, and that the crown had passed to the house of Trastámara. The lawyers argued long over which of the two had ever been the rightful king.",
+          ca: "Després d'anys de guerra civil entre els germans, va arribar la nova que el rei Pere havia estat mort a mans del seu germà Enric de Trastàmara a Montiel, i que la corona havia passat a la casa de Trastàmara. Els homes de lleis discutiren llargament sobre quin dels dos havia estat mai el rei legítim.",
+        },
+      }),
+      r(1379, 1390, {
+        name: { en: "John I", ca: "Joan I" },
+        house: { en: "Trastámara", ca: "Trastàmara" },
+        style: { en: "King John I", ca: "el rei Joan I" },
+        aka: [{ en: "King John", ca: "el rei Joan" }],
+      }),
+      r(1390, 1406, {
+        name: { en: "Henry III", ca: "Enric III" },
+        house: { en: "Trastámara", ca: "Trastàmara" },
+        style: { en: "King Henry III, the Infirm", ca: "el rei Enric III, el Doliente" },
+        accession: {
+          en: "News came that King John had died of a fall from his horse while hunting hares near Alcalá, still a young man, and that his sickly son Henry reigned as a boy in his place, with regents to govern for him.",
+          ca: "Va arribar la nova que el rei Joan havia mort d'una caiguda de cavall caçant llebres prop d'Alcalá, encara jove, i que el seu fill malaltís Enric regnava com a infant al seu lloc, amb regents que governaven per ell.",
+        },
+      }),
+      r(1406, 1454, {
+        name: { en: "John II", ca: "Joan II" },
+        house: { en: "Trastámara", ca: "Trastàmara" },
+        style: { en: "King John II", ca: "el rei Joan II" },
+        aka: [{ en: "King John", ca: "el rei Joan" }],
+      }),
+      r(1454, 1474, {
+        name: { en: "Henry IV", ca: "Enric IV" },
+        house: { en: "Trastámara", ca: "Trastàmara" },
+        style: { en: "King Henry IV", ca: "el rei Enric IV" },
+      }),
+      r(1474, 1504, {
+        name: { en: "Isabella I", ca: "Isabel I" },
+        house: { en: "Trastámara", ca: "Trastàmara" },
+        style: { en: "Queen Isabella I, the Catholic", ca: "la reina Isabel I, la Catòlica" },
+        accession: {
+          en: "King Henry died leaving only a daughter the realm called doubtful-born, and his sister Isabella — already wed to Ferdinand of Aragon — claimed the crown instead. Portugal took up the other girl's cause, and five years of war followed before the parishes were sure whose writ they lived under.",
+          ca: "El rei Enric morí sense deixar més que una filla que el regne tenia per dubtosa, i la seva germana Isabel — ja casada amb Ferran d'Aragó — reclamà la corona en el seu lloc. Portugal prengué la causa de l'altra noia, i seguiren cinc anys de guerra abans que les parròquies sabessin del cert sota quin manament vivien.",
+        },
+      }),
+      r(1504, 1506, {
+        name: { en: "Philip I", ca: "Felip I" },
+        house: { en: "Habsburg", ca: "Habsburg" },
+        style: { en: "King Philip I, the Fair", ca: "el rei Felip I, el Bell" },
+        aka: [{ en: "Philip the Fair", ca: "Felip el Bell" }],
+        accession: {
+          en: "Queen Isabella died, and the crown passed to her daughter Joanna — but it was Joanna's husband, Philip of Habsburg, whom men styled king in the parish's own hearing, since the queen herself was said to be too grieved in her wits to rule alone.",
+          ca: "Morí la reina Isabel, i la corona passà a la seva filla Joana — però fou el marit de Joana, Felip d'Habsburg, a qui la gent anomenava rei, car es deia que la reina mateixa tenia el seny massa afligit per governar sola.",
+        },
+      }),
+      r(1506, 1516, {
+        name: { en: "Joanna", ca: "Joana" },
+        house: { en: "Trastámara", ca: "Trastàmara" },
+        style: { en: "Queen Joanna, with her father Ferdinand governing as regent", ca: "la reina Joana, amb el seu pare Ferran governant com a regent" },
+        aka: [{ en: "Joanna the Mad", ca: "Joana la Boja" }],
+        accession: {
+          en: "King Philip died suddenly, not two years crowned, and the old king Ferdinand of Aragon came back to govern the realm as regent for his daughter Joanna, whose grief and wandering wits, it was said, unfitted her to rule alone.",
+          ca: "El rei Felip morí de sobte, no fets dos anys de regnat, i el vell rei Ferran d'Aragó tornà a governar el regne com a regent per la seva filla Joana, la dolor i el seny esgarriat de la qual, es deia, la feien inhàbil per governar sola.",
+        },
+      }),
+      r(1516, 1556, {
+        name: { en: "Charles I", ca: "Carles I" },
+        house: { en: "Habsburg", ca: "Habsburg" },
+        style: { en: "King Charles I", ca: "el rei Carles I" },
+        aka: [{ en: "the young King Charles", ca: "el jove rei Carles" }],
+        accession: {
+          en: "The old king Ferdinand died, and his grandson Charles — raised abroad in Flanders, and a stranger to most who now called him king — was proclaimed sovereign of Castile jointly with his mother Joanna, still living, still, they said, unfit to reign.",
+          ca: "Morí el vell rei Ferran, i el seu nét Carles — criat a l'estranger, a Flandes, i un desconegut per a la majoria que ara l'anomenaven rei — fou proclamat sobirà de Castella conjuntament amb la seva mare Joana, encara viva, encara, es deia, inhàbil per regnar.",
+        },
+      }),
+    ],
+  },
 };

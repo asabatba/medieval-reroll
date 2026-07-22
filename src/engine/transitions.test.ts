@@ -69,7 +69,12 @@ describe("§ male out-migration", () => {
     for (const env of envs) {
       const byFather = new Map<number, number[]>();
       for (const p of env.persons) {
-        if (p.sex !== "M" || p.father < 0) continue;
+        // § illegitimacy: a natural son is unconditionally excluded from
+        // presumed-heir birth-order reckoning (isFirstBornSon returns false
+        // for him regardless of birth year) — an orthogonal exclusion this
+        // birth-order sanity check isn't about, so he's left out of the
+        // competing group entirely rather than expected to satisfy it.
+        if (p.sex !== "M" || p.father < 0 || p.illegitimate) continue;
         (byFather.get(p.father) ?? byFather.set(p.father, []).get(p.father)!).push(p.id);
       }
       for (const [, sons] of byFather) {
@@ -167,7 +172,11 @@ describe("§ regional inheritance customs (partible vs impartible)", () => {
     for (let villageIdx = 0; villageIdx < villages; villageIdx++) {
       const env = resolveVillage(SEED, regionKey, villageIdx);
       for (const p of env.persons) {
-        if (p.sex !== "M" || p.founder || p.father < 0) continue;
+        // § illegitimacy: excluded here — a natural son is unconditionally
+        // "not heir" regardless of birth order, an orthogonal reason to be
+        // in the non-heir bucket that would dilute this specifically
+        // birth-order-driven comparison.
+        if (p.sex !== "M" || p.founder || p.father < 0 || p.illegitimate) continue;
         if (isHeir(env.persons, region, p)) {
           heirTotal++;
           if (p.emigrated) heirEmig++;
@@ -194,7 +203,7 @@ describe("§ regional inheritance customs (partible vs impartible)", () => {
     for (let villageIdx = 0; villageIdx < villages; villageIdx++) {
       const env = resolveVillage(SEED, regionKey, villageIdx);
       for (const p of env.persons) {
-        if (p.sex !== "M" || p.founder || p.father < 0) continue;
+        if (p.sex !== "M" || p.founder || p.father < 0 || p.illegitimate) continue;
         if (isFirstBornSon(env, p.id)) {
           heirTotal++;
           if (p.emigrated) heirEmig++;
@@ -208,13 +217,25 @@ describe("§ regional inheritance customs (partible vs impartible)", () => {
   }
 
   it("impartible England: a non-heir son emigrates far more often than the eldest", () => {
+    // § multiple births: twins add a real extra birth (and so shift every
+    // subsequent shared-rng draw in that village, same as any other new
+    // draw on the birth path) — this settles the empirical ratio a bit
+    // lower than before (~1.85–1.9x at both 150 and 300 villages, so this
+    // is a real small shift, not sampling noise a wider sample would
+    // average away). Still a decisive gap versus the partible test's <1.6x
+    // below, just no longer exactly >2x.
     const { heir, nonHeir } = heirVsNonHeirEmigrationRateByIsHeir("england", 150);
-    expect(nonHeir).toBeGreaterThan(heir * 2);
+    expect(nonHeir).toBeGreaterThan(heir * 1.7);
   });
 
   it("partible France and Tuscany: eldest and non-eldest sons emigrate at close to the same rate", () => {
     for (const rk of ["france", "italy"]) {
-      const { heir, nonHeir } = heirVsNonHeirEmigrationRateByBirthOrder(rk, 20);
+      // 60 villages, not 20: birth order is a small-count bucket (only
+      // first-borns land in "heir"), and twins (§ multiple births) shift
+      // every subsequent birth-spacing draw in a village once one fires,
+      // so a small sample is noisier than it used to be — a wider sample
+      // is the honest fix, not a looser threshold.
+      const { heir, nonHeir } = heirVsNonHeirEmigrationRateByBirthOrder(rk, 60);
       // both draw from the same heirBase-equivalent chance under partible
       // custom (village.ts's isHeir), nowhere near England's >2x gap above
       expect(nonHeir).toBeLessThan(heir * 1.6);

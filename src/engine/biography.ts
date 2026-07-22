@@ -43,7 +43,7 @@ import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
 import { famineAt, warAt } from "./mortality.js";
 import { lordOfManorAt, manorLineOf, royalLineOf, royalWorldEvents, sovereignAt, tenureIndexAt } from "./nobility.js";
-import { inheritedFromFather, isFirstBornSon } from "./succession.js";
+import { childrenOf, inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
   Bio,
@@ -316,7 +316,12 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const spouseOf = (c: Couple): Person => env.persons[p.id === c.husband ? c.wife : c.husband];
   const own = unionCouples[0] ?? null;
   const spouse = own ? spouseOf(own) : null;
-  const children = unionCouples.flatMap((c) => c.children.map((cid) => env.persons[cid]));
+  // § illegitimacy: childrenOf (succession.ts) is the union-based flatMap
+  // above PLUS any natural child found by a direct father/mother scan — used
+  // here (rather than recomputing unionCouples.flatMap by hand) so lineage.ts's
+  // descendantsOf, which also calls childrenOf, never disagrees with this Bio
+  // about who counts as this person's child.
+  const children = childrenOf(env, id);
   // § occupation marital gate: an occupation entry that presupposes she's
   // married (or widowed) must only be eligible if that's actually true of
   // her own recorded life — occupation is decided at a fixed early age
@@ -337,7 +342,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const destPerson = destRecord && destEnv ? destEnv.persons[destRecord.personId] : null;
   const destUnion = destPerson?.unions?.length && destEnv ? destEnv.couples[destPerson.unions[0]] : null;
   const destSpouse = destUnion && destEnv ? destEnv.persons[destUnion.husband === destPerson?.id ? destUnion.wife : destUnion.husband] : null;
-  const destChildren = destUnion && destEnv ? destUnion.children.map((cid) => destEnv.persons[cid]) : [];
+  // childrenOf (not destUnion.children directly), for the same reason as
+  // `children` above: it also surfaces any § illegitimate child of the
+  // destination record, which descendantsOf (lineage.ts) already does.
+  const destChildren = destUnion && destEnv && destPerson ? childrenOf(destEnv, destPerson.id) : [];
 
   const events: BioEvent[] = [];
   const ev = (year: number, text: string, kind: BioEventKind, src?: string, refs?: EventRef[]) => {
@@ -385,17 +393,36 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       "birth",
       cite("reg"),
     );
-  } else {
-    // Native-born, non-founder: both parents are guaranteed present by
-    // construction (only founders/fabricated incomers have father/mother -1).
+  } else if (p.illegitimate) {
+    // § illegitimacy: both parents are still real and present (village.ts
+    // never assigns an unknown father — see rollIllegitimateBirths), but
+    // the register's own record of the fact would be a court roll, not a
+    // parish birth entry — the same "not everything got the reg citation"
+    // logic as the merchet/wardship events elsewhere in this file.
     ev(
       p.birth,
       ca
-        ? `Va néixer a ${env.place[locale]}, ${region.name.ca}, ${p.sex === "M" ? "fill" : "filla"} de ${father!.name} ${father!.surname} i ${mother!.name}${bNote}.`
-        : `Born in ${env.place[locale]}, ${region.name.en}, ${p.sex === "M" ? "son" : "daughter"} of ${father!.name} ${father!.surname} and ${mother!.name}${bNote}.`,
+        ? `Va néixer a ${env.place[locale]}, ${region.name.ca}, {{fill/filla}} natural de ${mother!.name} ${mother!.surname} i de ${father!.name}, que mai no es van casar.`
+        : `Born in ${env.place[locale]}, ${region.name.en}, natural {{son/daughter}} of ${mother!.name} ${mother!.surname} and ${father!.name}, who never married her.`,
+      "birth",
+      cite("court"),
+      [nameRef(mother!, selfAddr), nameRef(father!, selfAddr, false)],
+    );
+  } else {
+    // Native-born, non-founder: both parents are guaranteed present by
+    // construction (only founders/fabricated incomers have father/mother -1).
+    const twin = p.twinOf != null ? env.persons[p.twinOf] : null;
+    const twinNote = twin ? (ca ? ` Va néixer {{bessó/bessona}}, junt amb ${twin.name}.` : ` Born a twin, alongside ${twin.name}.`) : "";
+    ev(
+      p.birth,
+      ca
+        ? `Va néixer a ${env.place[locale]}, ${region.name.ca}, ${p.sex === "M" ? "fill" : "filla"} de ${father!.name} ${father!.surname} i ${mother!.name}${bNote}.${twinNote}`
+        : `Born in ${env.place[locale]}, ${region.name.en}, ${p.sex === "M" ? "son" : "daughter"} of ${father!.name} ${father!.surname} and ${mother!.name}${bNote}.${twinNote}`,
       "birth",
       cite("reg"),
-      [nameRef(father!, selfAddr), nameRef(mother!, selfAddr, false)],
+      twin
+        ? [nameRef(father!, selfAddr), nameRef(mother!, selfAddr, false), nameRef(twin, selfAddr, false)]
+        : [nameRef(father!, selfAddr), nameRef(mother!, selfAddr, false)],
     );
   }
 
@@ -785,6 +812,13 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             : ` She came from the next parish, with a dowry of linen and a cow.`;
       }
       const older = p.sex === "F" && s.birth < p.birth - 3;
+      // § consanguinity: flagged by village.ts's marry(), not blocked — a
+      // first-cousin match required a bishop's dispensation after Lateran IV
+      // (1215), which is worth its own sentence rather than passing silently.
+      if (c.consanguineous)
+        extra += ca
+          ? ` Eren cosins germans; calgué una dispensa del bisbe per casar-los.`
+          : ` They were first cousins; a bishop's dispensation was needed for the match.`;
       // § nobility links: the merchet lord is clickable — to his own lord
       // page, not to any register record (a lord has none).
       const mRefs = [nameRef(s, selfAddr)];
@@ -796,6 +830,24 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           route: "lord",
           routeIdx: tenureIndexAt(manorLineOf(env.worldSeed, env.regionKey, env.villageIdx).heads, c.year),
         });
+      // § nobility crosslink: a modest share of gentry matches to a NATIVE
+      // spouse (not an incomer decoded elsewhere) are kin of the manor's own
+      // lord line — a real, addressable NobleLine (nobility.ts), not an
+      // invented relation, so the reference links to that lord's own page
+      // exactly like the merchet lord above.
+      if (p.cls === "gentry" && !s.incomer && rng.chance(0.12)) {
+        const kinLord = lordOfManorAt(env.worldSeed, env.regionKey, env.villageIdx, c.year);
+        extra += ca
+          ? ` Era parent llunyà de ${kinLord.name}, que aleshores tenia la senyoria.`
+          : ` A distant kinsman of ${kinLord.name}, who then held the manor.`;
+        mRefs.push({
+          id: -1,
+          name: kinLord.name,
+          addr: selfAddr,
+          route: "lord",
+          routeIdx: tenureIndexAt(manorLineOf(env.worldSeed, env.regionKey, env.villageIdx).heads, c.year),
+        });
+      }
       ev(
         c.year,
         ca
@@ -807,11 +859,16 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       );
     } else {
       // § remarriage
+      const consangText = c.consanguineous
+        ? ca
+          ? ` Eren cosins germans; calgué una dispensa del bisbe per casar-los.`
+          : ` They were first cousins; a bishop's dispensation was needed for the match.`
+        : "";
       ev(
         c.year,
         ca
-          ? `Es va tornar a casar, amb ${sName}: una casa no es podia portar sola, i el dol durava el que durava.`
-          : `Married again, to ${sName}: a household could not be run alone, and mourning lasted only as long as it could afford to.`,
+          ? `Es va tornar a casar, amb ${sName}: una casa no es podia portar sola, i el dol durava el que durava.${consangText}`
+          : `Married again, to ${sName}: a household could not be run alone, and mourning lasted only as long as it could afford to.${consangText}`,
         "marriage",
         undefined,
         [nameRef(s, selfAddr)],

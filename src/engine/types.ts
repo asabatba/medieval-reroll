@@ -80,6 +80,15 @@ export interface Person {
   longDistance?: boolean;
   /** Assigned at Tier 1, alongside death; "normal" for women (see RiskTrade). */
   riskTrade?: RiskTrade;
+  /** § illegitimacy: born to a mother and (real, known) father who were never
+   * married to each other. Still a genealogical child (childrenOf/succession.ts
+   * surfaces her for lineage/narrative purposes) but never counted toward
+   * inheritance (heirOf) or birth-order heir reckoning (isFirstBornSon,
+   * eldestSonOf) — the historical default absent a formal legitimation. */
+  illegitimate?: boolean;
+  /** § multiple births: the co-twin's id, when this person was one of a pair
+   * born in the same year to the same couple. Symmetric — set on both. */
+  twinOf?: number;
 }
 
 export interface Couple {
@@ -87,6 +96,11 @@ export interface Couple {
   wife: number;
   year: number;
   children: number[];
+  /** § consanguinity: the spouses share a grandparent (first cousins). Not
+   * blocked — a real medieval practice, especially among gentry keeping
+   * property in the family — just flagged so Tier 2 can narrate the
+   * dispensation a marriage this close actually required after Lateran IV. */
+  consanguineous?: boolean;
 }
 
 export interface Region {

@@ -316,6 +316,12 @@ describe("§ occupation marital gate", () => {
 function earliestChildBirthRaw(env: ReturnType<typeof resolveVillage>, id: number): number | null {
   const p = env.persons[id];
   const births = (p.unions ?? []).flatMap((ci) => env.couples[ci].children.map((cid) => env.persons[cid].birth));
+  // § illegitimacy: a natural child (village.ts's rollIllegitimateBirths)
+  // belongs to no Couple, so biography.ts's own earliestChildBirth (which
+  // now reads childrenOf, same as this test ought to) can be earlier than
+  // any union-based birth found above — scan for one directly, same shape
+  // as succession.ts's childrenOf.
+  for (const q of env.persons) if (q.illegitimate && (q.father === id || q.mother === id)) births.push(q.birth);
   return births.length ? Math.min(...births) : null;
 }
 

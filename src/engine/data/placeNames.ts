@@ -197,6 +197,28 @@ const KITS: Record<string, RegionNameKit> = {
       ["the hamlet of", "el llogaret de"],
     ],
   },
+  castile: {
+    prefixes: ["Villa", "Fuente", "Torre", "Val", "Fres", "Alma", "Espin", "Robledo", "Pozo", "Navas", "Olmedo", "Cast"],
+    suffixes: ["nueva", "viejo", "frío", "seco", "dueñas", "alba", "rubio", "hermoso", "blanco", "mocho"],
+    qualifiers: [
+      ["in Old Castile", "a la Vella Castella"],
+      ["in New Castile", "a la Nova Castella"],
+      ["in the Tierra de Campos", "a la Tierra de Campos"],
+      ["near Valladolid", "prop de Valladolid"],
+      ["in the Bureba", "a la Bureba"],
+      ["in Extremadura", "a Extremadura"],
+      ["near Burgos", "prop de Burgos"],
+      ["in the Campos Góticos", "als Campos Góticos"],
+      ["near Ávila", "prop d'Àvila"],
+      ["in the Sanabria", "a la Sanabria"],
+    ],
+    words: [
+      ["the village of", "el poble de"],
+      ["the vill of", "la vila de"],
+      ["the parish of", "la parròquia de"],
+      ["the hamlet of", "el llogaret de"],
+    ],
+  },
 };
 
 // Short proper name for each curated (hand-written) flagship place, in the
@@ -208,6 +230,7 @@ const CURATED_SHORT: Record<string, string[]> = {
   catalonia: ["Santa Coloma del Vallès", "Osona", "Vilamarí", "Riudellots"],
   italy: ["Colle Alberti", "Mugello", "San Donnino", "Montefollonico"],
   germany: ["Obergrund", "Cologne", "Lindheim", "Eschenbach"],
+  castile: ["Fresno el Viejo", "Tierra de Campos", "Torrelobatón", "Almazán"],
 };
 
 function capitalize(s: string): string {

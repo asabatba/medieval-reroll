@@ -293,4 +293,60 @@ export const REGIONS: Record<string, Region> = {
     landUnit: { en: "morgen", ca: "morgen" },
     inheritance: "impartible",
   },
+  castile: {
+    name: { en: "the Crown of Castile", ca: "la Corona de Castella" },
+    places: [
+      { en: "the village of Fresno el Viejo, in Old Castile", ca: "el poble de Fresno el Viejo, a la Vella Castella" },
+      { en: "a hamlet in the Tierra de Campos", ca: "un llogaret de la Tierra de Campos" },
+      { en: "the vill of Torrelobatón, near Valladolid", ca: "la vila de Torrelobatón, prop de Valladolid" },
+      { en: "the village of Almazán, in Soria", ca: "el poble d'Almazán, a Sòria" },
+    ],
+    maleNames: [
+      "Juan",
+      "Pedro",
+      "Alfonso",
+      "Fernando",
+      "Diego",
+      "García",
+      "Gonzalo",
+      "Rodrigo",
+      "Sancho",
+      "Álvaro",
+      "Martín",
+      "Gómez",
+      "Ruy",
+      "Lope",
+      "Suero",
+      "Ordoño",
+    ],
+    femaleNames: ["María", "Catalina", "Elvira", "Teresa", "Urraca", "Sancha", "Leonor", "Beatriz", "Constanza", "Inés", "Mencía", "Aldonza"],
+    surnames: ["García", "Fernández", "Rodríguez", "Martínez", "Sánchez", "Gómez", "López", "Díaz", "Ruiz", "Álvarez", "Ibáñez", "Ortiz"],
+    marriageF: [16, 20],
+    marriageM: [22, 27],
+    famine: [1315, 1322],
+    famineName: { en: "the Great Famine", ca: "la Gran Fam" },
+    warYears: [
+      [1366, 1369],
+      [1475, 1479],
+      [1482, 1492],
+    ],
+    warNames: {
+      1366: { en: "the war between King Peter and his brother Henry of Trastámara", ca: "la guerra entre el rei Pere i el seu germà Enric de Trastàmara" },
+      1475: { en: "the war of the Castilian succession", ca: "la guerra de successió castellana" },
+      1482: { en: "the war against Granada", ca: "la guerra contra Granada" },
+    },
+    revolt: null,
+    pilgrim: [
+      { en: "Santiago de Compostela", ca: "Sant Jaume de Galícia — Santiago de Compostel·la" },
+      { en: "Our Lady of Guadalupe", ca: "Nostra Senyora de Guadalupe" },
+      { en: "the shrine of San Isidoro at León", ca: "el santuari de Sant Isidor a Lleó" },
+    ],
+    currency: "maravedís",
+    landUnit: { en: "fanegas", ca: "fanegues" },
+    // Castilian customary law (the Fuero Real, later the Siete Partidas)
+    // reserved a legítima to every child rather than passing a holding whole
+    // to one heir — closer to French/Tuscan partible custom than to the
+    // English copyhold or Catalan hereu.
+    inheritance: "partible",
+  },
 };

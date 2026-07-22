@@ -37,6 +37,12 @@ export const JURISDICTIONS: Record<string, JurisdictionData> = {
     deaneries: ["Wetterau", "Rheingau", "Nahegau", "Ortenau", "Hunsrück", "Taunus"],
     earldoms: ["Nassau", "Katzenelnbogen", "Sponheim", "Hanau", "Isenburg"],
   },
+  castile: {
+    province: "Toledo",
+    dioceses: ["Toledo", "Burgos", "Palencia", "Segovia", "Ávila", "León"],
+    deaneries: ["Sepúlveda", "Arévalo", "Astudillo", "Belorado", "Aranda", "Roa", "Cuéllar", "Peñafiel"],
+    earldoms: ["Trastámara", "Haro", "Lara", "Alburquerque", "Medinaceli", "Benavente"],
+  },
 };
 
 export const SAINTS: Record<Locale, string[]> = {

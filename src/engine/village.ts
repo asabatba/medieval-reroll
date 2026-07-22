@@ -136,11 +136,19 @@ function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: Sex): R
 // to have died before the father never actually stood between a younger
 // son and the holding, and is excluded here rather than wrongly blocking
 // him from being treated as the presumed heir.
+// § illegitimacy: a natural son was never in the running for the tenement —
+// he neither counts as a competing elder brother against a legitimate son,
+// nor (checked first) can he himself ever be presumed the heir: false, not
+// the "no father on record" true, since here the non-heir penalty mechanics
+// (out-migration, downward mobility) SHOULD apply, exactly as for any other
+// non-heir son.
 function eldestSonOf(persons: readonly Person[], p: Person): boolean {
-  if (p.sex !== "M" || p.father < 0) return true;
+  if (p.sex !== "M") return true;
+  if (p.illegitimate) return false;
+  if (p.father < 0) return true;
   const father = persons[p.father];
   for (const q of persons) {
-    if (q.id === p.id || q.father !== p.father || q.sex !== "M") continue;
+    if (q.id === p.id || q.father !== p.father || q.sex !== "M" || q.illegitimate) continue;
     if (q.death.year <= father.death.year) continue; // predeceased the father: never actually in the running
     if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
   }
@@ -292,10 +300,35 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     marry(H, W, marriageYear);
   }
 
+  // § consanguinity: do H and W share a grandparent? Not a bar to marriage
+  // (first-cousin matches were real, especially among gentry consolidating
+  // property) — just flagged so Tier 2 can narrate the dispensation a match
+  // this close actually required after Lateran IV (1215).
+  function grandparentsOf(p: Person): Set<number> {
+    const gs = new Set<number>();
+    const add = (parentId: number) => {
+      if (parentId < 0) return;
+      const parent = persons[parentId];
+      if (parent.father >= 0) gs.add(parent.father);
+      if (parent.mother >= 0) gs.add(parent.mother);
+    };
+    add(p.father);
+    add(p.mother);
+    return gs;
+  }
+  function isConsanguineous(H: Person, W: Person): boolean {
+    if (H.father < 0 && H.mother < 0) return false;
+    if (W.father < 0 && W.mother < 0) return false;
+    const gH = grandparentsOf(H);
+    for (const g of grandparentsOf(W)) if (gH.has(g)) return true;
+    return false;
+  }
+
   function marry(H: Person, W: Person, year: number): Couple | null {
     // marriage cannot outlive either spouse
     if (year >= H.death.year || year >= W.death.year) return null;
     const c: Couple = { husband: H.id, wife: W.id, year, children: [] };
+    if (isConsanguineous(H, W)) c.consanguineous = true;
     const ci = couples.length;
     couples.push(c);
     if (!H.unions) H.unions = [];
@@ -315,7 +348,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     return c;
   }
 
-  function makeChild(c: Couple, H: Person, W: Person, y: number): void {
+  function makeChild(c: Couple, H: Person, W: Person, y: number): Person {
     const sex: Sex = rng.chance(0.5) ? "M" : "F";
     // § sibling name collision: the per-region name pools are small (a
     // dozen or so per sex — see region.maleNames/femaleNames), so drawing
@@ -360,6 +393,23 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // sent into service or apprenticeship elsewhere, since he won't inherit.
     rollService(child, nonHeirSon);
     c.children.push(child.id);
+    return child;
+  }
+
+  // § multiple births: a modest, stylized twinning rate (not a precise
+  // historical figure — well attested to run roughly ~1% of births across
+  // pre-modern Europe, with no strong regional signal this model tries to
+  // capture) — rolled from a stream independent of the shared `rng` (own
+  // namespace 980000, mirroring riskTradeOf/rollMobility's own streams) so
+  // adding this never perturbs the existing birth-spacing/matching sequence.
+  const TWIN_RATE = 0.012;
+  function maybeTwin(c: Couple, H: Person, W: Person, y: number, firstborn: Person): void {
+    if (c.children.length >= 11) return;
+    const r = makeRng(personStream(vHash, 980000, firstborn.id));
+    if (!r.chance(TWIN_RATE)) return;
+    const twin = makeChild(c, H, W, y);
+    firstborn.twinOf = twin.id;
+    twin.twinOf = firstborn.id;
   }
 
   function genChildren(c: Couple, capYear: number): void {
@@ -368,7 +418,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const endYear = Math.min(H.death.year, W.death.year, W.birth + 42);
     let y = c.year + rng.int(1, 2);
     while (y < endYear && y <= capYear && c.children.length < 11) {
-      makeChild(c, H, W, y);
+      const child = makeChild(c, H, W, y);
+      maybeTwin(c, H, W, y, child);
       y += rng.int(demo.birthSpacing[0], demo.birthSpacing[1]);
     }
   }
@@ -553,6 +604,74 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       }
     }
   }
+  runMatchingRounds();
+
+  // § illegitimacy: a modest share of women who reach adulthood still
+  // unmarried after the primary matching rounds bore one child out of
+  // wedlock at some point regardless — the commonest documented pattern (a
+  // service woman's child by a named local man). Placed AFTER primary
+  // matching (so "found no local/immigrant match" is already known) but
+  // BEFORE the emigration/remarriage passes below: a natural child doesn't
+  // stop her from later marrying elsewhere, emigrating, or remaining
+  // unmarried for good — all of those still run normally afterward. The
+  // child itself becomes eligible for the ordinary marriage market too, via
+  // the interleaved runMatchingRounds() calls in the remarriage loop further
+  // down (a single call to runMatchingRounds() already exhausts every
+  // cascading generation, so no extra call is needed here).
+  //
+  // Never assigns an unknown father: biography.ts's native-born birth
+  // narration reads `father!`/`mother!` unconditionally for anyone who
+  // isn't a founder/incomer (§ pure decode invariant — "both parents are
+  // guaranteed present by construction") — inventing an unaddressable
+  // father would break that. If no real, non-relative adult man exists yet
+  // (only possible in a village's very first generation), the roll is
+  // simply skipped for that woman.
+  function rollIllegitimateBirths(): void {
+    for (const W of persons.slice()) {
+      if (W.sex !== "F" || W.founder || W.spouse != null) continue;
+      const r = makeRng(personStream(vHash, 970000, W.id));
+      if (!r.chance(demo.illegitimacyRate)) continue;
+      const ageLo = Math.max(14, region.marriageF[0] - 3);
+      const ageHi = Math.max(ageLo + 1, Math.min(region.marriageF[1] + 8, W.death.age - 1));
+      if (ageHi <= ageLo) continue;
+      const y = W.birth + r.int(ageLo, ageHi);
+      if (y >= W.death.year) continue;
+      const fatherCandidates = persons.filter(
+        (m) =>
+          m.sex === "M" &&
+          m.id !== W.father &&
+          !(m.father === W.father && W.father !== -1) &&
+          !(m.mother === W.mother && W.mother !== -1) &&
+          m.birth + 14 <= y &&
+          m.death.year > y,
+      );
+      if (!fatherCandidates.length) continue;
+      const fatherP = r.pick(fatherCandidates);
+      const sex: Sex = r.chance(0.5) ? "M" : "F";
+      const child = addPerson({
+        name: r.pick(sex === "M" ? region.maleNames : region.femaleNames),
+        surname: childSurname(fatherP, W),
+        sex,
+        birth: y,
+        cls: W.cls,
+        father: fatherP.id,
+        mother: W.id,
+        illegitimate: true,
+      });
+      child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
+      child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
+    }
+  }
+  rollIllegitimateBirths();
+  // A freshly-created illegitimate child is UNPROCESSED — unlike everyone
+  // reachable from the founders, who the single exhaustive call above
+  // already swept into `processed` one way or another. Without this second
+  // call, such a child could reach the emigration passes below (which key
+  // off sex/age/spouse only, not `processed`) while still eligible for
+  // local matching too, risking the same person being marked BOTH
+  // `emigrated` and later locally married by the interleaved loop further
+  // down. One more call resolves her (married or processed-but-unmarried)
+  // first, same as everyone else by this point.
   runMatchingRounds();
 
   // Shared by both emigration passes below: a real, resolvable destination
