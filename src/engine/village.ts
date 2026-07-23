@@ -32,47 +32,37 @@
 // and residence are cross-village facts rather than forked lives.
 // =====================================================================
 
-import { CLASS_INFO, CLASSES } from "./data/classes.js";
+import { CLASS_INFO, CLASSES, URBAN_CLASSES } from "./data/classes.js";
 import { demographyOf } from "./data/demography.js";
 import { placeOf } from "./data/placeNames.js";
 import { REGIONS } from "./data/regions.js";
 import { addrHash, makeRng, personStream } from "./hash.js";
 import { famineAt, rollDeath, warAt } from "./mortality.js";
 import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
-import type { Address, Couple, Death, Envelope, Person, Region, RiskTrade, Sex, SocialClass } from "./types.js";
+import { settlementTypeOf } from "./settlement.js";
+import type { Address, Couple, Death, Envelope, Person, Sex } from "./types.js";
+import { cacheClear, cacheGet, cacheSet, cacheSize } from "./villageCache.js";
+import { riskTradeOf, rollDownwardMobility, rollMobility, rollService } from "./villageMobility.js";
+import { isAffinal, isConsanguineous, isHeir } from "./villageRules.js";
 
-// § hardening: the envelope cache is a bounded LRU, not an unbounded map —
-// a long-running session that browses thousands of addresses stays flat in
-// memory. Eviction is safe because solves are pure: a re-solve reproduces
-// the identical envelope (village.test.ts proves it).
-export const ENVELOPE_CACHE_LIMIT = 1024;
-const _envelopeCache = new Map<string, Envelope>();
+export { ENVELOPE_CACHE_LIMIT } from "./villageCache.js";
+export { isHeir } from "./villageRules.js";
 
 export function resolveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
   const key = `${worldSeed}/${regionKey}/${villageIdx}`;
-  const cached = _envelopeCache.get(key);
-  if (cached) {
-    // refresh recency (Map iteration order is insertion order)
-    _envelopeCache.delete(key);
-    _envelopeCache.set(key, cached);
-    return cached;
-  }
+  const cached = cacheGet(key);
+  if (cached) return cached;
   const env = solveVillage(worldSeed, regionKey, villageIdx);
-  _envelopeCache.set(key, env);
-  while (_envelopeCache.size > ENVELOPE_CACHE_LIMIT) {
-    const oldest = _envelopeCache.keys().next().value;
-    if (oldest === undefined) break;
-    _envelopeCache.delete(oldest);
-  }
+  cacheSet(key, env);
   return env;
 }
 
 export function clearEnvelopeCache(): void {
-  _envelopeCache.clear();
+  cacheClear();
 }
 
 export function envelopeCacheSize(): number {
-  return _envelopeCache.size;
+  return cacheSize();
 }
 
 // How many marriage-matching rounds a solve may run, SHARED across every
@@ -93,90 +83,6 @@ const PLACEHOLDER_DEATH: Death = { year: 0, age: 0, cause: "infancy" };
 
 // A person's trade-hazard category (§ occupational mortality): rolled once,
 // deterministically, from a stream independent of the shared village `rng`
-// (own namespace 8001, mirroring the per-person death stream at 7001) so
-// adding this never perturbs the marriage/migration draw sequence. Women
-// keep "normal" for now — their mortality model is already dominated by
-// childbirth risk, tracked separately. Tier 2 (biography.ts) reads this same
-// tag to keep occupation narrative consistent with the mechanic.
-function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: Sex): RiskTrade {
-  if (sex !== "M") return "normal";
-  const r = makeRng(personStream(vHash, 8001, id));
-  switch (cls) {
-    case "gentry":
-      return r.chance(0.35) ? "military" : "normal";
-    case "merchant":
-      return r.chance(0.25) ? "maritime" : "normal";
-    case "artisan":
-      return r.chance(0.18) ? "hazardous" : "normal";
-    case "freePeasant":
-      return r.chance(0.08) ? "maritime" : "normal";
-    case "serf":
-      return r.chance(0.05) ? "hazardous" : "normal";
-    default:
-      return "normal";
-  }
-}
-
-// § male out-migration: only the eldest surviving son inherits (male
-// primogeniture, mirrored by succession.ts's heirOf/isFirstBornSon for
-// decode-time use). Evaluated against the local, still-growing `persons`
-// array — safe because persons are always created in non-decreasing birth
-// order (a person's elder siblings, if any, already exist by the time they
-// themselves are created or matched).
-//
-// This can still disagree with heirOf's actual answer at the father's
-// death: an elder brother who emigrates or takes holy orders isn't
-// knowable here, since both are decided at HIS OWN later marriage-matching
-// round, long after this presumed-heir reckoning already had to happen for
-// every son as each one is born. Predecease is the one cause of that same
-// mismatch that IS fully knowable this early — every child of one marriage
-// is created synchronously in birth order with their death year rolled
-// immediately (mortality.ts), and the father's own death year was fixed
-// long before he had children — so an elder "brother" who's already known
-// to have died before the father never actually stood between a younger
-// son and the holding, and is excluded here rather than wrongly blocking
-// him from being treated as the presumed heir.
-// § illegitimacy / § legitimation: a natural son is never in the running for
-// the tenement UNLESS his parents later actually married each other AND
-// the region isn't England — the Statute of Merton (1236) had English
-// common law refuse to recognize legitimation per subsequens matrimonium
-// for inheritance, unlike canon law and most Continental custom. Read by
-// both the subject check and the competing-brother scan, so a legitimated
-// son (elsewhere) both can be, and can be blocked by, an elder brother
-// exactly like any other son born in wedlock.
-function heirEligible(q: Person, regionKey: string): boolean {
-  return !q.illegitimate || !!(q.legitimated && regionKey !== "england");
-}
-
-// he neither counts as a competing elder brother against a legitimate son,
-// nor (checked first) can he himself ever be presumed the heir: false, not
-// the "no father on record" true, since here the non-heir penalty mechanics
-// (out-migration, downward mobility) SHOULD apply, exactly as for any other
-// non-heir son.
-function eldestSonOf(persons: readonly Person[], p: Person, regionKey: string): boolean {
-  if (p.sex !== "M") return true;
-  if (!heirEligible(p, regionKey)) return false;
-  if (p.father < 0) return true;
-  const father = persons[p.father];
-  for (const q of persons) {
-    if (q.id === p.id || q.father !== p.father || q.sex !== "M" || !heirEligible(q, regionKey)) continue;
-    if (q.death.year <= father.death.year) continue; // predeceased the father: never actually in the running
-    if (q.birth < p.birth || (q.birth === p.birth && q.id < p.id)) return false;
-  }
-  return true;
-}
-
-// § regional inheritance customs: under partible custom (France, Tuscany —
-// see regions.ts) land was divided among the sons instead of passing whole
-// to one, so every son had a real stake worth staying for. The various
-// "non-heir" mechanical penalties below (heavier service, out-migration,
-// downward mobility) read THIS, not eldestSonOf directly, so they simply
-// never apply in a partible region rather than needing a separate flag at
-// every call site.
-export function isHeir(persons: readonly Person[], region: Region, regionKey: string, p: Person): boolean {
-  return region.inheritance === "partible" || eldestSonOf(persons, p, regionKey);
-}
-
 function solveVillage(worldSeed: number, regionKey: string, villageIdx: number): Envelope {
   const region = REGIONS[regionKey];
   const demo = demographyOf(regionKey);
@@ -192,45 +98,6 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const full: Person = { ...p, id: persons.length, origin: p.origin !== undefined ? p.origin : origin, death: PLACEHOLDER_DEATH };
     persons.push(full);
     return full;
-  }
-
-  // § mobility: a native child occasionally leaves their natal class on
-  // coming of age — serfs buying or defying their way to free tenancies
-  // (far likelier in the emptied countryside after 1349), free peasants'
-  // sons apprenticed into crafts, artisans' sons into trade. Rolled from a
-  // per-person stream so it never perturbs the shared village rng.
-  function rollMobility(p: Person): void {
-    const r = makeRng(personStream(vHash, 950000, p.id));
-    const post = p.birth + 16 >= 1350;
-    const m = demo.mobility;
-    let next: SocialClass | null = null;
-    if (p.cls === "serf" && r.chance(post ? m.serfToFree.postPlague : m.serfToFree.base)) next = "freePeasant";
-    else if (p.cls === "freePeasant" && r.chance(post ? m.freeToArtisan.postPlague : m.freeToArtisan.base)) next = "artisan";
-    else if (p.cls === "artisan" && r.chance(post ? m.artisanToMerchant.postPlague : m.artisanToMerchant.base)) next = "merchant";
-    if (next) {
-      p.clsOrigin = p.cls;
-      p.cls = next;
-    }
-  }
-
-  // § downward mobility: the mirror of rollMobility, for a non-heir son of
-  // an artisan/merchant house who has no shop or trade capital of his own
-  // to inherit — no rung to defend either. Never fires under partible
-  // custom (isHeir already reads every son as a stakeholder there, so
-  // nonHeirSon is always false) or if rollMobility already moved this
-  // person up — one class transition at birth, not two.
-  function rollDownwardMobility(p: Person, nonHeirSon: boolean): void {
-    if (!nonHeirSon || p.clsOrigin) return;
-    const r = makeRng(personStream(vHash, 960000, p.id));
-    const post = p.birth + 16 >= 1350;
-    const d = demo.mobility.nonHeirDowngrade;
-    let next: SocialClass | null = null;
-    if (p.cls === "merchant" && r.chance(post ? d.merchantToArtisan.postPlague : d.merchantToArtisan.base)) next = "artisan";
-    else if (p.cls === "artisan" && r.chance(post ? d.artisanToFree.postPlague : d.artisanToFree.base)) next = "freePeasant";
-    if (next) {
-      p.clsOrigin = p.cls;
-      p.cls = next;
-    }
   }
 
   // § dual surnames (Catalonia): the Iberian convention of a compound
@@ -251,27 +118,21 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     return regionKey === "catalonia" ? `${surnameLine(H.surname)} i ${surnameLine(W.surname)}` : H.surname;
   }
 
-  // § service: low-wealth children commonly spent adolescence in service or
-  // apprenticeship in another household (the NW-European life-cycle-service
-  // pattern; rarer in the Mediterranean — rates come from demography.ts).
-  function rollService(p: Person, heirBoost = false): void {
-    if (CLASS_INFO[p.cls].wealth > 2 && !heirBoost) return;
-    const r = makeRng(personStream(vHash, 900000, p.id));
-    // § male out-migration: a non-heir son of a wealthier household (who
-    // won't inherit the land either) is also more likely to be sent into
-    // service or apprenticeship than the base low-wealth rate alone implies.
-    const chance = heirBoost ? Math.min(0.9, demo.service[p.sex] * 1.4) : demo.service[p.sex];
-    if (!r.chance(chance)) return;
-    const from = p.birth + 12;
-    p.service = { from, to: from + r.int(4, 8) };
-  }
-
   // Founders: G0 couples born 1235–1275, already married. Their pre-history
   // is outside the register ("the register begins in 1290").
   const founderCouples = rng.int(9, 13);
   const surnamePool = region.surnames.slice();
+  // § settlement: a market town's founders skew toward the trades a town
+  // existed to house (data/classes.ts's URBAN_CLASSES) rather than the
+  // ordinary rural mix. One rng.weighted() call either way, so this never
+  // changes the shared stream's draw count — only which table it reads
+  // from. Native children inherit class at birth and only move class via
+  // the existing mobility rolls (villageMobility.ts), so this single hook
+  // is what drives the whole village's eventual class/wealth/occupation
+  // mix toward "urban" or "rural".
+  const classTable = settlementTypeOf(worldSeed, regionKey, villageIdx) === "urban" ? URBAN_CLASSES : CLASSES;
   for (let i = 0; i < founderCouples; i++) {
-    const cls = rng.weighted(CLASSES);
+    const cls = rng.weighted(classTable);
     const wealth = CLASS_INFO[cls].wealth;
     const surname = drawSurname(surnamePool);
     const hb = rng.int(1235, 1272);
@@ -311,35 +172,11 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     marry(H, W, marriageYear);
   }
 
-  // § consanguinity: do H and W share a grandparent? Not a bar to marriage
-  // (first-cousin matches were real, especially among gentry consolidating
-  // property) — just flagged so Tier 2 can narrate the dispensation a match
-  // this close actually required after Lateran IV (1215).
-  function grandparentsOf(p: Person): Set<number> {
-    const gs = new Set<number>();
-    const add = (parentId: number) => {
-      if (parentId < 0) return;
-      const parent = persons[parentId];
-      if (parent.father >= 0) gs.add(parent.father);
-      if (parent.mother >= 0) gs.add(parent.mother);
-    };
-    add(p.father);
-    add(p.mother);
-    return gs;
-  }
-  function isConsanguineous(H: Person, W: Person): boolean {
-    if (H.father < 0 && H.mother < 0) return false;
-    if (W.father < 0 && W.mother < 0) return false;
-    const gH = grandparentsOf(H);
-    for (const g of grandparentsOf(W)) if (gH.has(g)) return true;
-    return false;
-  }
-
   function marry(H: Person, W: Person, year: number): Couple | null {
     // marriage cannot outlive either spouse
     if (year >= H.death.year || year >= W.death.year) return null;
     const c: Couple = { husband: H.id, wife: W.id, year, children: [] };
-    if (isConsanguineous(H, W)) c.consanguineous = true;
+    if (isConsanguineous(persons, H, W)) c.consanguineous = true;
     const ci = couples.length;
     couples.push(c);
     if (!H.unions) H.unions = [];
@@ -389,20 +226,20 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       father: H.id,
       mother: W.id,
     });
-    rollMobility(child);
+    rollMobility(vHash, demo, child);
     // § male out-migration / § downward mobility: both class-transition
     // rolls happen BEFORE riskTradeOf, so the trade-hazard tag it derives
     // always reflects the child's FINAL class, never a stale pre-transition
     // one (occupation narrative in biography.ts reads p.cls fresh anyway,
     // but riskTrade is rolled once here and must agree with it).
     const nonHeirSon = child.sex === "M" && !isHeir(persons, region, regionKey, child);
-    rollDownwardMobility(child, nonHeirSon);
+    rollDownwardMobility(vHash, demo, child, nonHeirSon);
     child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
     child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
     // § male out-migration: a non-heir son — of ANY wealth grade, not just
     // the low-wealth default rollService already covers — is likelier to be
     // sent into service or apprenticeship elsewhere, since he won't inherit.
-    rollService(child, nonHeirSon);
+    rollService(vHash, demo, child, nonHeirSon);
     c.children.push(child.id);
     return child;
   }
@@ -799,22 +636,6 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     return latestWidowedAt(p) != null;
   }
 
-  // § affinity: the spouse of p's MOST RECENT union, dead or alive — used to
-  // detect a remarriage candidate who is a sibling of that spouse (marrying
-  // a dead wife's sister / a dead husband's brother). A real canon-law
-  // impediment distinct from consanguinity (no blood tie at all) but
-  // requiring the same kind of dispensation — flagged, not blocked, same
-  // as isConsanguineous above.
-  function lastSpouseOf(p: Person): Person | null {
-    if (!p.unions?.length) return null;
-    const c = couples[p.unions[p.unions.length - 1]];
-    return persons[p.id === c.husband ? c.wife : c.husband];
-  }
-  function isAffinal(a: Person, b: Person): boolean {
-    const lastA = lastSpouseOf(a);
-    return !!lastA && ((lastA.father !== -1 && lastA.father === b.father) || (lastA.mother !== -1 && lastA.mother === b.mother));
-  }
-
   function matchWidowers(takenSpouse: Set<number>): boolean {
     let any = false;
     const widowers = persons
@@ -864,7 +685,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       // onto m.unions immediately, so isAffinal called after it would read
       // lastSpouseOf(m) as `best` herself (a trivial self-comparison,
       // nearly always true) instead of m's actual previous, deceased wife.
-      const affinal = isAffinal(m, best);
+      const affinal = isAffinal(persons, couples, m, best);
       takenSpouse.add(best.id);
       takenSpouse.add(m.id);
       const c = marry(m, best, year);
@@ -912,7 +733,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       }
       if (!best) continue;
       // § affinity: computed BEFORE marry(), same reason as matchWidowers above.
-      const affinal = isAffinal(w, best);
+      const affinal = isAffinal(persons, couples, w, best);
       takenSpouse.add(best.id);
       takenSpouse.add(w.id);
       const c = marry(best, w, year);

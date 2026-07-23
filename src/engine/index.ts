@@ -18,13 +18,14 @@
    1347–1500, Great Famine, EMP marriage ages, ~1.3% maternal mortality/birth.
 */
 
-export { decodePerson, fatherOccupation } from "./biography.js";
+export { decodePerson } from "./biography.js";
 export { CLASS_INFO } from "./data/classes.js";
 export { DEFAULT_DEMOGRAPHY, DEMOGRAPHY, demographyOf } from "./data/demography.js";
 export { CAUSE_LABEL } from "./data/narrative.js";
 export { PLAGUES, plagueAt } from "./data/plagues.js";
 export { REGIONS } from "./data/regions.js";
 export { citeDocument } from "./documents.js";
+export { fatherOccupation } from "./fatherOccupation.js";
 export { addrHash, makeRng } from "./hash.js";
 // Overlapping hierarchies (§10): independent trees over the same village
 // addresses, joined by a deterministic assignment table.
@@ -55,6 +56,8 @@ export {
   tenureIndexAt,
 } from "./nobility.js";
 export { randomCitizen, roster } from "./roster.js";
+// § settlement: deterministic rural/urban axis over village addresses.
+export { settlementTypeOf } from "./settlement.js";
 export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";
 // Temporal resolver (§ year layer): the village population/households AS OF a year.
 export { CHURCH_HOUSEHOLD, MANOR_HOUSEHOLD, residentAt, villageStateAt } from "./snapshot.js";
@@ -81,6 +84,7 @@ export type {
   Rng,
   RosterRow,
   RoyalLine,
+  SettlementType,
   Sex,
   SocialClass,
   SolveDiagnostics,

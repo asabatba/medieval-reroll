@@ -17,7 +17,9 @@
 // know about a destination it hasn't been told about.
 // =====================================================================
 import type { Locale } from "../i18n/locale.js";
-import { CLASS_INFO, CRAFTS } from "./data/classes.js";
+import { decodeOccupation } from "./biographyOccupation.js";
+import { addRoyalRefs } from "./biographyRoyalRefs.js";
+import { CLASS_INFO } from "./data/classes.js";
 import {
   ADULT_EVENTS,
   CAUSE_LABEL,
@@ -25,7 +27,6 @@ import {
   CORONER_DEATHS,
   COURT_CAUSES,
   DEATH_DETAIL,
-  FATHER_OCC,
   FEMALE_EVENTS,
   OLD_EVENTS,
   RISK_DEATH_DETAIL,
@@ -37,12 +38,13 @@ import { placeOf, placeShortOf } from "./data/placeNames.js";
 import { PLAGUES, plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
 import { citeDocument } from "./documents.js";
+import { fatherOccupation } from "./fatherOccupation.js";
 import { makeRng, personStream } from "./hash.js";
 import { manorOf, parishMotherVillageIdx, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
 import { famineAt, registerBlackoutAt, warAt } from "./mortality.js";
-import { lordOfManorAt, manorLineOf, royalLineOf, royalWorldEvents, sovereignAt, tenureIndexAt } from "./nobility.js";
+import { lordOfManorAt, manorLineOf, royalWorldEvents, sovereignAt, tenureIndexAt } from "./nobility.js";
 import { childrenOf, heirOf, inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
@@ -55,9 +57,7 @@ import type {
   EventRef,
   Person,
   PersonAddress,
-  RiskTrade,
   Sex,
-  SocialClass,
   SpouseRef,
   UnionRef,
 } from "./types.js";
@@ -69,131 +69,6 @@ import { resolveVillage } from "./village.js";
 function gender(text: string, sex: Sex): string {
   return text.replace(/\{\{([^/{}]*)\/([^/{}]*)\}\}/g, (_, m: string, f: string) => (sex === "M" ? m : f));
 }
-
-interface OccEntry {
-  text: string;
-  literate?: boolean;
-  /** Occupational hazard category this entry's trade actually carries — must match the person's own riskTrade (village.ts) so narrative and mortality agree. Untagged entries are the safe default. */
-  risk?: RiskTrade;
-  /** Occupation is decided at a fixed early age (13), before anyone in this
-   * model marries — an entry that presupposes a husband or widowhood is
-   * only eligible if that's actually true SOMEWHERE in her recorded life. */
-  maritalGate?: "married" | "widowed";
-}
-const OCCUPATIONS: Record<Locale, Record<SocialClass, Record<Sex, OccEntry[]>>> = {
-  en: {
-    serf: {
-      M: [
-        { text: "worked his father's servile holding, and inherited its bondage with its land" },
-        { text: "laboured on the lord's demesne as a ploughman" },
-        { text: "kept the lord's sheep as a shepherd" },
-        { text: "was sent to break stone in the lord's quarry, a service owed like any other", risk: "hazardous" },
-      ],
-      F: [{ text: "worked the holding, the dairy, and the harvest alongside the family" }, { text: "went into service at the manor house" }],
-    },
-    freePeasant: {
-      M: [
-        { text: "farmed the family holding" },
-        { text: "worked as the village {craft}" },
-        { text: "leased extra strips and prospered as a yeoman" },
-        { text: "fished the estuary for the household's table and the market", risk: "maritime" },
-      ],
-      F: [{ text: "ran the dairy, the poultry, the garden, and the brewing" }, { text: "went into service in a townhouse" }],
-    },
-    artisan: {
-      M: [
-        { text: "was apprenticed to the family trade of {craft} and in time kept the shop" },
-        { text: "became a journeyman {craft}" },
-        { text: "hewed and dressed stone in the quarry, a trade that crippled or killed men young", risk: "hazardous" },
-      ],
-      F: [
-        { text: "worked in the family workshop, minding the shop and the accounts" },
-        { text: "carried on the workshop in widowhood, with journeymen under her", maritalGate: "widowed" },
-      ],
-    },
-    merchant: {
-      M: [
-        { text: "rode to the fairs with the family's cloth and kept the books", literate: true },
-        { text: "took ship with the trading fleet along the coast, buying and selling in foreign ports", literate: true, risk: "maritime" },
-      ],
-      F: [
-        { text: "helped keep the household accounts, alongside her mother", literate: true },
-        { text: "kept the shop and the books when her husband travelled", literate: true, maritalGate: "married" },
-      ],
-    },
-    clergyFamily: {
-      M: [{ text: "was taught his letters and became a clerk", literate: true }],
-      F: [{ text: "was taught to read her psalter, unusual for a girl", literate: true }],
-    },
-    gentry: {
-      M: [
-        { text: "was raised to arms and the management of the estate" },
-        { text: "studied law and served at the sessions", literate: true },
-        { text: "was raised chiefly to war, and rode in the retinue of a greater lord", risk: "military" },
-      ],
-      F: [
-        { text: "was raised to needlework, estate accounts, and the marriage market" },
-        { text: "ran the manor entirely during her husband's absences", maritalGate: "married" },
-      ],
-    },
-  },
-  ca: {
-    serf: {
-      M: [
-        { text: "va treballar l'explotació servil del seu pare, i en va heretar la servitud amb la terra" },
-        { text: "va llaurar el domini del senyor com a bover" },
-        { text: "va guardar les ovelles del senyor com a pastor" },
-        { text: "va ser enviat a tallar pedra a la pedrera del senyor, una prestació deguda com qualsevol altra", risk: "hazardous" },
-      ],
-      F: [{ text: "va treballar l'explotació, la lleteria i la collita al costat de la família" }, { text: "va entrar a servir a la casa senyorial" }],
-    },
-    freePeasant: {
-      M: [
-        { text: "va conrear l'explotació familiar" },
-        { text: "va treballar com a {craft} del poble" },
-        { text: "va arrendar terres addicionals i va prosperar com a pagès benestant" },
-        { text: "va pescar a l'estuari per a la taula de la casa i el mercat", risk: "maritime" },
-      ],
-      F: [{ text: "va portar la lleteria, els corrals, l'hort i la cervesa" }, { text: "va entrar a servir en una casa de vila" }],
-    },
-    artisan: {
-      M: [
-        { text: "va aprendre l'ofici familiar de {craft} i amb el temps va portar el taller" },
-        { text: "es va fer oficial {craft}" },
-        { text: "va tallar i polir pedra a la pedrera, un ofici que esguerrava o matava els homes joves", risk: "hazardous" },
-      ],
-      F: [
-        { text: "va treballar al taller familiar, cuidant la botiga i els comptes" },
-        { text: "va portar el taller en la viduïtat, amb oficials al seu càrrec", maritalGate: "widowed" },
-      ],
-    },
-    merchant: {
-      M: [
-        { text: "va anar a les fires amb els draps de la família i en va portar els comptes", literate: true },
-        { text: "va anar a la mar amb la flota mercant al llarg de la costa, comprant i venent en ports estrangers", literate: true, risk: "maritime" },
-      ],
-      F: [
-        { text: "ajudava a portar els comptes de la casa, al costat de la seva mare", literate: true },
-        { text: "va portar la botiga i els comptes quan el seu marit viatjava", literate: true, maritalGate: "married" },
-      ],
-    },
-    clergyFamily: {
-      M: [{ text: "va aprendre les lletres i es va fer clergue", literate: true }],
-      F: [{ text: "va aprendre a llegir el seu saltiri, cosa poc habitual en una noia", literate: true }],
-    },
-    gentry: {
-      M: [
-        { text: "va ser format en les armes i el govern de l'hisenda" },
-        { text: "va estudiar dret i va servir a les sessions", literate: true },
-        { text: "va ser format sobretot per a la guerra, i va cavalcar al seguici d'un senyor més poderós", risk: "military" },
-      ],
-      F: [
-        { text: "va ser formada en la brodadora, els comptes de l'hisenda i el mercat matrimonial" },
-        { text: "va portar tot el senyoriu durant les absències del marit", maritalGate: "married" },
-      ],
-    },
-  },
-};
 
 const CHILD_DEATH_CAUSE: Record<Locale, string[]> = {
   en: ["the smallpox", "the flux", "a fever", "the measles"],
@@ -697,54 +572,17 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     }
   }
 
-  // Occupation — text stays consistent with the mechanical riskTrade tag
-  // rolled at Tier 1 (village.ts): a hazardous/maritime/military person is
-  // preferentially narrated into a trade that actually carries that hazard,
-  // never the reverse (a "normal" person never draws a risk-flavoured entry).
-  if (p.death.age >= 12 && !p.inOrders) {
-    // § mobility timing: the age-13 "occupation decided" moment predates
-    // the age-16 class-mobility transition (§ mobility below) — so someone
-    // WITH a clsOrigin (mobility applies) is still living their ORIGIN
-    // class at 13, not their eventual final class. Reading OCCUPATIONS by
-    // p.cls here would narrate the final trade years early (e.g. a serf
-    // already "prospered as a yeoman" at 13, then "Rose out of servitude"
-    // at 16 — flatly contradicting itself); reading it by clsOrigin instead
-    // keeps this event honest about which class is actually true yet, the
-    // same fix already applied to the maritalGate entries above.
-    const occCls = p.clsOrigin ?? p.cls;
-    const eligible = OCCUPATIONS[locale][occCls][p.sex].filter((o) => !o.maritalGate || (o.maritalGate === "married" ? everMarried : widowedUnions.length > 0));
-    const fullPool = eligible.length ? eligible : OCCUPATIONS[locale][occCls][p.sex];
-    // riskTrade (village.ts) is rolled from the person's FINAL class — the
-    // hazard belongs to the trade they end up in, not necessarily one they
-    // were already practicing at 13. Only let it steer text selection when
-    // occCls IS that final class (no mobility, or mobility hasn't happened
-    // yet in the narrative sense); otherwise a mobility case could fall
-    // through to the "no matching risk entry in the origin pool" fallback
-    // and randomly draw an unrelated risk-flavoured line from the origin
-    // class (e.g. a future sailor's age-13 text calling him a quarryman).
-    const riskTrade = occCls === p.cls ? (p.riskTrade ?? "normal") : "normal";
-    const matching = riskTrade === "normal" ? fullPool.filter((o) => !o.risk) : fullPool.filter((o) => o.risk === riskTrade);
-    const pool = matching.length ? matching : fullPool;
-    const occ = rng.pick(pool);
-    const craft = rng.pick(CRAFTS[locale]);
-    const occText = occ.text.replace("{craft}", craft);
-    occupation = occText;
-    if (occ.literate) literate = true;
-    // A marital-gated entry narrates something only true once she's married
-    // (or widowed) — dating it to the fixed age-13 "occupation decided"
-    // moment would print "ran the manor during her husband's absences"
-    // years before the chronicle's own marriage entry, for a girl who is
-    // in fact still unmarried at 13. Anchor it to the year that actually
-    // makes it true instead (never earlier than 13, and never invented:
-    // `own`/`widowedUnions` are the same real union records the eligibility
-    // filter above already checked).
-    const occYear =
-      occ.maritalGate === "married"
-        ? Math.max(p.birth + 13, own!.year)
-        : occ.maritalGate === "widowed"
-          ? Math.max(p.birth + 13, Math.min(...widowedUnions.map((c) => spouseOf(c).death.year)))
-          : p.birth + 13;
-    ev(occYear, `${p.name} ${occText}.`, "life");
+  // Occupation (biographyOccupation.ts) — text stays consistent with the
+  // mechanical riskTrade tag rolled at Tier 1 (village.ts): a
+  // hazardous/maritime/military person is preferentially narrated into a
+  // trade that actually carries that hazard, never the reverse. Reads the
+  // same `rng` instance decodePerson already holds, at the same point in
+  // its draw sequence as the inline version this replaced.
+  const decodedOcc = decodeOccupation(p, locale, rng, everMarried, widowedUnions, own, spouseOf);
+  if (decodedOcc) {
+    occupation = decodedOcc.text;
+    if (decodedOcc.literate) literate = true;
+    ev(decodedOcc.year, `${p.name} ${decodedOcc.text}.`, "life");
   }
   if (p.inOrders) {
     literate = true;
@@ -1359,13 +1197,14 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // Death — real cause from envelope, decoded detail. A hazardous/maritime
-  // trade occasionally pulls its detail from the matching occupational-
-  // accident pool instead of the generic one, same "disease" cause bucket
-  // the register would file it under either way, but the coroner's roll
-  // (not the parish register) is what actually recorded such a death.
+  // Death — real cause from envelope, decoded detail. A hazardous/maritime/
+  // military trade occasionally pulls its detail from the matching
+  // occupational-accident pool instead of the generic one, same "disease"
+  // cause bucket the register would file it under either way, but the
+  // coroner's roll (not the parish register) is what actually recorded such
+  // a death.
   const riskPool =
-    p.death.cause === "disease" && (p.riskTrade === "hazardous" || p.riskTrade === "maritime") && rng.chance(0.55)
+    p.death.cause === "disease" && (p.riskTrade === "hazardous" || p.riskTrade === "maritime" || p.riskTrade === "military") && rng.chance(0.55)
       ? RISK_DEATH_DETAIL[locale][p.riskTrade]
       : null;
   const deathPool = riskPool ?? DEATH_DETAIL[locale][p.death.cause];
@@ -1539,65 +1378,4 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       (pl) => pl[0] >= p.birth && pl[1] <= p.death.year && !(p.death.cause === "plague" && p.death.year >= pl[0] && p.death.year <= pl[1]),
     ).length,
   };
-}
-
-// § nobility links: see the call site in decodePerson. Kept as a plain
-// module function — it reads only ROYAL_LINES data, never the rng.
-//
-// Each ref targets the SPECIFIC sovereign's page, so an alias shared or
-// shareable across reigns ("King Henry", "King John") is resolved
-// year-aware: if the reign in force at the event's year answers to the
-// matched string, it wins ("King Henry's war" in 1415 is Henry V);
-// otherwise the reign that explicitly claims the alias, preferring one
-// covering the event's year, else the nearest by accession — news usually
-// concerned the current king or his immediate neighbours.
-function addRoyalRefs(events: BioEvent[], regionKey: string, locale: Locale, addr: Address): void {
-  const line = royalLineOf(regionKey);
-  if (!line) return;
-  const owners = new Map<string, number[]>();
-  const claim = (s: string, i: number) => {
-    const list = owners.get(s) ?? [];
-    list.push(i);
-    owners.set(s, list);
-  };
-  line.reigns.forEach((r, i) => {
-    claim(r.style[locale], i);
-    claim(r.name[locale], i);
-    for (const aka of r.aka ?? []) claim(aka[locale], i);
-  });
-  const answersTo = (i: number, s: string) =>
-    line.reigns[i].style[locale].includes(s) || line.reigns[i].name[locale].includes(s) || (line.reigns[i].aka ?? []).some((a) => a[locale] === s);
-  for (const e of events) {
-    const extra: EventRef[] = [];
-    for (const [name, claimants] of owners) {
-      if (!e.text.includes(name)) continue;
-      let idx = -1;
-      // Last match wins, so on a transition year the incoming reign takes
-      // the alias — the same tie-break as sovereignAt.
-      for (let i = 0; i < line.reigns.length; i++) if (line.reigns[i].from <= e.year && e.year <= line.reigns[i].to && answersTo(i, name)) idx = i;
-      if (idx < 0) idx = claimants.find((i) => line.reigns[i].from <= e.year && e.year <= line.reigns[i].to) ?? -1;
-      if (idx < 0)
-        idx = claimants.reduce((best, i) => (Math.abs(line.reigns[i].from - e.year) < Math.abs(line.reigns[best].from - e.year) ? i : best), claimants[0]);
-      extra.push({ id: -1, name, addr, route: "royal", routeIdx: idx });
-    }
-    if (extra.length) e.refs = [...(e.refs ?? []), ...extra];
-  }
-}
-
-// Father's occupation, decoded from the FATHER's own envelope address so all
-// siblings agree on it (upward dependency only) — and, for an immigrant,
-// from her ORIGIN envelope, since that's the manor her father actually held
-// land of, not the destination's.
-export function fatherOccupation(env: Envelope, fatherId: number, locale: Locale): string | null {
-  if (fatherId < 0) return null;
-  const f = env.persons[fatherId];
-  const rng = makeRng(personStream(env.vHash, 60000, fatherId));
-  // § nobility: the lord he held of is the head of the manor's line in his
-  // own working prime, not the fief card's mid-register anchor.
-  const lord = lordOfManorAt(env.worldSeed, env.regionKey, env.villageIdx, Math.min(f.death.year, f.birth + 30)).name;
-  return rng
-    .pick(FATHER_OCC[locale][f.cls])
-    .replace("{land}", rng.int(CLASS_INFO[f.cls].wealth >= 2 ? 12 : 5, CLASS_INFO[f.cls].wealth >= 2 ? 40 : 15) + " " + env.region.landUnit[locale])
-    .replace("{craft}", rng.pick(CRAFTS[locale]))
-    .replace(/\{lord\}/g, lord);
 }

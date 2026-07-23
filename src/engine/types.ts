@@ -11,6 +11,9 @@ export type Sex = "M" | "F";
 
 export type SocialClass = "serf" | "freePeasant" | "artisan" | "merchant" | "clergyFamily" | "gentry";
 
+/** § settlement: the rural/urban axis a village address resolves to (settlement.ts) — deterministic, independent of any one village's own solve. */
+export type SettlementType = "rural" | "urban";
+
 export type DeathCause = "plague" | "famine" | "war" | "infancy" | "childhood" | "childbirth" | "disease" | "oldage";
 
 /** Occupational hazard category, rolled at Tier 1 alongside death and read back by

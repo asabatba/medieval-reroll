@@ -20,6 +20,7 @@ import { JURISDICTIONS, SAINTS } from "./data/jurisdictions.js";
 import { placeShortOf } from "./data/placeNames.js";
 import { addrHash, makeRng } from "./hash.js";
 import { ANCHOR_YEAR, honourFamilyOf, lordOfManorAt } from "./nobility.js";
+import { settlementTypeOf } from "./settlement.js";
 import type { Fief, Jurisdiction } from "./types.js";
 
 // ---- ecclesiastical tree: province > diocese > deanery > parish ----
@@ -73,11 +74,18 @@ export function parishOf(worldSeed: number, regionKey: string, villageIdx: numbe
 // grows them into full dynastic lines; the fief card's `lord` is the
 // mid-register (ANCHOR_YEAR) head of the manor's line, which by the
 // anchoring contract is the exact name this function always produced.
+//
+// § settlement: a chartered market town is still held of the same lord
+// line (a mesne borough, the historical norm for this period — outright
+// self-governing/royal boroughs were the exception) but isn't called a
+// "manor" — only the wrapping phrase changes; honour/earldom/lord are
+// exactly what an equivalent rural village in the same block would have.
 export function manorOf(worldSeed: number, regionKey: string, villageIdx: number, locale: Locale): Fief {
   const { earldom, surname: honourLord } = honourFamilyOf(worldSeed, regionKey, villageIdx);
   const lord = lordOfManorAt(worldSeed, regionKey, villageIdx, ANCHOR_YEAR).name;
   const place = placeShortOf(worldSeed, regionKey, villageIdx);
+  const urban = settlementTypeOf(worldSeed, regionKey, villageIdx) === "urban";
   return locale === "ca"
-    ? { manor: `la senyoria de ${place}`, honour: `l'honor de ${honourLord}`, earldom: `el comtat de ${earldom}`, lord }
-    : { manor: `the manor of ${place}`, honour: `the honour of ${honourLord}`, earldom: `the earldom of ${earldom}`, lord };
+    ? { manor: urban ? `la vila de ${place}` : `la senyoria de ${place}`, honour: `l'honor de ${honourLord}`, earldom: `el comtat de ${earldom}`, lord }
+    : { manor: urban ? `the borough of ${place}` : `the manor of ${place}`, honour: `the honour of ${honourLord}`, earldom: `the earldom of ${earldom}`, lord };
 }

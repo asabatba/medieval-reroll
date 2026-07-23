@@ -117,8 +117,12 @@ export const DEATH_DETAIL: Record<Locale, Record<DeathCause, string[]>> = {
 // category for it — but drawn from a trade-appropriate pool so a miner's
 // entry doesn't read like a sailor's. Used by biography.ts only when the
 // person's own riskTrade tag calls for it, so this never surfaces for
-// someone whose narrated occupation carried no such hazard.
-export const RISK_DEATH_DETAIL: Record<Locale, Record<"hazardous" | "maritime", string[]>> = {
+// someone whose narrated occupation carried no such hazard. `military` here
+// is deliberately an OLD wound or a training mishap, never a battle death —
+// an actual war-year kill already reaches DEATH_DETAIL.war via rollDeath's
+// own "war" cause; this pool only fires for a martial life whose death
+// itself landed outside any active war window.
+export const RISK_DEATH_DETAIL: Record<Locale, Record<"hazardous" | "maritime" | "military", string[]>> = {
   en: {
     hazardous: [
       "was crushed under a fall of stone in the quarry",
@@ -129,6 +133,11 @@ export const RISK_DEATH_DETAIL: Record<Locale, Record<"hazardous" | "maritime", 
       "was lost overboard in a sudden squall, and the sea gave nothing back",
       "drowned when the boat went down within sight of the shore",
       "died of a fever caught in a foreign port, far from home, and was buried there",
+    ],
+    military: [
+      "died of an old wound taken years before in some forgotten skirmish, which never fully healed",
+      "was thrown and trampled at arms practice in the tiltyard",
+      "died of a fever taken on garrison duty, far from any real battle",
     ],
   },
   ca: {
@@ -141,6 +150,11 @@ export const RISK_DEATH_DETAIL: Record<Locale, Record<"hazardous" | "maritime", 
       "es va perdre per la borda en una torbonada sobtada, i el mar no en va tornar res",
       "es va negar quan el vaixell es va enfonsar a la vista de la costa",
       "va morir d'una febre agafada en un port estranger, lluny de casa, i hi va quedar enterrat",
+    ],
+    military: [
+      "va morir d'una vella ferida rebuda anys enrere en una escaramussa oblidada, que mai no es va curar del tot",
+      "va caure de cavall i va ser trepitjat en un exercici d'armes",
+      "va morir d'una febre agafada en servei de guarnició, lluny de tota batalla real",
     ],
   },
 };

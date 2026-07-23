@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Locale } from "../i18n/locale.js";
-import { decodePerson, fatherOccupation } from "./biography.js";
+import { decodePerson } from "./biography.js";
 import { CLASS_INFO } from "./data/classes.js";
 import { plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
+import { fatherOccupation } from "./fatherOccupation.js";
 import { parishOf } from "./hierarchy.js";
 import { warAt } from "./mortality.js";
 import { lordOfManorAt } from "./nobility.js";
@@ -143,6 +144,7 @@ const MARITIME_OCC_MARKERS = ["fished the estuary", "trading fleet", "va pescar 
 const MILITARY_OCC_MARKERS = ["raised chiefly to war", "format sobretot per a la guerra"];
 const HAZARD_DEATH_MARKERS = ["fall of stone in the quarry", "gallery of the mine", "despreniment de pedra", "galeria de la mina"];
 const MARITIME_DEATH_MARKERS = ["lost overboard", "boat went down", "foreign port", "borda", "vaixell", "port estranger"];
+const MILITARY_DEATH_MARKERS = ["forgotten skirmish", "tiltyard", "garrison duty", "escaramussa oblidada", "exercici d'armes", "servei de guarnició"];
 
 function includesAny(text: string, markers: string[]): boolean {
   return markers.some((m) => text.includes(m));
@@ -190,6 +192,7 @@ describe("occupational-risk narrative consistency", () => {
   it("occupational-accident death detail only ever appears for a matching riskTrade", () => {
     let sawHazardDeath = 0;
     let sawMaritimeDeath = 0;
+    let sawMilitaryDeath = 0;
     for (const regionKey of REGION_KEYS) {
       for (let villageIdx = 0; villageIdx < 8; villageIdx++) {
         const env = resolveVillage(1444, regionKey, villageIdx);
@@ -204,11 +207,16 @@ describe("occupational-risk narrative consistency", () => {
             expect(p.riskTrade).toBe("maritime");
             sawMaritimeDeath++;
           }
+          if (includesAny(deathText, MILITARY_DEATH_MARKERS)) {
+            expect(p.riskTrade).toBe("military");
+            sawMilitaryDeath++;
+          }
         }
       }
     }
     expect(sawHazardDeath).toBeGreaterThan(0);
     expect(sawMaritimeDeath).toBeGreaterThan(0);
+    expect(sawMilitaryDeath).toBeGreaterThan(0);
   });
 });
 
