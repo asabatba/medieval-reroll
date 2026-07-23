@@ -1279,7 +1279,8 @@ button.fam-node:focus-visible {
   margin: 0;
   font-size: 11px;
 }
-.fam-self-leaf > .fam-branch {
+.fam-self-leaf > .fam-branch,
+.fam-unions > .fam-branch {
   margin-top: 6px;
 }
 .fam-root {

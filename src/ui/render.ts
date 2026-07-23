@@ -178,17 +178,16 @@ function renderFamilyTree(t: (typeof UI)[Locale], bio: Bio): string {
   const selfName = bio.name + (bio.surname ? " " + bio.surname : "");
   const unionsHtml = bio.unions.length
     ? `<div class="fam-unions">${bio.unions
-        .map(
-          (u) =>
-            `<div class="fam-union"><span class="fam-knot" aria-hidden="true">⚭</span>${famNode(u.spouse.name, u.spouse, addrStr(u.spouse.addr, u.spouse.id))}</div>`,
-        )
+        .map((u) => {
+          const kidsHtml = u.children.length
+            ? `<div class="fam-branch">${u.children.map((c) => `<div class="fam-leaf">${famNode(c.name, c, addrStr(c.addr, c.id))}</div>`).join("")}</div>`
+            : "";
+          return `<div class="fam-union"><span class="fam-knot" aria-hidden="true">⚭</span>${famNode(u.spouse.name, u.spouse, addrStr(u.spouse.addr, u.spouse.id))}</div>${kidsHtml}`;
+        })
         .join("")}</div>`
     : "";
-  const childrenHtml = bio.children.length
-    ? `<div class="fam-branch">${bio.children.map((c) => `<div class="fam-leaf">${famNode(c.name, c, addrStr(c.addr, c.id))}</div>`).join("")}</div>`
-    : "";
 
-  const selfInner = `<div class="fam-self-row">${famNode(selfName, bio, null, { self: true })}<span class="fam-tag">${esc(t.self(bio.sex))}</span></div>${unionsHtml}${childrenHtml}`;
+  const selfInner = `<div class="fam-self-row">${famNode(selfName, bio, null, { self: true })}<span class="fam-tag">${esc(t.self(bio.sex))}</span></div>${unionsHtml}`;
 
   const sibLeaf = (s: (typeof bio.siblings)[number]) => `<div class="fam-leaf">${famNode(s.name, s, addrStr(s.addr, s.id))}</div>`;
   const elderHtml = bio.siblings
