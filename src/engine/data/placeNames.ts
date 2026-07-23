@@ -247,6 +247,28 @@ const KITS: Record<string, RegionNameKit> = {
       ["the fishertoun of", "el poble de pescadors de"],
     ],
   },
+  portugal: {
+    prefixes: ["Vila", "Mont", "Sout", "Font", "Casal", "Póvo", "Ribeir", "Pedr", "Carvalh", "Ave", "Torr", "Alcal"],
+    suffixes: ["inho", "ela", "osa", "eira", "al", "nova", "velha", "ão", "ães", "im"],
+    qualifiers: [
+      ["in the Minho", "al Minho"],
+      ["in the Beira", "a la Beira"],
+      ["in the Estremadura", "a l'Estremadura"],
+      ["in the Alentejo", "a l'Alentejo"],
+      ["in Trás-os-Montes", "a Trás-os-Montes"],
+      ["near Coimbra", "prop de Coimbra"],
+      ["near Lisbon", "prop de Lisboa"],
+      ["in the Algarve", "a l'Algarve"],
+      ["near Braga", "prop de Braga"],
+      ["near Évora", "prop d'Évora"],
+    ],
+    words: [
+      ["the village of", "el poble de"],
+      ["the vill of", "la vila de"],
+      ["the parish of", "la parròquia de"],
+      ["the hamlet of", "el llogaret de"],
+    ],
+  },
 };
 
 // Short proper name for each curated (hand-written) flagship place, in the
@@ -260,6 +282,7 @@ const CURATED_SHORT: Record<string, string[]> = {
   germany: ["Obergrund", "Cologne", "Lindheim", "Eschenbach"],
   castile: ["Fresno el Viejo", "Tierra de Campos", "Torrelobatón", "Almazán"],
   scotland: ["Kirkhaugh", "Dalrigg", "Auchinlea", "Pittenhinny"],
+  portugal: ["Vilarinho", "Fráguas", "Alvorge", "Montouro"],
 };
 
 function capitalize(s: string): string {

@@ -51,6 +51,8 @@ describe("settlementTypeOf", () => {
 });
 
 describe("settlement effects on the village solve", () => {
+  // Explicit timeout: cost scales with REGION_KEYS.length (§ Adding a
+  // region) — a fixed budget generous enough for the current region count.
   it("urban villages' founders skew toward higher-wealth classes than rural ones", () => {
     let urbanWealthSum = 0;
     let urbanFounders = 0;
@@ -75,7 +77,7 @@ describe("settlement effects on the village solve", () => {
     const urbanMeanWealth = urbanWealthSum / urbanFounders;
     const ruralMeanWealth = ruralWealthSum / ruralFounders;
     expect(urbanMeanWealth).toBeGreaterThan(ruralMeanWealth);
-  });
+  }, 20000);
 
   it("manorOf's wrapping phrase agrees with settlementTypeOf: borough/vila for urban, manor/senyoria for rural", () => {
     for (const regionKey of REGION_KEYS) {

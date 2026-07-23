@@ -733,4 +733,102 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
       }),
     ],
   },
+
+  portugal: {
+    title: { en: "Kings of Portugal", ca: "Reis de Portugal" },
+    reigns: [
+      r(1223, 1248, {
+        name: { en: "Sancho II", ca: "Sanç II" },
+        house: { en: "Burgundy", ca: "Borgonya" },
+        style: { en: "King Sancho II", ca: "el rei Sanç II" },
+        end: "deposed",
+      }),
+      r(1248, 1279, {
+        name: { en: "Afonso III", ca: "Alfons III" },
+        house: { en: "Burgundy", ca: "Borgonya" },
+        style: { en: "King Afonso III", ca: "el rei Alfons III" },
+        accession: {
+          en: "The Pope himself declared King Sancho unfit to govern for the disorder of the realm, and the great men called over his brother Afonso, count of Boulogne by his own marriage, to rule in his stead — the old king dying in exile in Castile before the year was out, still calling himself king to the end.",
+          ca: "El mateix Papa declarà el rei Sanç indigne de governar per la desordre del regne, i els grans homes cridaren el seu germà Alfons, comte de Boulogne pel seu propi matrimoni, a regnar en el seu lloc — el vell rei morí a l'exili a Castella abans que acabés l'any, encara anomenant-se rei fins al final.",
+        },
+      }),
+      r(1279, 1325, {
+        name: { en: "Dinis I", ca: "Dinis I" },
+        house: { en: "Burgundy", ca: "Borgonya" },
+        style: { en: "King Dinis I, the Farmer King", ca: "el rei Dinis I, el Rei Llaurador" },
+        aka: [{ en: "the Farmer King", ca: "el Rei Llaurador" }],
+      }),
+      r(1325, 1357, {
+        name: { en: "Afonso IV", ca: "Alfons IV" },
+        house: { en: "Burgundy", ca: "Borgonya" },
+        style: { en: "King Afonso IV, the Brave", ca: "el rei Alfons IV, el Brau" },
+      }),
+      r(1357, 1367, {
+        name: { en: "Pedro I", ca: "Pere I" },
+        house: { en: "Burgundy", ca: "Borgonya" },
+        style: { en: "King Pedro I, the Just", ca: "el rei Pere I, el Just" },
+        accession: {
+          en: "King Afonso died, and his son Pedro, on taking the crown, hunted down the men who years before had murdered Inês de Castro, his father's secret wife, and tore the heart from one of them with his own hands. He had her body raised from the grave, crowned, and set upon the throne, that the whole court might come and kiss the dead queen's hand.",
+          ca: "El rei Alfons morí, i el seu fill Pere, en prendre la corona, perseguí els homes que anys abans havien assassinat Inês de Castro, l'esposa secreta del seu pare, i arrencà el cor a un d'ells amb les seves pròpies mans. Féu desenterrar el cos d'ella, coronar-lo i asseure'l al tron, perquè tota la cort hi anés a besar la mà de la reina morta.",
+        },
+      }),
+      r(1367, 1383, {
+        name: { en: "Fernando I", ca: "Ferran I" },
+        house: { en: "Burgundy", ca: "Borgonya" },
+        style: { en: "King Fernando I, the Handsome", ca: "el rei Ferran I, el Bell" },
+      }),
+      r(1383, 1385, {
+        name: { en: "the 1383–85 Crisis", ca: "la Crisi de 1383–85" },
+        house: null,
+        style: { en: "no king — the 1383–85 Crisis", ca: "cap rei — la Crisi de 1383–85" },
+        interregnum: true,
+        accession: {
+          en: "King Fernando died leaving only a daughter, wed to the King of Castile, who claimed the crown of Portugal for his own. The widowed queen ruled as regent in her daughter's name, but the commons of Lisbon rose against her and against the Castilian claim both, until the Cortes met at Coimbra and acclaimed the old king's bastard half-brother, João, Master of the Order of Aviz.",
+          ca: "El rei Ferran morí sense deixar més que una filla, casada amb el rei de Castella, que reclamà per a si la corona de Portugal. La reina vídua governà com a regent en nom de la filla, però el poble de Lisboa s'aixecà contra ella i contra la pretensió castellana alhora, fins que les Corts es reuniren a Coimbra i aclamaren el germanastre bastard del vell rei, Joan, mestre de l'orde d'Avis.",
+        },
+      }),
+      r(1385, 1433, {
+        name: { en: "João I", ca: "Joan I" },
+        house: { en: "Aviz", ca: "Avis" },
+        style: { en: "King João I", ca: "el rei Joan I" },
+        aka: [{ en: "John, Master of Aviz", ca: "Joan, mestre d'Avis" }],
+        accession: {
+          en: "At Aljubarrota the Master of Aviz's small army, with English bowmen fighting at their side, broke the great host of Castile in a single afternoon, and the independence of Portugal — and the friendship with England — was sealed in that field for good.",
+          ca: "A Aljubarrota, el petit exèrcit del mestre d'Avis, amb arquers anglesos combatent al seu costat, trencà la gran host de Castella en una sola tarda, i la independència de Portugal — i l'amistat amb Anglaterra — quedà segellada en aquell camp per sempre.",
+        },
+      }),
+      r(1433, 1438, {
+        name: { en: "Duarte I", ca: "Eduard I" },
+        house: { en: "Aviz", ca: "Avis" },
+        style: { en: "King Duarte I", ca: "el rei Eduard I" },
+      }),
+      r(1438, 1481, {
+        name: { en: "Afonso V", ca: "Alfons V" },
+        house: { en: "Aviz", ca: "Avis" },
+        style: { en: "King Afonso V, the African", ca: "el rei Alfons V, l'Africà" },
+        accession: {
+          en: "King Duarte died of the pestilence after only five years crowned, and his son Afonso, a child of six, was raised up in his place — the realm split for years after between the boy's mother and his uncle Pedro, Duke of Coimbra, over who should govern for him, a quarrel that ended only on the battlefield.",
+          ca: "El rei Eduard morí de la pesta després de només cinc anys coronat, i el seu fill Alfons, un infant de sis anys, fou alçat al seu lloc — el regne es dividí durant anys entre la mare del noi i el seu oncle Pere, duc de Coimbra, sobre qui l'havia de governar, una disputa que només acabà al camp de batalla.",
+        },
+      }),
+      r(1481, 1495, {
+        name: { en: "João II", ca: "Joan II" },
+        house: { en: "Aviz", ca: "Avis" },
+        style: { en: "King João II, the Perfect Prince", ca: "el rei Joan II, el Príncep Perfecte" },
+        accession: {
+          en: "King Afonso died a broken man after his own claim to the crown of Castile came to nothing on the battlefield, and his son João took the throne — a king who, within a few years, broke the power of the great houses that had defied his father in turn, and struck down the Duke of Viseu with his own dagger in the palace at Setúbal.",
+          ca: "El rei Alfons morí un home vençut després que la seva pretensió a la corona de Castella no reeixís al camp de batalla, i el seu fill Joan prengué el tron — un rei que, en pocs anys, trencà el poder de les grans cases que havien desafiat el seu pare, i apunyalà el duc de Viseu amb les seves pròpies mans al palau de Setúbal.",
+        },
+      }),
+      r(1495, 1521, {
+        name: { en: "Manuel I", ca: "Manuel I" },
+        house: { en: "Aviz", ca: "Avis" },
+        style: { en: "King Manuel I, the Fortunate", ca: "el rei Manuel I, l'Afortunat" },
+        accession: {
+          en: "King João's only lawful son had died young, thrown from his horse into the Tagus at Santarém, and the crown passed instead to his cousin Manuel, whom fortune — and the ships now rounding Africa toward the Indies — would treat kinder than any king of Portugal before him.",
+          ca: "L'únic fill legítim del rei Joan havia mort jove, llançat del cavall al Tejo a Santarém, i la corona passà en canvi al seu cosí Manuel, a qui la fortuna — i els vaixells que ara voltaven l'Àfrica cap a les Índies — tractarien millor que a cap rei de Portugal abans que ell.",
+        },
+      }),
+    ],
+  },
 };

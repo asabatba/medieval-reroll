@@ -212,6 +212,17 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     maleOutMigration: { nonHeirBase: 0.44, heirBase: 0.07, pressured: 0.64, groomPullChance: 0.3 }, // border unrest and the Auld Alliance's standing demand for soldiers abroad
     illegitimacyRate: 0.035, // Lowland kirk-session evidence runs above the NW-European norm
   },
+  portugal: {
+    ...NW_DEFAULT,
+    hazardMult: 1.03,
+    birthSpacing: [2, 3],
+    remarry: { M: 0.5, F: 0.2 }, // dowry-return regime, as in Castile/Catalonia
+    emigration: { base: 0.46, pressured: 0.64 }, // Ceuta, Madeira, and the Atlantic voyages opened new outlets as the fifteenth century wore on
+    service: { M: 0.22, F: 0.26 },
+    maternalMortalityPerBirth: 0.0065,
+    maleOutMigration: { nonHeirBase: 0.38, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.26 }, // North African garrisons and the African voyages drew off younger sons who once would simply have left for the towns
+    illegitimacyRate: 0.03,
+  },
 };
 
 export const DEFAULT_DEMOGRAPHY: RegionDemography = NW_DEFAULT;

@@ -49,6 +49,12 @@ export const JURISDICTIONS: Record<string, JurisdictionData> = {
     deaneries: ["Fife", "Angus", "Merse", "Gowrie", "Lothian", "Mearns", "Fothrif", "Teviotdale"],
     earldoms: ["Fife", "Angus", "Mar", "Menteith", "Strathearn", "March"],
   },
+  portugal: {
+    province: "Braga",
+    dioceses: ["Braga", "Porto", "Coimbra", "Lisboa", "Évora", "Viseu"],
+    deaneries: ["Entre-Douro-e-Minho", "Trás-os-Montes", "Beira Alta", "Beira Baixa", "Ribatejo", "Alto Alentejo", "Baixo Alentejo", "Algarve"],
+    earldoms: ["Barcelos", "Ourém", "Marialva", "Arraiolos", "Viana", "Faro"],
+  },
 };
 
 export const SAINTS: Record<Locale, string[]> = {
