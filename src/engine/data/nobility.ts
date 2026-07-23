@@ -607,4 +607,130 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
       }),
     ],
   },
+
+  scotland: {
+    title: { en: "Kings of Scots", ca: "Reis d'Escòcia" },
+    reigns: [
+      r(1214, 1249, {
+        name: { en: "Alexander II", ca: "Alexandre II" },
+        house: { en: "Dunkeld", ca: "Dunkeld" },
+        style: { en: "King Alexander II", ca: "el rei Alexandre II" },
+      }),
+      r(1249, 1286, {
+        name: { en: "Alexander III", ca: "Alexandre III" },
+        house: { en: "Dunkeld", ca: "Dunkeld" },
+        style: { en: "King Alexander III", ca: "el rei Alexandre III" },
+      }),
+      r(1286, 1292, {
+        name: { en: "the Great Cause", ca: "la Gran Causa" },
+        house: null,
+        style: { en: "no king — the succession disputed in the Great Cause", ca: "cap rei — la successió disputada en la Gran Causa" },
+        interregnum: true,
+        accession: {
+          en: "King Alexander was thrown from his horse on a black night riding home to his young queen, and found dead on the shore below Kinghorn. His only heir was a granddaughter, an infant in far Norway, who herself died crossing the sea before ever setting foot in her kingdom — and for six years the great lords of Scotland could not agree among themselves who should wear the crown.",
+          ca: "El rei Alexandre caigué del cavall una nit negra tornant a casa amb la seva jove reina, i fou trobat mort a la platja sota Kinghorn. La seva única hereva era una néta, infanta a la llunyana Noruega, que morí ella mateixa travessant el mar abans de trepitjar mai el seu regne — i durant sis anys els grans senyors d'Escòcia no es posaren d'acord sobre qui n'havia de dur la corona.",
+        },
+      }),
+      r(1292, 1296, {
+        name: { en: "John Balliol", ca: "Joan Balliol" },
+        house: { en: "Balliol", ca: "Balliol" },
+        style: { en: "King John Balliol", ca: "el rei Joan Balliol" },
+        end: "deposed",
+        aka: [{ en: "King John", ca: "el rei Joan" }],
+        accession: {
+          en: "The King of England was asked to judge among thirteen claimants to the empty throne, and gave it to John Balliol, who did him homage for it — a beginning, the old men said, that boded no good for a kingdom's freedom.",
+          ca: "Es demanà al rei d'Anglaterra que jutgés entre tretze pretendents al tron buit, i el donà a Joan Balliol, que li'n féu homenatge — un començament, deien els vells, que no auspiciava res de bo per a la llibertat d'un regne.",
+        },
+      }),
+      r(1296, 1306, {
+        name: { en: "the Wars of Independence", ca: "les Guerres d'Independència" },
+        house: null,
+        style: {
+          en: "no king — the Guardians of Scotland, in the wars against King Edward of England",
+          ca: "cap rei — els Guardians d'Escòcia, en les guerres contra el rei Eduard d'Anglaterra",
+        },
+        interregnum: true,
+        accession: {
+          en: "King Edward of England stripped King John of the royal arms off his own surcoat before the whole army — men called him Toom Tabard, the empty coat, ever after — and led the realm's great men south in chains. No crowned king sat in Scotland for ten hard years of war, while William Wallace and other guardians carried on the fight in the kingdom's name.",
+          ca: "El rei Eduard d'Anglaterra arrencà al rei Joan les armes reials de la mateixa sobrevesta davant tot l'exèrcit — d'aleshores ençà l'anomenaren Toom Tabard, la casaca buida — i s'endugué cap al sud, encadenats, els grans homes del regne. Cap rei coronat no segué a Escòcia durant deu anys durs de guerra, mentre William Wallace i altres guardians continuaven la lluita en nom del regne.",
+        },
+      }),
+      r(1306, 1329, {
+        name: { en: "Robert I", ca: "Robert I" },
+        house: { en: "Bruce", ca: "Bruce" },
+        style: { en: "King Robert I, the Bruce", ca: "el rei Robert I, Robert Bruce" },
+        aka: [{ en: "Robert the Bruce", ca: "Robert Bruce" }],
+        accession: {
+          en: "Robert Bruce slew his rival Comyn before the high altar at Dumfries, and within weeks had himself crowned at Scone, though hardly a great man of the realm stood with him and the Pope himself declared him excommunicate for the deed. Years of the hardest war followed, before the crown he had seized in blood was his in fact as well as name.",
+          ca: "Robert Bruce matà el seu rival Comyn davant l'altar major de Dumfries, i en poques setmanes es féu coronar a Scone, encara que gairebé cap gran home del regne no li fes costat i el mateix Papa el declarés excomunicat pel fet. Seguiren anys de la guerra més dura, abans que la corona presa amb sang fos seva també de fet, no només de nom.",
+        },
+      }),
+      r(1329, 1371, {
+        name: { en: "David II", ca: "David II" },
+        house: { en: "Bruce", ca: "Bruce" },
+        style: { en: "King David II", ca: "el rei David II" },
+        accession: {
+          en: "King Robert died full of years and hard-won victory, and his son David, a child of five, was crowned in his place — the first king of Scots crowned and anointed with the Pope's own blessing, which his father had fought a lifetime to win.",
+          ca: "El rei Robert morí carregat d'anys i de victòries dures de guanyar, i el seu fill David, un infant de cinc anys, fou coronat al seu lloc — el primer rei d'Escòcia coronat i ungit amb la benedicció del Papa mateix, que son pare havia lluitat tota una vida per aconseguir.",
+        },
+      }),
+      r(1371, 1390, {
+        name: { en: "Robert II", ca: "Robert II" },
+        house: { en: "Stewart", ca: "Stewart" },
+        style: { en: "King Robert II", ca: "el rei Robert II" },
+        accession: {
+          en: "King David died leaving no son of his own body, and the crown passed to his nephew Robert Stewart, grown grey in the long waiting for it — the first of a new house that would hold the throne of Scotland after him.",
+          ca: "El rei David morí sense deixar cap fill propi, i la corona passà al seu nebot Robert Stewart, ja canós de tant esperar-la — el primer d'una casa nova que tindria el tron d'Escòcia després d'ell.",
+        },
+      }),
+      r(1390, 1406, {
+        name: { en: "Robert III", ca: "Robert III" },
+        house: { en: "Stewart", ca: "Stewart" },
+        style: { en: "King Robert III", ca: "el rei Robert III" },
+        accession: {
+          en: "The old king died, and his son — christened John, but crowned Robert, for the name John had brought Balliol's kingdom nothing but grief — took the throne, a man already lamed and ailing, with the realm's true governance falling more and more to other hands.",
+          ca: "El vell rei morí, i el seu fill — batejat Joan, però coronat Robert, car el nom de Joan no havia portat al regnat de Balliol res més que dol — prengué el tron, un home ja coix i malaltís, amb el govern real del regne caient cada cop més en altres mans.",
+        },
+      }),
+      r(1406, 1437, {
+        name: { en: "James I", ca: "Jaume I" },
+        house: { en: "Stewart", ca: "Stewart" },
+        style: { en: "King James I", ca: "el rei Jaume I" },
+        end: "killed",
+        accession: {
+          en: "King Robert died of grief, men said, on the news that his last living son James, sent to France for his own safety, had been taken by English ships at sea and carried a prisoner to London — a boy king who would hold the name of king eighteen years before ever he held his own kingdom.",
+          ca: "El rei Robert morí de dol, deia la gent, en saber que el seu darrer fill viu, Jaume, enviat a França per seguretat, havia estat pres per vaixells anglesos en alta mar i dut presoner a Londres — un rei infant que duria el nom de rei divuit anys abans de tenir mai el seu propi regne.",
+        },
+      }),
+      r(1437, 1460, {
+        name: { en: "James II", ca: "Jaume II" },
+        house: { en: "Stewart", ca: "Stewart" },
+        style: { en: "King James II", ca: "el rei Jaume II" },
+        end: "killed",
+        accession: {
+          en: "King James was murdered in the night in the drains beneath the Blackfriars of Perth by men of his own blood, and his six-year-old son was crowned at Holyrood within the month, too young yet to know whom to trust among the lords who now knelt to him.",
+          ca: "El rei Jaume fou assassinat de nit als clavegueram sota els dominics de Perth per homes de la seva pròpia sang, i el seu fill de sis anys fou coronat a Holyrood abans d'un mes, massa jove encara per saber de qui fiar-se entre els senyors que ara s'agenollaven davant seu.",
+        },
+      }),
+      r(1460, 1488, {
+        name: { en: "James III", ca: "Jaume III" },
+        house: { en: "Stewart", ca: "Stewart" },
+        style: { en: "King James III", ca: "el rei Jaume III" },
+        end: "killed",
+        accession: {
+          en: "King James was killed before Roxburgh when the great bombard they called the Lion burst at its own firing, and his eight-year-old son reigned in his place, the castle taken the same week by the army that had lost its king in the winning of it.",
+          ca: "El rei Jaume morí davant Roxburgh quan la gran bombarda que anomenaven el Lleó esclatà en dispar, i el seu fill de vuit anys regnà al seu lloc, el castell pres la mateixa setmana per l'exèrcit que havia perdut el seu rei tot guanyant-lo.",
+        },
+      }),
+      r(1488, 1513, {
+        name: { en: "James IV", ca: "Jaume IV" },
+        house: { en: "Stewart", ca: "Stewart" },
+        style: { en: "King James IV", ca: "el rei Jaume IV" },
+        accession: {
+          en: "King James was killed at Sauchieburn by rebel lords who had raised their banners in his own son's name, and the new young king, they said, wore an iron chain next his skin ever after, a penance for a father's death he had never willed but could not undo.",
+          ca: "El rei Jaume fou mort a Sauchieburn per senyors rebels que havien alçat les seves banderes en nom del seu propi fill, i el nou rei jove, es deia, dugué des d'aleshores una cadena de ferro a la pell, penitència per una mort del pare que mai no havia volgut però que no podia desfer.",
+        },
+      }),
+    ],
+  },
 };

@@ -43,6 +43,12 @@ export const JURISDICTIONS: Record<string, JurisdictionData> = {
     deaneries: ["Sepúlveda", "Arévalo", "Astudillo", "Belorado", "Aranda", "Roa", "Cuéllar", "Peñafiel"],
     earldoms: ["Trastámara", "Haro", "Lara", "Alburquerque", "Medinaceli", "Benavente"],
   },
+  scotland: {
+    province: "St Andrews",
+    dioceses: ["St Andrews", "Glasgow", "Aberdeen", "Moray", "Dunkeld", "Brechin"],
+    deaneries: ["Fife", "Angus", "Merse", "Gowrie", "Lothian", "Mearns", "Fothrif", "Teviotdale"],
+    earldoms: ["Fife", "Angus", "Mar", "Menteith", "Strathearn", "March"],
+  },
 };
 
 export const SAINTS: Record<Locale, string[]> = {

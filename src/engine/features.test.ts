@@ -59,6 +59,44 @@ describe("§ Castile region", () => {
   });
 });
 
+describe("§ Scotland region", () => {
+  it("is wired into every region-keyed data table, not just REGIONS", () => {
+    expect(REGIONS.scotland).toBeDefined();
+    expect(DEMOGRAPHY.scotland).toBeDefined();
+    expect(JURISDICTIONS.scotland).toBeDefined();
+    expect(ROYAL_LINES.scotland).toBeDefined();
+  });
+
+  it("its royal line covers the whole register era (founders from 1235, births to 1490) with no gaps", () => {
+    const reigns = ROYAL_LINES.scotland.reigns;
+    expect(reigns[0].from).toBeLessThanOrEqual(1235);
+    expect(reigns[reigns.length - 1].to).toBeGreaterThanOrEqual(1500);
+    for (let i = 1; i < reigns.length; i++) expect(reigns[i].from).toBe(reigns[i - 1].to);
+  });
+
+  it("resolves villages with the same structural invariants as every other region", () => {
+    for (const env of sampleEnvs("scotland", 8)) {
+      expect(env.persons.length).toBeGreaterThan(30);
+      expect(env.persons.length).toBeLessThan(4000);
+      expect(env.diagnostics.truncated).toBe(false);
+    }
+  });
+
+  it("generates place names past the curated flagship villages, same as any other region", () => {
+    const beyond = placeOf(SEED, "scotland", 50);
+    expect(beyond.en.length).toBeGreaterThan(0);
+    expect(beyond.ca.length).toBeGreaterThan(0);
+  });
+
+  it("decodePerson produces a readable biography for a Scottish villager", () => {
+    const env = resolveVillage(SEED, "scotland", 0);
+    const p = env.persons.find((q) => !q.founder && q.father >= 0)!;
+    const bio = decodePerson(env, p.id, "en")!;
+    expect(bio.events.length).toBeGreaterThan(0);
+    expect(bio.region).toBe("Scotland");
+  });
+});
+
 describe("§ illegitimacy", () => {
   const envs = sampleEnvs("england", 120);
 

@@ -219,6 +219,34 @@ const KITS: Record<string, RegionNameKit> = {
       ["the hamlet of", "el llogaret de"],
     ],
   },
+  scotland: {
+    prefixes: ["Kirk", "Auchen", "Dal", "Bal", "Drum", "Glen", "Strath", "Inver", "Craig", "Muir", "Ard", "Kin", "Pit", "Tor", "Cul"],
+    suffixes: ["haugh", "toun", "brae", "burn", "law", "hope", "shiel", "ford", "mill", "head", "hill", "well"],
+    qualifiers: [
+      ["Roxburghshire", "Roxburghshire"],
+      ["Berwickshire", "Berwickshire"],
+      ["Selkirkshire", "Selkirkshire"],
+      ["Ayrshire", "Ayrshire"],
+      ["Lanarkshire", "Lanarkshire"],
+      ["Fife", "Fife"],
+      ["Perthshire", "Perthshire"],
+      ["Angus", "Angus"],
+      ["Aberdeenshire", "Aberdeenshire"],
+      ["Banffshire", "Banffshire"],
+      ["Stirlingshire", "Stirlingshire"],
+      ["Midlothian", "Midlothian"],
+      ["East Lothian", "East Lothian"],
+      ["Kincardineshire", "Kincardineshire"],
+      ["Renfrewshire", "Renfrewshire"],
+      ["Dumfriesshire", "Dumfriesshire"],
+    ],
+    words: [
+      ["the village of", "el poble de"],
+      ["the kirktoun of", "el poble parroquial de"],
+      ["the barony of", "la baronia de"],
+      ["the fishertoun of", "el poble de pescadors de"],
+    ],
+  },
 };
 
 // Short proper name for each curated (hand-written) flagship place, in the
@@ -231,6 +259,7 @@ const CURATED_SHORT: Record<string, string[]> = {
   italy: ["Colle Alberti", "Mugello", "San Donnino", "Montefollonico"],
   germany: ["Obergrund", "Cologne", "Lindheim", "Eschenbach"],
   castile: ["Fresno el Viejo", "Tierra de Campos", "Torrelobatón", "Almazán"],
+  scotland: ["Kirkhaugh", "Dalrigg", "Auchinlea", "Pittenhinny"],
 };
 
 function capitalize(s: string): string {

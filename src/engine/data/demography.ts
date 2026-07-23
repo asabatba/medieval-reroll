@@ -202,6 +202,16 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     maleOutMigration: { nonHeirBase: 0.36, heirBase: 0.06, pressured: 0.58, groomPullChance: 0.26 }, // frontier repoblación an outlet for younger sons, alongside the standing war
     illegitimacyRate: 0.028,
   },
+  scotland: {
+    ...NW_DEFAULT,
+    hazardMult: 1.05, // harsher climate, more marginal arable on the whole
+    infantMult: 1.06,
+    emigration: { base: 0.48, pressured: 0.68 }, // Low Countries/Baltic trade towns and, above all, the Auld Alliance's soldiery in France
+    service: { M: 0.36, F: 0.4 },
+    maternalMortalityPerBirth: 0.013,
+    maleOutMigration: { nonHeirBase: 0.44, heirBase: 0.07, pressured: 0.64, groomPullChance: 0.3 }, // border unrest and the Auld Alliance's standing demand for soldiers abroad
+    illegitimacyRate: 0.035, // Lowland kirk-session evidence runs above the NW-European norm
+  },
 };
 
 export const DEFAULT_DEMOGRAPHY: RegionDemography = NW_DEFAULT;
