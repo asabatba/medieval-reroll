@@ -301,7 +301,20 @@ export interface EventRef {
  * DeathCause, this used to be a bare `string`, so a typo'd or renamed kind
  * on the narrative side could silently drop its UI tag with nothing
  * catching it. A literal union here makes that a compile error instead. */
-export type BioEventKind = "birth" | "plague" | "famine" | "grief" | "fortune" | "marriage" | "child" | "war" | "revolt" | "hardship" | "death" | "life";
+export type BioEventKind =
+  | "birth"
+  | "plague"
+  | "famine"
+  | "grief"
+  | "fortune"
+  | "marriage"
+  | "child"
+  | "war"
+  | "revolt"
+  | "hardship"
+  | "death"
+  | "life"
+  | "elsewhere";
 
 export interface BioEvent {
   year: number;

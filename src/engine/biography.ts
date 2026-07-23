@@ -364,6 +364,23 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // destination record, which descendantsOf (lineage.ts) already does.
   const destChildren = destUnion && destEnv && destPerson ? childrenOf(destEnv, destPerson.id) : [];
 
+  // § departure: once she marries out or he leaves for good, this register
+  // has nothing further true to say about their local life — computed HERE
+  // (before any content-producing block runs, not just the ones textually
+  // after the Marriage section that narrates it) because earlier blocks
+  // — plague passages, manorial accounts — are just as much a local-presence
+  // claim as anything below and need the same boundary. Every localized
+  // block downstream reads this as an upper bound on when its content can
+  // occur, same role p.death.year already plays for ev() itself, just
+  // narrower. The Marriage section below still fires the actual departure
+  // event/text at exactly this year.
+  const departureYear: number | null =
+    !own && p.marriedOut
+      ? (destUnion?.year ?? p.birth + region.marriageF[1])
+      : !own && p.sex === "M" && p.emigrated
+        ? (destUnion?.year ?? p.birth + region.marriageM[1])
+        : null;
+
   const events: BioEvent[] = [];
   // § register blackout: years the crisis-year check below actually
   // suppressed a texture entry — surfaced afterward as one explicit line
@@ -503,13 +520,18 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     }
   }
 
-  // Plague passages: family losses read from ACTUAL envelope deaths
+  // Plague passages: family losses read from ACTUAL envelope deaths.
+  // "Lived through" it is a local-presence claim same as anything below —
+  // capped by departureYear too, even though this block runs textually
+  // before the Marriage section that narrates the departure itself
+  // (departureYear is computed earlier precisely so this can read it).
+  const localEnd = departureYear ?? p.death.year;
   let mentionedPlagues = 0;
   for (const pl of PLAGUES) {
-    if (pl[1] < p.birth || pl[0] > p.death.year) continue;
+    if (pl[1] < p.birth || pl[0] > localEnd) continue;
     const ageAt = Math.max(0, pl[0] - p.birth);
-    if (p.death.year >= pl[0] && !(p.death.cause === "plague" && p.death.year <= pl[1] + 0)) {
-      if (p.death.year < pl[0]) continue;
+    if (localEnd >= pl[0] && !(p.death.cause === "plague" && p.death.year <= pl[1] + 0)) {
+      if (localEnd < pl[0]) continue;
       if (ageAt < 3) continue;
       // did this plague actually take kin? — read the record, don't invent
       const kin: string[] = [];
@@ -537,7 +559,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         }
         ev(pl[0] + (ageAt === 0 ? 1 : 0), t, "plague");
         mentionedPlagues++;
-        if (pl[2] >= 10 && ageAt >= 10 && wealth <= 2 && rng.chance(0.6)) {
+        // Bargaining with THIS manor's steward, or taking up a dead
+        // neighbour's land, is its own local-presence claim, dated a year
+        // past the plague itself — check localEnd again rather than
+        // trusting the outer loop's start-year check to still cover it.
+        if (pl[2] >= 10 && ageAt >= 10 && wealth <= 2 && pl[1] + 1 <= localEnd && rng.chance(0.6)) {
           ev(
             pl[1] + 1,
             p.cls === "serf"
@@ -555,10 +581,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     }
   }
 
-  // Famine
-  if (famineAt(Math.max(p.birth, region.famine[0]), region) && p.death.year >= region.famine[0] && p.birth <= region.famine[1] && wealth <= 2) {
+  // Famine — same local-presence claim as the plague passages above.
+  if (famineAt(Math.max(p.birth, region.famine[0]), region) && localEnd >= region.famine[0] && p.birth <= region.famine[1] && wealth <= 2) {
     const y = Math.max(p.birth + 1, region.famine[0]);
-    if (y <= p.death.year && y - p.birth >= 2)
+    if (y <= localEnd && y - p.birth >= 2)
       ev(
         y,
         ca
@@ -749,7 +775,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // or, for a non-heir son under impartible custom, down (§ downward
   // mobility, rollDownwardMobility). Direction is read off the wealth
   // grades themselves, not stored separately on the Person.
-  if (p.clsOrigin && p.death.age >= 16) {
+  if (p.clsOrigin && p.death.age >= 16 && (departureYear == null || departureYear - p.birth >= 16)) {
     const y = p.birth + 16;
     const rose = CLASS_INFO[p.cls].wealth > CLASS_INFO[p.clsOrigin].wealth;
     let t: string;
@@ -781,8 +807,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // and boon-works owed for the holding, sometimes in arrears after a bad
   // harvest — for the tenant classes who actually rendered such dues in
   // this model (artisans/merchants/gentry/clergy held by other tenures).
-  if ((p.cls === "serf" || p.cls === "freePeasant") && p.death.age >= 20 && rng.chance(0.3)) {
-    const y = p.birth + rng.int(20, Math.min(50, p.death.age));
+  // Presupposes she's still the one holding it, so capped by departure too.
+  const acctAge = departureYear != null ? Math.min(p.death.age, departureYear - p.birth) : p.death.age;
+  if ((p.cls === "serf" || p.cls === "freePeasant") && acctAge >= 20 && rng.chance(0.3)) {
+    const y = p.birth + rng.int(20, Math.min(50, acctAge));
     const badYear = famineAt(y, region) || !!warAt(y, region);
     ev(
       y,
@@ -975,7 +1003,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       );
     } else {
       ev(
-        p.birth + region.marriageF[1],
+        departureYear!,
         ca
           ? `Es va casar fora de la parròquia${destText}; el seu nom surt d'aquest registre cap a un altre, i la resta de la seva vida hi queda escrita.`
           : `Married out of the parish${destText}; her name leaves this register for another, and the rest of her life is written there.`,
@@ -1009,7 +1037,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         [nameRef(destSpouse, destRecord)],
       );
     } else {
-      const heir = region.inheritance === "partible" || isFirstBornSon(env, id);
+      const heirApparent = region.inheritance === "partible" || isFirstBornSon(env, id);
       const reasons = ca
         ? [
             `Sense terra pròpia que esperar, va marxar${destText} a provar sort en un ofici.`,
@@ -1022,8 +1050,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             `Went to serve in another manor's household${destText}, there being no tenement here for a second son.`,
           ];
       ev(
-        p.birth + region.marriageM[1],
-        heir || p.death.age < region.marriageM[1] + 3
+        departureYear!,
+        heirApparent || p.death.age < region.marriageM[1] + 3
           ? ca
             ? `Va marxar de la parròquia${destText}; el seu nom surt d'aquest registre cap a un altre, i la resta de la seva vida hi queda escrita.`
             : `Left the parish${destText}; his name leaves this register for another, and the rest of his life is written there.`
@@ -1113,8 +1141,15 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // Revolt
-  if (region.revolt && region.revolt.year >= p.birth + 15 && region.revolt.year <= Math.min(p.death.year, p.birth + 55) && wealth <= 3 && rng.chance(0.35)) {
+  // Revolt — "swept the district" assumes she was still in the district;
+  // capped by departureYear like every other localized block below.
+  if (
+    region.revolt &&
+    region.revolt.year >= p.birth + 15 &&
+    region.revolt.year <= Math.min(departureYear ?? p.death.year, p.birth + 55) &&
+    wealth <= 3 &&
+    rng.chance(0.35)
+  ) {
     const joined = rng.chance(0.55);
     const rname = region.revolt.name[locale],
       rdesc = region.revolt.desc[locale];
@@ -1132,11 +1167,13 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // War touching the village
+  // War touching the village — same departure cap: soldiers "coming near"
+  // is a local fact, false once she's no longer local.
   for (const [a, b] of region.warYears) {
-    if (b < p.birth + 6 || a > p.death.year) continue;
+    const localEnd = departureYear ?? p.death.year;
+    if (b < p.birth + 6 || a > localEnd) continue;
     if (rng.chance(0.35) && wealth <= 3) {
-      const y = Math.max(a, p.birth + 6) + rng.int(0, Math.max(0, Math.min(b, p.death.year) - Math.max(a, p.birth + 6)));
+      const y = Math.max(a, p.birth + 6) + rng.int(0, Math.max(0, Math.min(b, localEnd) - Math.max(a, p.birth + 6)));
       const wn = warAt(y, region, locale) || (ca ? "les guerres" : "the wars");
       const action = ca ? rng.pick(WAR_ACTION.ca) : rng.pick(WAR_ACTION.en);
       ev(
@@ -1154,7 +1191,12 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // Personal texture events
   const earliestChildBirth = children.length ? Math.min(...children.map((c) => c.birth)) : null;
   function texture(pool: readonly [string, number, string | null][], lo: number, hi: number, n: number) {
-    const span = Math.min(hi, p.death.age) - lo;
+    // § departure: a departed person's life here is over from that year on,
+    // same as p.death.age already bounds a life that's over from death on —
+    // capping `hi` covers every texture pool (CHILD/YOUTH/ADULT/OLD_EVENTS,
+    // including the generic will pool entry) in one place.
+    const effHi = departureYear != null ? Math.min(hi, departureYear - p.birth) : hi;
+    const span = Math.min(effHi, p.death.age) - lo;
     if (span <= 0) return;
     let count = 0;
     for (const [tmpl, wgt, flag] of pool) {
@@ -1221,8 +1263,10 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // OLD_EVENTS "will" pool line it replaces (texture()'s skip above keeps
   // the two from ever firing for the same person) — but this one, having a
   // real heir on record, names the holding's actual destination instead of
-  // an anonymous bed and brass pot.
-  if (heir && p.death.age > 58 && rng.chance(1.2 * 0.16)) {
+  // an anonymous bed and brass pot. Never fires once departed: a will
+  // dictated to THIS parish clerk over a holding here presupposes she's
+  // still the one holding it.
+  if (heir && departureYear == null && p.death.age > 58 && rng.chance(1.2 * 0.16)) {
     const y = p.birth + 58 + rng.int(0, Math.min(90, p.death.age) - 58);
     const heirName = `${heir.name} ${heir.surname}`;
     ev(
@@ -1246,7 +1290,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // not call order) — this only changes which value of `literate` this
   // block's own text-selection callback sees.
   for (const w of WORLD_EVENTS[locale]) {
-    if (w[1] < p.birth + w[3] || w[0] > p.death.year) continue;
+    if (w[1] < p.birth + w[3] || w[0] > (departureYear ?? p.death.year)) continue;
     if (w[2] && !w[2].includes(env.regionKey)) continue;
     if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
   }
@@ -1255,7 +1299,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // (real history, not dice) — same shape and gating as the world events
   // above, appended after them so their rng draws stay in a fixed order.
   for (const w of royalWorldEvents(locale)) {
-    if (w[1] < p.birth + w[3] || w[0] > p.death.year) continue;
+    if (w[1] < p.birth + w[3] || w[0] > (departureYear ?? p.death.year)) continue;
     if (w[2] && !w[2].includes(env.regionKey)) continue;
     if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
   }
@@ -1269,7 +1313,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     const succ = line.heads
       .slice(1)
       .map((h, i) => ({ h, old: line.heads[i] }))
-      .filter(({ h }) => h.acceded >= Math.max(p.birth + 10, 1292) && h.acceded <= p.death.year);
+      .filter(({ h }) => h.acceded >= Math.max(p.birth + 10, 1292) && h.acceded <= (departureYear ?? p.death.year));
     if (succ.length && rng.chance(0.35)) {
       const { h, old } = rng.pick(succ);
       const hIdx = line.heads.indexOf(h);
@@ -1299,9 +1343,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     }
   }
 
-  // Pilgrimage
-  if (p.death.age >= 28 && rng.chance(0.18)) {
-    const y = p.birth + rng.int(25, Math.min(55, p.death.age - 1));
+  // Pilgrimage — "went ... and came home" presupposes a home here to come
+  // back to, so it's capped by departure the same way as the rest.
+  const pilgrimAge = departureYear != null ? Math.min(p.death.age, departureYear - p.birth) : p.death.age;
+  if (pilgrimAge >= 28 && rng.chance(0.18)) {
+    const y = p.birth + rng.int(25, Math.min(55, pilgrimAge - 1));
     const shrine = rng.pick(region.pilgrim)[locale];
     ev(
       y,
@@ -1324,25 +1370,59 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       : null;
   const deathPool = riskPool ?? DEATH_DETAIL[locale][p.death.cause];
   const dd = rng.pick(deathPool);
-  let burialTxt: string;
-  if (p.death.cause === "plague")
-    burialTxt = ca
-      ? "Enterrat{{/da}} de pressa, en una fossa compartida amb altres d'aquell temps de mort."
-      : "Buried in haste, in a grave shared with others of that dying time.";
-  else if (p.death.age === 0) burialTxt = "";
-  else if (p.death.age < 12)
-    burialTxt = ca ? "Enterrat{{/da}} al cementiri vora els altres fills de la família." : "Buried in the churchyard beside the other children of the family.";
-  else if (wealth >= 4)
-    burialTxt = ca
-      ? "Enterrat{{/da}} a l'església parroquial davant l'altar, sota una llosa amb inscripció, amb misses fundades per la seva ànima."
-      : "Buried in the parish church before the altar, beneath a marked stone, with masses endowed for the soul.";
-  else burialTxt = rng.pick(BURIAL_PLAIN[locale]);
-  if (motherVillage && p.death.cause !== "plague" && p.death.age > 0)
-    burialTxt += ca
-      ? ` Portat a ${motherVillage}, a la parròquia mare que serveix aquests pobles.`
-      : ` Carried to ${motherVillage}, to the mother parish that serves these villages.`;
-  const dSrc = riskPool || (p.death.cause === "disease" && CORONER_DEATHS[locale].has(dd)) ? cite("coroner") : cite("reg");
-  ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
+  if (departureYear != null && destPerson && destUnion && destSpouse && destRecord) {
+    // § departure: her real death IS recorded — in HER OWN destination
+    // record (destPerson), a full independent life there (verified: as
+    // rich as an ordinary native bio) — link straight to it, one hop
+    // instead of the two (origin → husband's page → his wife listing) the
+    // marriage-out event alone would otherwise leave as the only path.
+    const destPlace = p.emigrateTo ? placeNameOf(env.worldSeed, p.emigrateTo, locale) : "";
+    ev(
+      p.death.year,
+      ca
+        ? `${p.name} ${p.surname} va morir l'any ${p.death.year}; la resta de la seva vida — el casament, els fills, i l'enterrament — queda escrita al registre de ${destPlace}.`
+        : `${p.name} ${p.surname} died in ${p.death.year}; the rest of ${pos} life — the marriage, the children, and the burial — is written in the register of ${destPlace}.`,
+      "elsewhere",
+      cite("reg"),
+      [nameRef(destPerson, destRecord)],
+    );
+  } else if (departureYear != null) {
+    // § departure, no destination record: a genuine dead end. Her death
+    // itself is still real (rolled at the origin regardless of where she
+    // ended up — see identity.ts), only the burial detail is unknowable
+    // here, so keep the true cause and admit the rest honestly instead of
+    // fabricating a local burial that didn't happen.
+    ev(
+      p.death.year,
+      ca
+        ? `${p.name} ${dd}. On va ser enterrat{{/da}}, aquest registre no ho diu.`
+        : `${p.name} ${dd}. Where {{he/she}} was laid to rest, this register does not say.`,
+      "elsewhere",
+      cite("reg"),
+    );
+  } else {
+    let burialTxt: string;
+    if (p.death.cause === "plague")
+      burialTxt = ca
+        ? "Enterrat{{/da}} de pressa, en una fossa compartida amb altres d'aquell temps de mort."
+        : "Buried in haste, in a grave shared with others of that dying time.";
+    else if (p.death.age === 0) burialTxt = "";
+    else if (p.death.age < 12)
+      burialTxt = ca
+        ? "Enterrat{{/da}} al cementiri vora els altres fills de la família."
+        : "Buried in the churchyard beside the other children of the family.";
+    else if (wealth >= 4)
+      burialTxt = ca
+        ? "Enterrat{{/da}} a l'església parroquial davant l'altar, sota una llosa amb inscripció, amb misses fundades per la seva ànima."
+        : "Buried in the parish church before the altar, beneath a marked stone, with masses endowed for the soul.";
+    else burialTxt = rng.pick(BURIAL_PLAIN[locale]);
+    if (motherVillage && p.death.cause !== "plague" && p.death.age > 0)
+      burialTxt += ca
+        ? ` Portat a ${motherVillage}, a la parròquia mare que serveix aquests pobles.`
+        : ` Carried to ${motherVillage}, to the mother parish that serves these villages.`;
+    const dSrc = riskPool || (p.death.cause === "disease" && CORONER_DEATHS[locale].has(dd)) ? cite("coroner") : cite("reg");
+    ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
+  }
 
   // § record scarcity: sometimes texture, world events, and marriage all
   // simply fail to roll — a genuine gap, not a bug, since the same is true
@@ -1354,8 +1434,11 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // not the ordinary short record of someone who simply died young — the
   // same move already made for founders (§ pre-register) and incomers (§
   // recorded elsewhere), extended to cover "recorded nowhere in between".
+  // Never fires once departed: the "elsewhere" closing entry above already
+  // explains the brevity — a second, different-voiced note saying the same
+  // thing would just be noise.
   const thinFloor = 2 + Math.min(3, Math.floor(p.death.age / 20));
-  if (events.length <= thinFloor && p.death.age >= 15) {
+  if (departureYear == null && events.length <= thinFloor && p.death.age >= 15) {
     ev(
       p.birth + Math.ceil((p.death.age + 1) / 2),
       ca
@@ -1366,7 +1449,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  events.sort((a, b) => a.year - b.year || (a.kind === "birth" ? -1 : a.kind === "death" ? 1 : 0));
+  events.sort((a, b) => a.year - b.year || (a.kind === "birth" ? -1 : a.kind === "death" || a.kind === "elsewhere" ? 1 : 0));
 
   // § nobility links: every sovereign named ANYWHERE in the chronicle —
   // accession news, war names, whatever prose mentions a king — links to

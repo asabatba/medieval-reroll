@@ -89,7 +89,10 @@ describe("decodePerson", () => {
       const sorted = [...years].sort((a, b) => a - b);
       expect(years).toEqual(sorted);
       expect(bio.events[0].kind).toBe("birth");
-      expect(bio.events[bio.events.length - 1].kind).toBe("death");
+      // "elsewhere" replaces "death" as the closing entry for someone who
+      // married out or emigrated (§ departure) — the register itself has
+      // nothing more to say, so there's no local burial to narrate.
+      expect(["death", "elsewhere"]).toContain(bio.events[bio.events.length - 1].kind);
     }
   });
 
@@ -640,13 +643,102 @@ describe("§ register blackout years", () => {
     expect(hits).toBeGreaterThan(0);
   });
 
-  it("never suppresses a structural birth, marriage, or death event — every person keeps all three where applicable", () => {
+  it("never suppresses a structural birth event, and every chronicle closes with a death or elsewhere entry", () => {
     for (const regionKey of REGION_KEYS) {
       const env = resolveVillage(1444, regionKey, 4);
       for (const p of env.persons) {
         const bio = decodePerson(env, p.id, "en")!;
         expect(bio.events.some((e) => e.kind === "birth")).toBe(true);
-        expect(bio.events.some((e) => e.kind === "death")).toBe(true);
+        // § departure replaces the "death" closing entry with "elsewhere"
+        // for someone who married out or emigrated — never both, never neither.
+        expect(bio.events.some((e) => e.kind === "death" || e.kind === "elsewhere")).toBe(true);
+      }
+    }
+  });
+});
+
+describe("§ departure cutoff", () => {
+  // Mirrors biography.ts's own departureYear formula exactly (see decodePerson):
+  // set only for someone with no local union who married out or (male) emigrated.
+  function departureInfoOf(env: ReturnType<typeof resolveVillage>, p: (typeof env.persons)[number]) {
+    const region = REGIONS[env.regionKey];
+    const departed = (!p.unions || p.unions.length === 0) && (p.marriedOut || (p.sex === "M" && p.emigrated));
+    if (!departed) return null;
+    const bio = decodePerson(env, p.id, "en")!;
+    const departureYear = bio.marriageYear != null ? bio.marriageYear : p.birth + (p.sex === "F" ? region.marriageF[1] : region.marriageM[1]);
+    return { bio, departureYear };
+  }
+
+  it("closes with an 'elsewhere' entry for a departed person, a 'death' entry for everyone else", () => {
+    let departedSeen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 10; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        for (const p of env.persons) {
+          const info = departureInfoOf(env, p);
+          const bio = info?.bio ?? decodePerson(env, p.id, "en")!;
+          const last = bio.events.at(-1);
+          if (info) {
+            departedSeen++;
+            expect(last?.kind).toBe("elsewhere");
+          } else {
+            expect(last?.kind).toBe("death");
+          }
+        }
+      }
+    }
+    expect(departedSeen).toBeGreaterThan(0);
+  });
+
+  it("never narrates local-presence content (court, manor, pilgrimage, war, plague, famine) for years after departure", () => {
+    const localOnlyKinds = new Set(["plague", "famine", "hardship", "fortune", "war", "revolt"]);
+    let checked = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 10; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        for (const p of env.persons) {
+          const info = departureInfoOf(env, p);
+          if (!info) continue;
+          checked++;
+          for (const e of info.bio.events) {
+            if (!localOnlyKinds.has(e.kind)) continue;
+            expect(e.year).toBeLessThanOrEqual(info.departureYear);
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("links the closing entry to the real destination record (not the spouse's) when one exists", () => {
+    let linkedSeen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 15; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        for (const p of env.persons) {
+          const info = departureInfoOf(env, p);
+          if (!info?.bio.destRecord) continue;
+          const last = info.bio.events.at(-1)!;
+          if (!last.refs?.length) continue; // destUnion might still be missing even though destRecord isn't
+          linkedSeen++;
+          // her own destination-record id, addressed at the destination village
+          expect(last.refs[0].addr.regionKey).toBe(info.bio.destRecord.regionKey);
+          expect(last.refs[0].addr.villageIdx).toBe(info.bio.destRecord.villageIdx);
+        }
+      }
+    }
+    expect(linkedSeen).toBeGreaterThan(0);
+  });
+
+  it("never dictates a named will for a departed person, however wealthy", () => {
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 10; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        for (const p of env.persons) {
+          const info = departureInfoOf(env, p);
+          if (!info) continue;
+          expect(info.bio.events.some((e) => e.text.startsWith("Dictated a will to the parish clerk, naming"))).toBe(false);
+        }
       }
     }
   });

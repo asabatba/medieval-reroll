@@ -24,6 +24,7 @@ export const KIND_LABEL: Record<Locale, Record<BioEventKind, string>> = {
     hardship: "Hardship",
     death: "Obiit",
     life: "",
+    elsewhere: "Elsewhere",
   },
   ca: {
     birth: "Naixement",
@@ -38,5 +39,6 @@ export const KIND_LABEL: Record<Locale, Record<BioEventKind, string>> = {
     hardship: "Penúria",
     death: "Òbit",
     life: "",
+    elsewhere: "Altre registre",
   },
 };

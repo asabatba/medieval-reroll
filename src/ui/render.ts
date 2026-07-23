@@ -442,8 +442,12 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
       `</div>`;
   }
 
-  // Chronicle
-  html += `<div class="sect reveal"><h2>${esc(t.chronicle)}</h2></div><div class="chronicle">`;
+  // Chronicle — a chronicle that closes with an "elsewhere" entry (§
+  // departure: she married out or he left for good, with nothing further
+  // true to narrate here) gets a fading treatment instead of ending flush,
+  // so the page itself reads as trailing off rather than just stopping.
+  const trailsOff = bio.events.at(-1)?.kind === "elsewhere";
+  html += `<div class="sect reveal"><h2>${esc(t.chronicle)}</h2></div><div class="chronicle${trailsOff ? " chronicle-fade" : ""}">`;
   bio.events.forEach((e, i) => {
     const label = KIND_LABEL[locale][e.kind] || "";
     html += `<div class="entry k-${e.kind} reveal" style="animation-delay:${Math.min(i * 55, 850)}ms">

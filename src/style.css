@@ -365,6 +365,15 @@ h1.name .init {
   border-left: 1px solid var(--line);
   margin-left: 6px;
 }
+/* § departure: a chronicle that ends on an "elsewhere" entry (she married
+   out, he left for good) fades toward blank parchment instead of ending
+   flush, so the page itself signals the record trailing off rather than
+   an ordinary ending. Mask, not opacity, so the fade covers the guide-line
+   and the last entry's dot together as one edge. */
+.chronicle.chronicle-fade {
+  mask-image: linear-gradient(to bottom, black calc(100% - 70px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 70px), transparent 100%);
+}
 .entry {
   display: grid;
   grid-template-columns: 96px 1fr;
@@ -453,6 +462,22 @@ h1.name .init {
 .entry.k-death .yr {
   color: var(--rubric);
 }
+/* § departure: a hollow ring instead of every other kind's filled dot —
+   marks an open ending (the register saying no more, or pointing
+   elsewhere) rather than a normal recorded fact. */
+.entry.k-elsewhere::before {
+  background: transparent;
+  border: 1.5px solid var(--bone-dim);
+  box-shadow: none;
+}
+.entry.k-elsewhere .tx {
+  font-style: italic;
+  color: var(--bone-dim);
+}
+.entry.k-elsewhere .tx::first-letter {
+  color: inherit;
+  font-weight: inherit;
+}
 .tag {
   display: inline-block;
   font-family: "JetBrains Mono", monospace;
@@ -482,6 +507,11 @@ h1.name .init {
 .k-revolt .tag {
   color: var(--verdigris);
   border-color: rgba(125, 155, 128, 0.4);
+}
+.k-elsewhere .tag {
+  color: var(--bone-dim);
+  border-color: var(--line);
+  font-style: normal;
 }
 
 /* ---- Children ---- */

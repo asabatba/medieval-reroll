@@ -1,4 +1,4 @@
-/* MEDIEVAL REROLL v2 — deterministic history engine
+/* Medieval Reroll v2 — deterministic history engine
    Architecture (per spec):
    - Hierarchical addresses: world_seed → region → village:idx → person:id
    - Tier 1: resolveVillage() — the envelope. One pure, memoizable constraint
