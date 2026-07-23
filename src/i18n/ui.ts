@@ -99,6 +99,9 @@ interface UiStrings {
   // ---- family tree (§ one-step tree: parents / self+siblings+spouses / children) ----
   familyTree: string;
   self: (sex: "M" | "F") => string;
+  // ---- theme switch ----
+  themeDark: string;
+  themeLight: string;
 }
 
 export const UI: Record<Locale, UiStrings> = {
@@ -210,6 +213,8 @@ export const UI: Record<Locale, UiStrings> = {
     warBadge: (name: string) => name,
     familyTree: "Family tree",
     self: (sex) => (sex === "F" ? "Herself" : "Himself"),
+    themeDark: "Night parchment",
+    themeLight: "Day parchment",
   },
   ca: {
     brandSuffix: "REROLL",
@@ -319,5 +324,7 @@ export const UI: Record<Locale, UiStrings> = {
     warBadge: (name: string) => name,
     familyTree: "Arbre genealògic",
     self: (sex) => (sex === "F" ? "Ella mateixa" : "Ell mateix"),
+    themeDark: "Pergamí de nit",
+    themeLight: "Pergamí de dia",
   },
 };

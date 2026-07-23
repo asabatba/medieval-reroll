@@ -1,5 +1,6 @@
 import * as E from "../engine/index.js";
 import { getLocale, type Locale, setLocale } from "../i18n/locale.js";
+import { getTheme, setTheme, type Theme } from "../i18n/theme.js";
 import { UI } from "../i18n/ui.js";
 import {
   buildViewHTML,
@@ -65,14 +66,17 @@ export function initApp(): void {
   const rollBtn = document.getElementById("roll") as HTMLButtonElement;
   const newWorldBtn = document.getElementById("new-world") as HTMLButtonElement;
   const langsw = document.getElementById("langsw") as HTMLElement;
+  const themesw = document.getElementById("themesw") as HTMLElement;
 
   let locale: Locale = getLocale();
+  let theme: Theme = getTheme();
   let worldSeed = 1444;
   let stack: StackNode[] = [];
 
   function applyChrome(): void {
     const t = UI[locale];
     document.documentElement.lang = locale;
+    document.documentElement.dataset.theme = theme;
     seedbox.placeholder = t.seedboxPlaceholder;
     seedbox.setAttribute("aria-label", t.seedboxLabel);
     seedbox.title = t.seedboxTitle;
@@ -88,6 +92,14 @@ export function initApp(): void {
       const active = b.dataset.lang === locale;
       b.classList.toggle("active", active);
       b.setAttribute("aria-pressed", String(active));
+    });
+    themesw.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+      const active = b.dataset.theme === theme;
+      const label = b.dataset.theme === "dark" ? t.themeDark : t.themeLight;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-pressed", String(active));
+      b.title = label;
+      b.setAttribute("aria-label", label);
     });
   }
 
@@ -254,6 +266,17 @@ export function initApp(): void {
       setLocale(locale);
       applyChrome();
       if (stack.length) render(false, false);
+    });
+  });
+
+  themesw.innerHTML = '<button type="button" data-theme="dark">☾</button><button type="button" data-theme="light">☀</button>';
+  themesw.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+    b.addEventListener("click", () => {
+      const next = b.dataset.theme as Theme;
+      if (next === theme) return;
+      theme = next;
+      setTheme(theme);
+      applyChrome();
     });
   });
 

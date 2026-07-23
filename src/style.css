@@ -1,14 +1,56 @@
+/* ---- Theming (§ light/dark) ----
+   Two moods of the same register: ink read by candlelight (dark, default)
+   or the same page held up to daylight (light). Every color a component
+   uses is one of these tokens — swapping `[data-theme]` on <html> (set
+   pre-paint by the inline script in index.html, toggled at runtime by the
+   themesw control) is the entire theme switch. `-rgb` twins exist wherever
+   a color is also needed at partial alpha (rgba(var(--x-rgb), n)) so the
+   tint itself, not just the alpha, changes with the theme. */
 :root {
+  color-scheme: dark;
   --bg: #171209;
   --panel: #201a10;
   --panel2: #262013;
   --line: #3a3220;
+  --line-rgb: 58, 50, 32;
   --bone: #e6d9bd;
   --bone-dim: #a89877;
+  --dim2: #6d6046;
   --rubric: #c8452f;
+  --rubric-rgb: 200, 69, 47;
+  --rubric-deep: #7d2317;
   --gilt: #c9a227;
+  --gilt-rgb: 201, 162, 39;
   --verdigris: #7d9b80;
+  --verdigris-rgb: 125, 155, 128;
+  --death-ink: #ecc9b8;
+  --roll-ink: #f7ecd9;
   --shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+/* § day parchment: same structure, held up to the light instead of
+   candlelight — panels lighten, ink darkens, the three accents (rubric,
+   gilt, verdigris) deepen to hold contrast against a pale ground rather
+   than simply inverting. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ece0c2;
+  --panel: #f8f1dc;
+  --panel2: #f2e8cc;
+  --line: #cbb883;
+  --line-rgb: 203, 184, 131;
+  --bone: #2b2013;
+  --bone-dim: #5c4a2e;
+  --dim2: #6d6046;
+  --rubric: #a3301c;
+  --rubric-rgb: 163, 48, 28;
+  --rubric-deep: #6b2012;
+  --gilt: #7a5a0d;
+  --gilt-rgb: 122, 90, 13;
+  --verdigris: #3f6b4c;
+  --verdigris-rgb: 63, 107, 76;
+  --death-ink: #6b2418;
+  --roll-ink: #f7ecd9;
+  --shadow: 0 16px 44px rgba(120, 94, 42, 0.22);
 }
 * {
   margin: 0;
@@ -21,10 +63,37 @@ html {
 body {
   font-family: "Fraunces", serif;
   font-optical-sizing: auto;
-  background: radial-gradient(1200px 500px at 50% -10%, rgba(201, 162, 39, 0.06), transparent 60%), var(--bg);
+  background: radial-gradient(1200px 500px at 50% -10%, rgba(var(--gilt-rgb), 0.06), transparent 60%), var(--bg);
   color: var(--bone);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+}
+@media (prefers-reduced-motion: no-preference) {
+  body,
+  .card,
+  .parent,
+  .kid,
+  .rel,
+  .hh,
+  .vital,
+  .reigns,
+  .reign,
+  details.register,
+  details.village,
+  .seedbox,
+  button.ghost,
+  .langsw button,
+  .themesw button,
+  button.roll,
+  .tag,
+  .badge,
+  .entry {
+    transition:
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      color 0.25s ease,
+      box-shadow 0.25s ease;
+  }
 }
 .mono {
   font-family: "JetBrains Mono", monospace;
@@ -61,12 +130,14 @@ header {
   align-items: center;
   flex-wrap: wrap;
 }
-.langsw {
+.langsw,
+.themesw {
   display: flex;
   gap: 4px;
   order: -1;
 }
-.langsw button {
+.langsw button,
+.themesw button {
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   letter-spacing: 0.06em;
@@ -77,14 +148,22 @@ header {
   border-radius: 3px;
   cursor: pointer;
 }
-.langsw button.active {
-  color: var(--gilt);
-  border-color: rgba(201, 162, 39, 0.5);
+.themesw button {
+  font-size: 14px;
+  line-height: 1;
+  padding: 7px 11px;
 }
-.langsw button:hover {
+.langsw button.active,
+.themesw button.active {
+  color: var(--gilt);
+  border-color: rgba(var(--gilt-rgb), 0.5);
+}
+.langsw button:hover,
+.themesw button:hover {
   color: var(--bone);
 }
-.langsw button:focus-visible {
+.langsw button:focus-visible,
+.themesw button:focus-visible {
   outline: 2px solid var(--gilt);
   outline-offset: 2px;
 }
@@ -93,15 +172,15 @@ button.roll {
   font-weight: 700;
   font-size: 17px;
   background: var(--rubric);
-  color: #f7ecd9;
+  color: var(--roll-ink);
   border: none;
   cursor: pointer;
   padding: 12px 26px;
   border-radius: 3px;
   letter-spacing: 0.04em;
   box-shadow:
-    0 3px 0 #7d2317,
-    0 10px 24px rgba(200, 69, 47, 0.25);
+    0 3px 0 var(--rubric-deep),
+    0 10px 24px rgba(var(--rubric-rgb), 0.25);
   transition:
     transform 0.08s ease,
     box-shadow 0.08s ease;
@@ -111,7 +190,7 @@ button.roll:hover {
 }
 button.roll:active {
   transform: translateY(2px);
-  box-shadow: 0 1px 0 #7d2317;
+  box-shadow: 0 1px 0 var(--rubric-deep);
 }
 button.roll:focus-visible,
 .seedbox:focus-visible,
@@ -202,7 +281,7 @@ button.roll:focus-visible,
   position: absolute;
   inset: 10px;
   pointer-events: none;
-  border: 1px solid rgba(201, 162, 39, 0.18);
+  border: 1px solid rgba(var(--gilt-rgb), 0.18);
   border-radius: 3px;
 }
 .eyebrow {
@@ -382,7 +461,7 @@ h1.name .init {
   position: relative;
 }
 .entry + .entry {
-  border-top: 1px dashed rgba(58, 50, 32, 0.6);
+  border-top: 1px dashed rgba(var(--line-rgb), 0.6);
 }
 .entry::before {
   content: "";
@@ -403,7 +482,7 @@ h1.name .init {
 .entry .yr .age {
   display: block;
   font-size: 10px;
-  color: #6d6046;
+  color: var(--dim2);
   margin-top: 3px;
   letter-spacing: 0.05em;
 }
@@ -425,7 +504,7 @@ h1.name .init {
   cursor: pointer;
   text-decoration: underline;
   text-decoration-style: dotted;
-  text-decoration-color: rgba(201, 162, 39, 0.45);
+  text-decoration-color: rgba(var(--gilt-rgb), 0.45);
   text-underline-offset: 2px;
 }
 .namelink:hover {
@@ -450,14 +529,14 @@ h1.name .init {
 }
 .entry.k-death::before {
   background: var(--rubric);
-  box-shadow: 0 0 0 4px rgba(200, 69, 47, 0.2);
+  box-shadow: 0 0 0 4px rgba(var(--rubric-rgb), 0.2);
 }
 .entry.k-death {
-  background: linear-gradient(90deg, rgba(200, 69, 47, 0.09), transparent 70%);
+  background: linear-gradient(90deg, rgba(var(--rubric-rgb), 0.09), transparent 70%);
   border-radius: 0 4px 4px 0;
 }
 .entry.k-death .tx {
-  color: #ecc9b8;
+  color: var(--death-ink);
 }
 .entry.k-death .yr {
   color: var(--rubric);
@@ -497,16 +576,16 @@ h1.name .init {
 .k-death .tag,
 .k-war .tag {
   color: var(--rubric);
-  border-color: rgba(200, 69, 47, 0.4);
+  border-color: rgba(var(--rubric-rgb), 0.4);
 }
 .k-fortune .tag,
 .k-marriage .tag {
   color: var(--gilt);
-  border-color: rgba(201, 162, 39, 0.4);
+  border-color: rgba(var(--gilt-rgb), 0.4);
 }
 .k-revolt .tag {
   color: var(--verdigris);
-  border-color: rgba(125, 155, 128, 0.4);
+  border-color: rgba(var(--verdigris-rgb), 0.4);
 }
 .k-elsewhere .tag {
   color: var(--bone-dim);
@@ -589,11 +668,11 @@ h1.name .init {
 }
 .lineage .crumb.here {
   color: var(--gilt);
-  border-color: rgba(201, 162, 39, 0.5);
+  border-color: rgba(var(--gilt-rgb), 0.5);
   cursor: default;
 }
 .lineage .sep {
-  color: #6d6046;
+  color: var(--dim2);
 }
 .openrel {
   margin-top: 10px;
@@ -634,15 +713,15 @@ h1.name .init {
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #6d6046;
+  color: var(--dim2);
   margin-top: 6px;
 }
 .kid:hover .khint {
   color: var(--gilt);
 }
 .kid.origin {
-  border-color: rgba(201, 162, 39, 0.55);
-  background: linear-gradient(180deg, rgba(201, 162, 39, 0.06), var(--panel));
+  border-color: rgba(var(--gilt-rgb), 0.55);
+  background: linear-gradient(180deg, rgba(var(--gilt-rgb), 0.06), var(--panel));
 }
 .kid.origin .khint {
   color: var(--gilt);
@@ -724,8 +803,8 @@ h1.name .init {
   color: var(--bone-dim);
 }
 .rel.self {
-  border-color: rgba(201, 162, 39, 0.55);
-  background: linear-gradient(180deg, rgba(201, 162, 39, 0.06), var(--panel));
+  border-color: rgba(var(--gilt-rgb), 0.55);
+  background: linear-gradient(180deg, rgba(var(--gilt-rgb), 0.06), var(--panel));
   cursor: default;
 }
 .rel.nolink {
@@ -783,14 +862,14 @@ details.register summary::before {
   font-size: 14px;
 }
 .regrow:hover {
-  background: rgba(201, 162, 39, 0.06);
+  background: rgba(var(--gilt-rgb), 0.06);
 }
 .regrow:focus-visible {
   outline: 2px solid var(--gilt);
   outline-offset: -2px;
 }
 .regrow.current {
-  background: rgba(201, 162, 39, 0.1);
+  background: rgba(var(--gilt-rgb), 0.1);
 }
 .regrow .rr-dates,
 .regrow .rr-cause {
@@ -828,7 +907,7 @@ button.ryrow {
   cursor: pointer;
 }
 button.ryrow:hover {
-  background: rgba(201, 162, 39, 0.06);
+  background: rgba(var(--gilt-rgb), 0.06);
 }
 button.ryrow:focus-visible {
   outline: 2px solid var(--gilt);
@@ -871,7 +950,7 @@ button.reign-head {
   padding: 2px 0;
 }
 button.reign-head:hover {
-  background: rgba(201, 162, 39, 0.06);
+  background: rgba(var(--gilt-rgb), 0.06);
 }
 button.reign-head:focus-visible {
   outline: 2px solid var(--gilt);
@@ -884,7 +963,7 @@ button.reign-head:focus-visible {
 .reign-note {
   margin: 6px 0 2px 110px;
   padding-left: 10px;
-  border-left: 2px solid rgba(201, 162, 39, 0.35);
+  border-left: 2px solid rgba(var(--gilt-rgb), 0.35);
   color: var(--bone-dim);
   font-size: 13.5px;
   line-height: 1.55;
@@ -908,7 +987,7 @@ button.reign-head:focus-visible {
   align-self: center;
 }
 .ryrow.lived {
-  background: rgba(201, 162, 39, 0.08);
+  background: rgba(var(--gilt-rgb), 0.08);
 }
 .ryrow.lived .ry-style {
   color: var(--gilt);
@@ -923,14 +1002,14 @@ button.reign-head:focus-visible {
   font-size: 9px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #6d6046;
+  color: var(--dim2);
   margin-left: 8px;
   vertical-align: 2px;
 }
 .k-death .src,
 .k-grief .src,
 .k-plague .src {
-  color: rgba(200, 69, 47, 0.7);
+  color: rgba(var(--rubric-rgb), 0.7);
 }
 /* ---- Village-in-year view ---- */
 details.village {
@@ -993,15 +1072,15 @@ details.village {
 }
 .badge.b-plague {
   color: var(--rubric);
-  border-color: rgba(200, 69, 47, 0.5);
+  border-color: rgba(var(--rubric-rgb), 0.5);
 }
 .badge.b-famine {
   color: var(--gilt);
-  border-color: rgba(201, 162, 39, 0.45);
+  border-color: rgba(var(--gilt-rgb), 0.45);
 }
 .badge.b-war {
   color: var(--verdigris);
-  border-color: rgba(125, 155, 128, 0.45);
+  border-color: rgba(var(--verdigris-rgb), 0.45);
 }
 .hhgrid {
   display: grid;
@@ -1019,7 +1098,7 @@ details.village {
   border-style: dashed;
 }
 .hh.orphan {
-  border-color: rgba(200, 69, 47, 0.35);
+  border-color: rgba(var(--rubric-rgb), 0.35);
 }
 .hh-title {
   font-family: "JetBrains Mono", monospace;
@@ -1053,14 +1132,14 @@ details.village {
   font-size: 13.5px;
 }
 .member:hover {
-  background: rgba(201, 162, 39, 0.07);
+  background: rgba(var(--gilt-rgb), 0.07);
 }
 .member:focus-visible {
   outline: 2px solid var(--gilt);
   outline-offset: -2px;
 }
 .member.current {
-  background: rgba(201, 162, 39, 0.12);
+  background: rgba(var(--gilt-rgb), 0.12);
 }
 .member .m-role {
   font-family: "JetBrains Mono", monospace;
@@ -1072,7 +1151,7 @@ details.village {
 .member .m-age {
   font-family: "JetBrains Mono", monospace;
   font-size: 10px;
-  color: #6d6046;
+  color: var(--dim2);
 }
 
 /* ---- Family tree (§ one-step tree) ----
@@ -1089,7 +1168,7 @@ details.village {
   gap: 4px 2px;
   margin-bottom: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px dashed rgba(58, 50, 32, 0.6);
+  border-bottom: 1px dashed rgba(var(--line-rgb), 0.6);
 }
 .fam-knot {
   color: var(--gilt);

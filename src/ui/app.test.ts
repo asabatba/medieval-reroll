@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const appMarkup = `
   <div class="wrap"><header><div class="controls">
-    <div id="langsw"></div><div id="worldseed"></div>
+    <div id="langsw"></div><div id="themesw"></div><div id="worldseed"></div>
     <input id="seedbox"><button id="replay"></button><button id="roll"></button><button id="new-world"></button>
   </div><p id="locator-error"></p></header><p id="intro"></p><p id="status"></p><main id="out"></main></div>`;
 
