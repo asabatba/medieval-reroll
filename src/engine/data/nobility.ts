@@ -1,4 +1,5 @@
 import type { Reign, RoyalLine } from "../types.js";
+import type { RegionKey } from "./regions.js";
 
 // ---------- royal lines (§ nobility) ----------
 // The REAL sovereigns of each region, as fixed historical data — no RNG, the
@@ -15,7 +16,7 @@ import type { Reign, RoyalLine } from "../types.js";
 
 const r = (from: number, to: number, reign: Omit<Reign, "from" | "to">): Reign => ({ from, to, ...reign });
 
-export const ROYAL_LINES: Record<string, RoyalLine> = {
+const ROYAL_LINES_DATA = {
   england: {
     title: { en: "Kings of England", ca: "Reis d'Anglaterra" },
     reigns: [
@@ -831,4 +832,6 @@ export const ROYAL_LINES: Record<string, RoyalLine> = {
       }),
     ],
   },
-};
+} satisfies Record<RegionKey, RoyalLine>;
+
+export const ROYAL_LINES: Record<string, RoyalLine> = ROYAL_LINES_DATA;

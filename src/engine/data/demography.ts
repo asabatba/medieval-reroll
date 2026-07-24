@@ -19,6 +19,7 @@
 // adult multiplier tables, so "wealth softens mortality" is data, not an
 // ad-hoc constant buried in the roll.
 // =====================================================================
+import type { RegionKey } from "./regions.js";
 
 export interface PeriodMult {
   from: number;
@@ -124,7 +125,7 @@ const NW_DEFAULT: RegionDemography = {
   illegitimacyRate: 0.03,
 };
 
-export const DEMOGRAPHY: Record<string, RegionDemography> = {
+const DEMOGRAPHY_DATA = {
   england: { ...NW_DEFAULT },
   germany: {
     ...NW_DEFAULT,
@@ -223,7 +224,9 @@ export const DEMOGRAPHY: Record<string, RegionDemography> = {
     maleOutMigration: { nonHeirBase: 0.38, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.26 }, // North African garrisons and the African voyages drew off younger sons who once would simply have left for the towns
     illegitimacyRate: 0.03,
   },
-};
+} satisfies Record<RegionKey, RegionDemography>;
+
+export const DEMOGRAPHY: Record<string, RegionDemography> = DEMOGRAPHY_DATA;
 
 export const DEFAULT_DEMOGRAPHY: RegionDemography = NW_DEFAULT;
 

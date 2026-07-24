@@ -10,7 +10,7 @@
 // =====================================================================
 import { addrHash, makeRng } from "../hash.js";
 import type { LocalText, Rng } from "../types.js";
-import { REGIONS } from "./regions.js";
+import { REGIONS, type RegionKey } from "./regions.js";
 
 interface RegionNameKit {
   prefixes: string[];
@@ -25,7 +25,7 @@ interface RegionNameKit {
   saintChance?: number;
 }
 
-const KITS: Record<string, RegionNameKit> = {
+const KITS_DATA = {
   england: {
     prefixes: [
       "Ash",
@@ -269,12 +269,14 @@ const KITS: Record<string, RegionNameKit> = {
       ["the hamlet of", "el llogaret de"],
     ],
   },
-};
+} satisfies Record<RegionKey, RegionNameKit>;
+
+const KITS: Record<string, RegionNameKit> = KITS_DATA;
 
 // Short proper name for each curated (hand-written) flagship place, in the
 // same order as REGIONS[key].places — used so hierarchy.ts's manor/honour
 // labels never need to regex-scrape a full sentence for the bare name.
-const CURATED_SHORT: Record<string, string[]> = {
+const CURATED_SHORT_DATA = {
   england: ["Elmleigh", "Elton", "Netherstoke", "Halesowen", "Merewick"],
   france: ["Saint-Ouen-le-Petit", "Caen", "Montcler", "Fresnay"],
   catalonia: ["Santa Coloma del Vallès", "Osona", "Vilamarí", "Riudellots"],
@@ -283,7 +285,9 @@ const CURATED_SHORT: Record<string, string[]> = {
   castile: ["Fresno el Viejo", "Tierra de Campos", "Torrelobatón", "Almazán"],
   scotland: ["Kirkhaugh", "Dalrigg", "Auchinlea", "Pittenhinny"],
   portugal: ["Vilarinho", "Fráguas", "Alvorge", "Montouro"],
-};
+} satisfies Record<RegionKey, string[]>;
+
+const CURATED_SHORT: Record<string, string[]> = CURATED_SHORT_DATA;
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);

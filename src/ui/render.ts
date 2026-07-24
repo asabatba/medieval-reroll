@@ -187,7 +187,18 @@ function renderFamilyTree(t: (typeof UI)[Locale], bio: Bio): string {
         .join("")}</div>`
     : "";
 
-  const selfInner = `<div class="fam-self-row">${famNode(selfName, bio, null, { self: true })}<span class="fam-tag">${esc(t.self(bio.sex))}</span></div>${unionsHtml}`;
+  // § an unlegitimated natural child belongs to no Couple/union at all (her
+  // parents never married — succession.ts's childrenOf direct-scan branch),
+  // so she'd otherwise be invisible in this diagram even though she's counted
+  // in bio.children and listed in the Marriage & Issue section. Show her in
+  // her own branch off self rather than silently dropping her.
+  const unionChildIds = new Set(bio.unions.flatMap((u) => u.children.map((c) => c.id)));
+  const naturalChildren = bio.children.filter((c) => !unionChildIds.has(c.id));
+  const naturalHtml = naturalChildren.length
+    ? `<div class="fam-union fam-natural"><span class="fam-tag">${esc(t.outOfWedlock)}</span></div><div class="fam-branch">${naturalChildren.map((c) => `<div class="fam-leaf">${famNode(c.name, c, addrStr(c.addr, c.id))}</div>`).join("")}</div>`
+    : "";
+
+  const selfInner = `<div class="fam-self-row">${famNode(selfName, bio, null, { self: true })}<span class="fam-tag">${esc(t.self(bio.sex))}</span></div>${unionsHtml}${naturalHtml}`;
 
   const sibLeaf = (s: (typeof bio.siblings)[number]) => `<div class="fam-leaf">${famNode(s.name, s, addrStr(s.addr, s.id))}</div>`;
   const elderHtml = bio.siblings

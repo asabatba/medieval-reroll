@@ -130,6 +130,46 @@ describe("buildRecordHTML", () => {
   });
 });
 
+// § family tree — unlegitimated natural children: a child born out of
+// wedlock whose parents never later married belongs to no Couple/union at
+// all (succession.ts's childrenOf direct father/mother scan is the only
+// place she's found), so the tree diagram — which otherwise only walks
+// bio.unions[].children — must surface her separately or she'd silently
+// vanish from the diagram while still counting in the vitals tally and the
+// Marriage & Issue list on the very same page.
+describe("renderFamilyTree — unlegitimated natural children", () => {
+  it("shows a natural child, not covered by any union, in her own branch off self", () => {
+    const regionKeys = Object.keys(E.REGIONS);
+    let found: { regionKey: string; villageIdx: number; parentId: number; childId: number } | null = null;
+    for (const regionKey of regionKeys) {
+      for (let v = 0; v < 12 && !found; v++) {
+        const env = E.resolveVillage(1444, regionKey, v);
+        for (const child of env.persons) {
+          if (!child.illegitimate || child.legitimated) continue;
+          const parentId = child.father >= 0 ? child.father : child.mother;
+          if (parentId < 0) continue;
+          const parent = env.persons[parentId];
+          if (parent.emigrated || parent.marriedOut) continue;
+          found = { regionKey, villageIdx: v, parentId, childId: child.id };
+          break;
+        }
+      }
+      if (found) break;
+    }
+    expect(found).not.toBeNull();
+    const { regionKey, villageIdx, parentId, childId } = found!;
+    const stack: StackNode[] = [{ regionKey, villageIdx, personId: parentId }];
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    const goto = `data-goto="${regionKey}:${villageIdx}:${childId}"`;
+
+    const treeStart = html.indexOf('class="fam-tree');
+    expect(treeStart).toBeGreaterThan(-1);
+    const treeHtml = html.slice(treeStart);
+    expect(treeHtml).toContain("Born out of wedlock");
+    expect(treeHtml).toContain(goto);
+  });
+});
+
 // § nobility routes: the two standalone views, dispatched via buildViewHTML.
 describe("nobility views", () => {
   it("renders the royal-line view with every reign and its accession stories", () => {

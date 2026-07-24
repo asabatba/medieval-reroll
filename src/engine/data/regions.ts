@@ -1,7 +1,14 @@
 import type { Region } from "../types.js";
 
 // ---------- world data ----------
-export const REGIONS: Record<string, Region> = {
+// REGION_DATA keeps its inferred literal-key type (via `satisfies`, not a
+// `Record<string, Region>` annotation) so RegionKey below is the exact
+// 8-key union, not `string` — every other region-keyed table
+// (demography.ts, jurisdictions.ts, data/nobility.ts, placeNames.ts) then
+// checks itself against RegionKey with its own `satisfies`, so forgetting a
+// country in one of those tables is a compile error, not just a test
+// failure (features.test.ts still covers the rest of each region's shape).
+const REGION_DATA = {
   england: {
     name: { en: "England", ca: "Anglaterra" },
     places: [
@@ -511,4 +518,10 @@ export const REGIONS: Record<string, Region> = {
     // child rather than passing a holding whole to one heir.
     inheritance: "partible",
   },
-};
+} satisfies Record<string, Region>;
+
+/** Every supported region key — the single source of truth every other
+ * region-keyed table is checked against at compile time (see the note above). */
+export type RegionKey = keyof typeof REGION_DATA;
+
+export const REGIONS: Record<string, Region> = REGION_DATA;

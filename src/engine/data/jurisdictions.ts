@@ -1,12 +1,13 @@
 import type { Locale } from "../../i18n/locale.js";
 import type { JurisdictionData } from "../types.js";
+import type { RegionKey } from "./regions.js";
 
 // Ecclesiastical and feudal geography, independent of the civil region/village
 // tree they overlay. Names only (bare place names, not the wrapping phrase —
 // hierarchy.ts localizes "the province of X" / "la província de X") — the
 // actual tree shape (province > diocese > deanery > parish, earldom > honour
 // > manor) is resolved in hierarchy.ts.
-export const JURISDICTIONS: Record<string, JurisdictionData> = {
+const JURISDICTIONS_DATA = {
   england: {
     province: "Canterbury",
     dioceses: ["Canterbury", "Rochester", "London", "Ely", "Worcester", "Lincoln"],
@@ -55,7 +56,9 @@ export const JURISDICTIONS: Record<string, JurisdictionData> = {
     deaneries: ["Entre-Douro-e-Minho", "Trás-os-Montes", "Beira Alta", "Beira Baixa", "Ribatejo", "Alto Alentejo", "Baixo Alentejo", "Algarve"],
     earldoms: ["Barcelos", "Ourém", "Marialva", "Arraiolos", "Viana", "Faro"],
   },
-};
+} satisfies Record<RegionKey, JurisdictionData>;
+
+export const JURISDICTIONS: Record<string, JurisdictionData> = JURISDICTIONS_DATA;
 
 export const SAINTS: Record<Locale, string[]> = {
   en: [

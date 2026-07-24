@@ -17,6 +17,10 @@ import type { Locale } from "../i18n/locale.js";
 import { royalLineOf } from "./nobility.js";
 import type { Address, BioEvent, EventRef } from "./types.js";
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function addRoyalRefs(events: BioEvent[], regionKey: string, locale: Locale, addr: Address): void {
   const line = royalLineOf(regionKey);
   if (!line) return;
@@ -33,10 +37,26 @@ export function addRoyalRefs(events: BioEvent[], regionKey: string, locale: Loca
   });
   const answersTo = (i: number, s: string) =>
     line.reigns[i].style[locale].includes(s) || line.reigns[i].name[locale].includes(s) || (line.reigns[i].aka ?? []).some((a) => a[locale] === s);
+  // A single alternation scan per event replaces an O(owners) `.includes()`
+  // check per event: most events name no sovereign at all, and this way an
+  // event with no match does one regex pass instead of one string search per
+  // candidate name.
+  const ownerNames = [...owners.keys()].filter((n) => n.length > 0);
+  const scanner = ownerNames.length ? new RegExp(ownerNames.map(escapeRegExp).join("|"), "g") : null;
   for (const e of events) {
+    if (!scanner) continue;
+    scanner.lastIndex = 0;
+    const mentioned = new Set<string>();
+    let m: RegExpExecArray | null = scanner.exec(e.text);
+    while (m) {
+      mentioned.add(m[0]);
+      m = scanner.exec(e.text);
+    }
+    if (!mentioned.size) continue;
     const extra: EventRef[] = [];
-    for (const [name, claimants] of owners) {
-      if (!e.text.includes(name)) continue;
+    for (const name of mentioned) {
+      const claimants = owners.get(name);
+      if (!claimants) continue;
       let idx = -1;
       // Last match wins, so on a transition year the incoming reign takes
       // the alias — the same tie-break as sovereignAt.

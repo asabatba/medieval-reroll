@@ -99,6 +99,7 @@ interface UiStrings {
   // ---- family tree (§ one-step tree: parents / self+siblings+spouses / children) ----
   familyTree: string;
   self: (sex: "M" | "F") => string;
+  outOfWedlock: string;
   // ---- theme switch ----
   themeDark: string;
   themeLight: string;
@@ -213,6 +214,7 @@ export const UI: Record<Locale, UiStrings> = {
     warBadge: (name: string) => name,
     familyTree: "Family tree",
     self: (sex) => (sex === "F" ? "Herself" : "Himself"),
+    outOfWedlock: "Born out of wedlock",
     themeDark: "Night parchment",
     themeLight: "Day parchment",
   },
@@ -324,6 +326,7 @@ export const UI: Record<Locale, UiStrings> = {
     warBadge: (name: string) => name,
     familyTree: "Arbre genealògic",
     self: (sex) => (sex === "F" ? "Ella mateixa" : "Ell mateix"),
+    outOfWedlock: "Nascuts fora del matrimoni",
     themeDark: "Pergamí de nit",
     themeLight: "Pergamí de dia",
   },

@@ -25,9 +25,11 @@ import { ROYAL_LINES } from "./data/nobility.js";
 import { plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
 import { addrHash, makeRng } from "./hash.js";
+import { nobleLineCacheGet, nobleLineCacheSet } from "./nobilityCache.js";
 import type { LordTenure, NobleLine, Region, Reign, Rng, RoyalLine, WorldEvent } from "./types.js";
 
 export { ROYAL_LINES } from "./data/nobility.js";
+export { NOBLE_LINE_CACHE_LIMIT, nobleLineCacheClear as clearNobleLineCache, nobleLineCacheSize } from "./nobilityCache.js";
 
 // ---- royal lines ----
 
@@ -134,17 +136,25 @@ export function tenureIndexAt(heads: LordTenure[], year: number): number {
 
 /** The baronial house holding the honour this village's manor belongs to. */
 export function honourLineOf(worldSeed: number, regionKey: string, villageIdx: number): NobleLine {
+  const key = `honour|${worldSeed}|${regionKey}|${villageIdx}`;
+  const cached = nobleLineCacheGet(key);
+  if (cached) return cached;
   const region = REGIONS[regionKey];
   const { surname, block } = honourFamilyOf(worldSeed, regionKey, villageIdx);
   const rng = makeRng(addrHash(worldSeed, [regionKey, "honour-line", block]));
   const first = rng.pick(region.maleNames);
-  return { surname, heads: growLine(rng, surname, first, region) };
+  const line: NobleLine = { surname, heads: growLine(rng, surname, first, region) };
+  nobleLineCacheSet(key, line);
+  return line;
 }
 
 /** The lord line of this village's own manor. Half the manors are held by a
  * cadet of the honour's baronial house (same surname), half by a lesser
  * knightly family of their own — the same split manorOf always drew. */
 export function manorLineOf(worldSeed: number, regionKey: string, villageIdx: number): NobleLine {
+  const key = `manor|${worldSeed}|${regionKey}|${villageIdx}`;
+  const cached = nobleLineCacheGet(key);
+  if (cached) return cached;
   const region = REGIONS[regionKey];
   const { surname: honourSurname } = honourFamilyOf(worldSeed, regionKey, villageIdx);
   const rng = makeRng(addrHash(worldSeed, [regionKey, "manor", villageIdx]));
@@ -152,7 +162,9 @@ export function manorLineOf(worldSeed: number, regionKey: string, villageIdx: nu
   // these two draws produce is the fief.lord printed on every record.
   const anchorFirst = rng.pick(region.maleNames);
   const surname = rng.chance(0.5) ? honourSurname : rng.pick(region.surnames);
-  return { surname, heads: growLine(rng, surname, anchorFirst, region) };
+  const line: NobleLine = { surname, heads: growLine(rng, surname, anchorFirst, region) };
+  nobleLineCacheSet(key, line);
+  return line;
 }
 
 export function honourHeadAt(worldSeed: number, regionKey: string, villageIdx: number, year: number): LordTenure {
