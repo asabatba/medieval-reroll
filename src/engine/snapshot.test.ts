@@ -147,6 +147,114 @@ describe("villageStateAt invariants", () => {
   });
 });
 
+// § service placement / § stem family: household COMPOSITION, as against
+// the membership bookkeeping above. Before these two mechanics the village
+// was a grid of solitaries — the one-person household was the modal
+// household in every region sampled, at a quarter to a third of all hearths,
+// against the five to eight per cent the surviving listings show, because
+// nothing in the model let anyone live under a roof they were neither
+// married into nor born into.
+describe("households hold the people who really lived in them", () => {
+  const envs = sampleEnvs();
+  const COMPOSITION_YEARS = [1340, 1400, 1460];
+
+  function composition() {
+    let hearths = 0;
+    let members = 0;
+    let solitary = 0;
+    let servants = 0;
+    let servantsUnderAMaster = 0;
+    let population = 0;
+    for (const env of envs) {
+      for (const year of COMPOSITION_YEARS) {
+        const state = villageStateAt(env, year);
+        population += state.population;
+        for (const r of state.residents) {
+          if (!r.inService) continue;
+          servants++;
+          if (r.householdId >= 0) servantsUnderAMaster++;
+        }
+        for (const h of state.households) {
+          if (h.id < 0) continue;
+          hearths++;
+          members += h.members.length;
+          if (h.members.length === 1) solitary++;
+        }
+      }
+    }
+    return { meanSize: members / hearths, solitaryShare: solitary / hearths, servantShare: servants / population, placed: servantsUnderAMaster / servants };
+  }
+
+  const stats = composition();
+
+  it("the mean household is a family, not a pair", () => {
+    // Listings across late-medieval and early-modern Europe cluster on 4.5–5;
+    // this model has no cottars or lodgers and so sits a little under, but
+    // anything below 3 means the co-residence rules have stopped working.
+    expect(stats.meanSize).toBeGreaterThan(3.2);
+    expect(stats.meanSize).toBeLessThan(6);
+  });
+
+  it("solitaries are a minority of hearths, not the modal household", () => {
+    expect(stats.solitaryShare).toBeLessThan(0.22);
+  });
+
+  it("servants are a visible part of the population and live under a named master", () => {
+    expect(stats.servantShare).toBeGreaterThan(0.02);
+    expect(stats.placed).toBeGreaterThan(0.6);
+  });
+
+  it("a servant's household is his master's own", () => {
+    let checked = 0;
+    for (const env of envs) {
+      for (const year of COMPOSITION_YEARS) {
+        const state = villageStateAt(env, year);
+        const byId = new Map(state.residents.map((r) => [r.id, r]));
+        for (const r of state.residents) {
+          if (!r.inService || r.householdId < 0) continue;
+          const master = byId.get(env.persons[r.id].serviceMaster!);
+          expect(master).toBeDefined();
+          expect(r.householdId).toBe(master!.householdId);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("§ stem family: a widowed parent whose married child keeps a house is under that child's roof, not alone", () => {
+    let checked = 0;
+    for (const env of envs) {
+      for (const year of COMPOSITION_YEARS) {
+        const state = villageStateAt(env, year);
+        const byId = new Map(state.residents.map((r) => [r.id, r]));
+        const sizeOf = new Map(state.households.map((h) => [h.id, h.members.length]));
+        for (const r of state.residents) {
+          if (r.maritalStatus !== "widowed") continue;
+          // A child of hers who keeps a house of his OWN with someone else in
+          // it — i.e. is himself one of the spouses of that couple household.
+          // Being merely present in a household of two is not the same thing:
+          // a child away in service (§ service placement) is a member of his
+          // master's house, which is no home for his widowed mother.
+          const host = state.residents.find((q) => {
+            const qp = env.persons[q.id];
+            if (!(qp.father === r.id || qp.mother === r.id)) return false;
+            if (q.householdId < 0 || q.householdId >= env.couples.length) return false;
+            const c = env.couples[q.householdId];
+            return (c.husband === q.id || c.wife === q.id) && (sizeOf.get(q.householdId) ?? 0) >= 2;
+          });
+          if (!host) continue;
+          checked++;
+          // she is either in that house, or in one of her own that is not
+          // a household of one
+          expect(byId.get(r.id)!.householdId === host.householdId || (sizeOf.get(r.householdId) ?? 0) > 1).toBe(true);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+});
+
 // § residency continuity: a real, locally-pulled migrant must never be
 // resident in BOTH her origin and destination villages' snapshots in the
 // same year, and — the specific seam this fixes — never resident in

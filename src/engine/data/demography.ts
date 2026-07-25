@@ -53,16 +53,36 @@ export interface RegionDemography {
     serfToFree: { base: number; postPlague: number };
     freeToArtisan: { base: number; postPlague: number };
     artisanToMerchant: { base: number; postPlague: number };
-    /** § downward mobility: the mirror of the upward rates above, for a
-     * non-heir son of an artisan/merchant house under IMPARTIBLE custom —
-     * no shop or trade capital of his own to inherit, so no rung to defend
-     * either. Unlike the upward rates, these are HIGHER before 1349 (land
-     * hunger gave a non-heir fewer real alternatives) and lower after (the
-     * post-plague glut gave him somewhere else to go instead of sliding
-     * down). Never exercised in a "partible" region — see Region.inheritance. */
+    /** The top of the ladder: a trading household that bought the manor and
+     * was styled gentle within a generation. Low, and markedly higher after
+     * 1349 — the late-medieval rise of the gentry — but it has to exist, or
+     * gentry is a class with an exit and no entrance. */
+    merchantToGentry: { base: number; postPlague: number };
+    /** § downward mobility: the mirror of the upward rates above, for a son
+     * who inherits neither the estate nor the shop nor the credit that went
+     * with it, and so has no rung to defend. Unlike the upward rates these
+     * are HIGHER before 1349 (land hunger gave a non-heir fewer real
+     * alternatives) and lower after (the post-plague glut gave him somewhere
+     * else to go instead of sliding down).
+     *
+     * The rates are set to BALANCE, not to be token: each one is roughly the
+     * outflow that holds its class at a village-plausible share against the
+     * inflow it receives — from rollMobility's promotions, and from the plain
+     * fact that wealth softens mortality, so a richer house leaves more
+     * children behind it. Undershoot them and the estates above the land
+     * compound without limit (see villageMobility.ts's own note).
+     *
+     * Under PARTIBLE custom (France, Tuscany) they still apply, at reduced
+     * weight, to every son after the first: land divided among all the sons
+     * is land divided, generation on generation, toward plots that no longer
+     * carry the standing they came with. */
     nonHeirDowngrade: {
       merchantToArtisan: { base: number; postPlague: number };
       artisanToFree: { base: number; postPlague: number };
+      /** A gentry younger son with no estate: the yeomanry, in one step. */
+      gentryToFree: { base: number; postPlague: number };
+      /** A clerical household was never heritable in the first place. */
+      clergyToFree: { base: number; postPlague: number };
     };
   };
   /** § maternal mortality: calibrated so the RESULTING per-registered-birth death rate lands
@@ -115,9 +135,12 @@ const NW_DEFAULT: RegionDemography = {
     serfToFree: { base: 0.03, postPlague: 0.12 },
     freeToArtisan: { base: 0.04, postPlague: 0.07 },
     artisanToMerchant: { base: 0.02, postPlague: 0.04 },
+    merchantToGentry: { base: 0.03, postPlague: 0.07 },
     nonHeirDowngrade: {
-      merchantToArtisan: { base: 0.16, postPlague: 0.06 },
-      artisanToFree: { base: 0.14, postPlague: 0.05 },
+      merchantToArtisan: { base: 0.66, postPlague: 0.54 },
+      artisanToFree: { base: 0.58, postPlague: 0.46 },
+      gentryToFree: { base: 0.74, postPlague: 0.62 },
+      clergyToFree: { base: 0.34, postPlague: 0.24 },
     },
   },
   maternalMortalityPerBirth: 0.012,
@@ -156,11 +179,14 @@ const DEMOGRAPHY_DATA = {
       serfToFree: { base: 0.02, postPlague: 0.08 }, // remença servitude was sticky until 1486
       freeToArtisan: { base: 0.04, postPlague: 0.07 },
       artisanToMerchant: { base: 0.03, postPlague: 0.05 },
+      merchantToGentry: { base: 0.025, postPlague: 0.06 }, // the ciutadans honrats bought their way up, but into a city patriciate more than a village manor
       // the hereu system's flip side: a non-heir who stayed rather than
       // emigrating had markedly less to fall back on than in NW Europe
       nonHeirDowngrade: {
-        merchantToArtisan: { base: 0.22, postPlague: 0.1 },
-        artisanToFree: { base: 0.2, postPlague: 0.09 },
+        merchantToArtisan: { base: 0.74, postPlague: 0.62 },
+        artisanToFree: { base: 0.66, postPlague: 0.54 },
+        gentryToFree: { base: 0.8, postPlague: 0.7 },
+        clergyToFree: { base: 0.4, postPlague: 0.3 },
       },
     },
     maternalMortalityPerBirth: 0.0052,
@@ -180,12 +206,16 @@ const DEMOGRAPHY_DATA = {
       serfToFree: { base: 0.04, postPlague: 0.1 },
       freeToArtisan: { base: 0.05, postPlague: 0.08 },
       artisanToMerchant: { base: 0.03, postPlague: 0.05 },
-      // inert here: Tuscany is a "partible" region (regions.ts), so
-      // village.ts's isHeir() never treats a son as a non-heir to begin
-      // with — these values exist only so every region's shape agrees.
+      merchantToGentry: { base: 0.04, postPlague: 0.08 }, // Tuscan merchant families bought contado estates and the standing that came with them
+      // Tuscany is a "partible" region (regions.ts), so these apply at the
+      // reduced subdivision weight rather than the full non-heir one — to
+      // every son after the first, since a plot split among brothers each
+      // generation is what actually pulled a Tuscan house down a rung.
       nonHeirDowngrade: {
-        merchantToArtisan: { base: 0.16, postPlague: 0.06 },
-        artisanToFree: { base: 0.14, postPlague: 0.05 },
+        merchantToArtisan: { base: 0.66, postPlague: 0.54 },
+        artisanToFree: { base: 0.58, postPlague: 0.46 },
+        gentryToFree: { base: 0.74, postPlague: 0.62 },
+        clergyToFree: { base: 0.34, postPlague: 0.24 },
       },
     },
     maternalMortalityPerBirth: 0.0068,

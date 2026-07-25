@@ -44,34 +44,74 @@ export function riskTradeOf(vHash: number, id: number, cls: Person["cls"], sex: 
 // (far likelier in the emptied countryside after 1349), free peasants'
 // sons apprenticed into crafts, artisans' sons into trade. Rolled from a
 // per-person stream so it never perturbs the shared village rng.
-export function rollMobility(vHash: number, demo: RegionDemography, p: Person): void {
+/**
+ * @param room Multiplier on the chance of moving INTO a given class — how
+ *   much space the village still has for another household of that kind
+ *   (§ the estate ceiling, data/classes.ts). A class already at its ceiling
+ *   takes in far fewer; one that has thinned out takes in more. This is the
+ *   same ceiling the downgrade side reads, applied from the other end, and
+ *   it is what makes the class structure settle rather than merely balance:
+ *   a village that loses its last gentry household to a failure of male
+ *   heirs can produce another, and one that already has three does not.
+ */
+export function rollMobility(vHash: number, demo: RegionDemography, p: Person, room: (cls: SocialClass) => number): void {
   const r = makeRng(personStream(vHash, 950000, p.id));
   const post = p.birth + 16 >= 1350;
   const m = demo.mobility;
+  const rate = (pair: { base: number; postPlague: number }, into: SocialClass) => (post ? pair.postPlague : pair.base) * room(into);
   let next: SocialClass | null = null;
-  if (p.cls === "serf" && r.chance(post ? m.serfToFree.postPlague : m.serfToFree.base)) next = "freePeasant";
-  else if (p.cls === "freePeasant" && r.chance(post ? m.freeToArtisan.postPlague : m.freeToArtisan.base)) next = "artisan";
-  else if (p.cls === "artisan" && r.chance(post ? m.artisanToMerchant.postPlague : m.artisanToMerchant.base)) next = "merchant";
+  if (p.cls === "serf" && r.chance(rate(m.serfToFree, "freePeasant"))) next = "freePeasant";
+  else if (p.cls === "freePeasant" && r.chance(rate(m.freeToArtisan, "artisan"))) next = "artisan";
+  else if (p.cls === "artisan" && r.chance(rate(m.artisanToMerchant, "merchant"))) next = "merchant";
+  // The top of the ladder, and the reason it has to exist: without it gentry
+  // is a class with an exit and no entrance, so a village that loses its one
+  // gentry line to a failure of male heirs never has another, and the estate
+  // simply drains out of the register. Real gentry status was replenished
+  // exactly here — a prosperous trading household bought the manor, married
+  // into arms, and was styled gentle within a generation — and markedly more
+  // often after 1349, which is the whole late-medieval rise of the gentry.
+  else if (p.cls === "merchant" && r.chance(rate(m.merchantToGentry, "gentry"))) next = "gentry";
   if (next) {
     p.clsOrigin = p.cls;
     p.cls = next;
   }
 }
 
-// § downward mobility: the mirror of rollMobility, for a non-heir son of
-// an artisan/merchant house who has no shop or trade capital of his own
-// to inherit — no rung to defend either. Never fires under partible
-// custom (isHeir already reads every son as a stakeholder there, so
-// nonHeirSon is always false) or if rollMobility already moved this
-// person up — one class transition at birth, not two.
-export function rollDownwardMobility(vHash: number, demo: RegionDemography, p: Person, nonHeirSon: boolean): void {
-  if (!nonHeirSon || p.clsOrigin) return;
+// § downward mobility: the mirror of rollMobility, and the thing that keeps
+// the village's social structure from being a ratchet.
+//
+// Without a rung out of EVERY class above the land, the estates above the
+// peasantry only ever grew. Two forces pushed them up and nothing pushed
+// back: mortality is softened by wealth grade (demography.ts's
+// wealthHazardMult/infantWealthMult), so the richer a household the more of
+// its children reached adulthood to have children of their own; and
+// rollMobility above promotes into artisan and merchant with no matching
+// outflow. Measured over the register era that compounded into villages
+// that were a quarter gentry and a fifth merchants by the 1450s — England's
+// gentry share went 9%→18% across the cohorts, Tuscany's 12%→26%, and
+// Catalonia's merchants 10%→23%. A village is not that, in any century.
+//
+// What really absorbed the surplus is not in dispute: a younger son
+// inherited neither the estate nor the shop nor the credit that went with
+// it, and in the ordinary case did not keep his father's standing. Gentry
+// younger sons became yeomen (or soldiers, or clerks); a merchant's went
+// back to working with his hands. So every class above the free peasantry
+// now has a way down, and the rates are the rates that actually balance the
+// inflow rather than the token ones they replace.
+//
+// Never fires if rollMobility already moved this person up — one class
+// transition at birth, not two.
+export function rollDownwardMobility(vHash: number, demo: RegionDemography, p: Person, weight: number): void {
+  if (weight <= 0 || p.clsOrigin) return;
   const r = makeRng(personStream(vHash, 960000, p.id));
   const post = p.birth + 16 >= 1350;
   const d = demo.mobility.nonHeirDowngrade;
+  const rate = (pair: { base: number; postPlague: number }) => (post ? pair.postPlague : pair.base) * weight;
   let next: SocialClass | null = null;
-  if (p.cls === "merchant" && r.chance(post ? d.merchantToArtisan.postPlague : d.merchantToArtisan.base)) next = "artisan";
-  else if (p.cls === "artisan" && r.chance(post ? d.artisanToFree.postPlague : d.artisanToFree.base)) next = "freePeasant";
+  if (p.cls === "merchant" && r.chance(rate(d.merchantToArtisan))) next = "artisan";
+  else if (p.cls === "artisan" && r.chance(rate(d.artisanToFree))) next = "freePeasant";
+  else if (p.cls === "gentry" && r.chance(rate(d.gentryToFree))) next = "freePeasant";
+  else if (p.cls === "clergyFamily" && r.chance(rate(d.clergyToFree))) next = "freePeasant";
   if (next) {
     p.clsOrigin = p.cls;
     p.cls = next;
@@ -82,7 +122,16 @@ export function rollDownwardMobility(vHash: number, demo: RegionDemography, p: P
 // apprenticeship in another household (the NW-European life-cycle-service
 // pattern; rarer in the Mediterranean — rates come from demography.ts).
 export function rollService(vHash: number, demo: RegionDemography, p: Person, heirBoost = false): void {
-  if (CLASS_INFO[p.cls].wealth > 2 && !heirBoost) return;
+  // Service and APPRENTICESHIP are the same institution seen from two ends —
+  // a spell of years in someone else's household, ending when the servant
+  // had a household of their own — and the craft end of it is if anything
+  // the better documented, through the indentures. Excluding the artisan and
+  // clerical grades (wealth 3) therefore cut out exactly the placements
+  // biographyOccupation.ts already narrates ("was apprenticed to the family
+  // trade"), and left the modelled servant population at roughly half the
+  // share the listings show. Only the merchant and gentry grades stay out by
+  // default: their sons went out as non-heirs (heirBoost) or not at all.
+  if (CLASS_INFO[p.cls].wealth > 3 && !heirBoost) return;
   const r = makeRng(personStream(vHash, 900000, p.id));
   // § male out-migration: a non-heir son of a wealthier household (who
   // won't inherit the land either) is also more likely to be sent into

@@ -268,13 +268,37 @@ describe("§ downward mobility", () => {
     expect(seen).toBeGreaterThan(0);
   });
 
-  it("never happens in partible regions (France, Tuscany) — isHeir reads every son as a stakeholder there", () => {
-    for (const regionKey of ["france", "italy"]) {
+  // § downward mobility, partible custom. This used to assert that downward
+  // mobility never happened at all in France and Tuscany, because isHeir
+  // reads every son as a stakeholder where the land is divided. That left
+  // those regions with no counterweight to the class ratchet whatsoever, and
+  // it showed: Tuscany's gentry share ran from 12% of the 1235–1300 cohort to
+  // 26% of the 1450–1500 one. A share of the land is not the whole of it, and
+  // land divided among brothers generation after generation is exactly how a
+  // partible-inheritance house came down a rung — so it happens here too, to
+  // sons after the first, at reduced weight (village.ts's PARTIBLE_SUBDIVISION).
+  it("happens in partible regions too, but only to non-eldest sons and more rarely than under impartible custom", () => {
+    function rate(regionKey: string): number {
+      let sons = 0;
+      let demoted = 0;
       for (let villageIdx = 0; villageIdx < 20; villageIdx++) {
         const env = resolveVillage(SEED, regionKey, villageIdx);
-        expect(downwardMobilized(env)).toEqual([]);
+        for (const p of env.persons) {
+          if (p.sex !== "M" || p.founder || p.incomer || isFirstBornSon(env, p.id)) continue;
+          sons++;
+        }
+        for (const p of downwardMobilized(env)) {
+          expect(p.sex).toBe("M");
+          expect(isFirstBornSon(env, p.id)).toBe(false);
+          demoted++;
+        }
       }
+      return demoted / sons;
     }
+    const partible = (rate("france") + rate("italy")) / 2;
+    const impartible = (rate("england") + rate("germany")) / 2;
+    expect(partible).toBeGreaterThan(0);
+    expect(partible).toBeLessThan(impartible);
   });
 });
 

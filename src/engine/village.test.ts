@@ -263,6 +263,79 @@ describe("resolveVillage determinism", () => {
   });
 });
 
+// § service placement (service.ts): the two facts about a spell that only the
+// finished matching can settle. The point of the pass is that service is
+// life-cycle service — a spell in someone else's house that ends when the
+// servant finally has one of their own — rather than a fixed adolescent term.
+describe("service spells end where they really ended, in a house that really existed", () => {
+  const envs = allEnvelopes();
+
+  it("a spell is a real span, and never outlives the servant", () => {
+    let seen = 0;
+    for (const env of envs) {
+      for (const p of env.persons) {
+        if (!p.service) continue;
+        seen++;
+        expect(p.service.to).toBeGreaterThan(p.service.from);
+        expect(p.service.from).toBeGreaterThanOrEqual(p.birth);
+        expect(p.service.to).toBeLessThanOrEqual(p.death.year);
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("nobody is still in service on or after their own wedding day", () => {
+    let married = 0;
+    for (const env of envs) {
+      for (const p of env.persons) {
+        const first = p.unions?.[0];
+        if (!p.service || first == null) continue;
+        married++;
+        expect(p.service.to).toBeLessThanOrEqual(env.couples[first].year);
+      }
+    }
+    expect(married).toBeGreaterThan(0);
+  });
+
+  it("spells now routinely run past the old fixed adolescent term", () => {
+    // The whole correction: service used to be discharged at 16–20 because
+    // rollService could only guess a 4–8 year term from age 12. If the median
+    // spell still ends before 20 the pass is not doing its work.
+    const ends: number[] = [];
+    for (const env of envs) for (const p of env.persons) if (p.service) ends.push(p.service.to - p.birth);
+    ends.sort((a, b) => a - b);
+    expect(ends[Math.floor(ends.length / 2)]).toBeGreaterThan(20);
+  });
+
+  it("a named master is a real householder of at least the servant's own standing, and never a parent", () => {
+    let placed = 0;
+    let unplaced = 0;
+    for (const env of envs) {
+      for (const p of env.persons) {
+        if (!p.service) continue;
+        if (p.serviceMaster == null) {
+          unplaced++;
+          continue;
+        }
+        placed++;
+        const m = env.persons[p.serviceMaster];
+        expect(m).toBeDefined();
+        expect(m.id).not.toBe(p.id);
+        expect(m.id).not.toBe(p.father);
+        expect(m.id).not.toBe(p.mother);
+        expect(m.sex).toBe("M");
+        // married, and married before the spell began — a house of his own
+        expect(m.unions?.length).toBeTruthy();
+        expect(env.couples[m.unions![0]].year).toBeLessThanOrEqual(p.service.from);
+        expect(m.death.year).toBeGreaterThan(p.service.from);
+      }
+    }
+    // Most spells find a master; the manorial familia is the residual, not
+    // the rule it used to be.
+    expect(placed).toBeGreaterThan(unplaced * 3);
+  });
+});
+
 function stripPerson(p: Person) {
   // origin is a fresh object literal each solve; compare by value, not identity
   const { origin, ...rest } = p;

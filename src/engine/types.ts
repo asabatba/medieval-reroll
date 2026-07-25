@@ -74,8 +74,17 @@ export interface Person {
   marriageYear?: number;
   /** Couple indices into Envelope.couples, in marriage order. Length > 1 means remarriage after widowhood. */
   unions?: number[];
-  /** Years spent in service/apprenticeship in another household (§ service), rolled at Tier 1. */
+  /** Years spent in service/apprenticeship in another household (§ service).
+   * The start is rolled with the child (villageMobility.ts); the END is
+   * settled only after the marriage matching, since life-cycle service ran
+   * until the servant had a household of their own to leave for
+   * (service.ts's resolveServiceSpells). */
   service?: { from: number; to: number };
+  /** § service placement: the id of the householder whose roof the spell was
+   * served under (service.ts). Unset where the village had no suitable house
+   * standing that year, in which case the servant is counted in the manorial
+   * familia instead (snapshot.ts). */
+  serviceMaster?: number;
   inOrders?: boolean;
   marriedOut?: boolean;
   emigrated?: boolean;

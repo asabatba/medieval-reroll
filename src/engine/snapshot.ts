@@ -27,8 +27,15 @@
 //  - full orphans stay together as a sibling group on the natal holding,
 //    headed by the eldest brother of age (male-primogeniture succession),
 //    else the eldest sibling.
-//  - adolescents rolled into service (§ service) are counted in the manor
-//    pseudo-household; adults in orders in the church pseudo-household.
+//  - a servant (§ service) is counted under the roof of the master his spell
+//    was assigned to at Tier 1 (service.ts), and only in the manorial
+//    pseudo-household when that master is gone or was never found; adults in
+//    orders are in the church pseudo-household.
+//  - § stem family: anyone the rules above would leave keeping house ALONE
+//    is taken in by the nearest married kin — a widow by her married son,
+//    an unmarried adult by a married sibling, an orphaned minor by a
+//    married sibling or an uncle. Only married couple households take
+//    anyone in, so this can never cascade.
 // =====================================================================
 import { findResidenceRecord } from "./identity.js";
 import type { Envelope, Person } from "./types.js";
@@ -181,10 +188,23 @@ export function villageStateAt(env: Envelope, year: number): VillageState {
       joinHousehold(CHURCH_HOUSEHOLD, -1, p.id);
       continue;
     }
+    // § service placement: a servant lived under his master's roof and was
+    // counted in that household by every listing that survives — not in a
+    // pseudo-household of his own. The master is fixed for the whole spell
+    // at Tier 1 (service.ts); the manorial familia is the fallback for a
+    // spell whose master died, left, or was never found in the first place,
+    // which is also where such a child really would have ended up.
     if (p.service && year >= p.service.from && year < p.service.to) {
       st.inService = true;
-      st.householdId = MANOR_HOUSEHOLD;
-      joinHousehold(MANOR_HOUSEHOLD, -1, p.id);
+      const master = p.serviceMaster != null ? states.get(p.serviceMaster) : undefined;
+      const masterHh = master && master.householdId >= 0 ? households.get(master.householdId) : undefined;
+      if (masterHh) {
+        st.householdId = masterHh.id;
+        joinHousehold(masterHh.id, masterHh.headId, p.id);
+      } else {
+        st.householdId = MANOR_HOUSEHOLD;
+        joinHousehold(MANOR_HOUSEHOLD, -1, p.id);
+      }
       continue;
     }
     const father = p.father >= 0 ? env.persons[p.father] : null;
@@ -239,6 +259,90 @@ export function villageStateAt(env: Envelope, year: number): VillageState {
     const sorted = h.members.map((id) => env.persons[id]).sort((a, b) => a.birth - b.birth || a.id - b.id);
     const head = sorted.find((m) => m.sex === "M" && year - m.birth >= 14) ?? sorted[0];
     h.headId = head.id;
+  }
+
+  // =====================================================================
+  // Pass 3 — § stem family. Everything above houses people by the one
+  // relationship it can read off a Couple: you live with your spouse, or
+  // with the parent who had you. That leaves everyone whose spouse and
+  // parents are both gone standing alone on a holding, and the result was
+  // a village in which the ONE-PERSON household was the modal household —
+  // a quarter to a third of every hearth in every region sampled, against
+  // the five to eight per cent that the actual listings show.
+  //
+  // Real communities absorbed those people, and the direction they moved
+  // in is well attested. A widow whose son had married did not keep house
+  // alone next door to him: he had the tenement precisely BECAUSE she had
+  // given it up (which is what let him marry at all — the same dead men's
+  // shoes capacity.ts's hard edge makes him wait for), and she lived in it
+  // with him. An unmarried brother or sister of the head stayed in the
+  // house they were born in rather than setting up alone, since there was
+  // no holding to set up ON. And an orphan too young to hold anything went
+  // to the nearest married kin — the wardship biography.ts already narrates.
+  //
+  // Only married couple households take anyone in, so a move can never
+  // cascade or depend on the order the solitaries are processed in.
+  // =====================================================================
+  // A house with someone else already under its roof can take another in.
+  // Deliberately NOT "both spouses living": a widowed son keeping house with
+  // his own children is exactly as able to shelter his mother as a married
+  // one, and requiring an intact couple left the commonest case of all — the
+  // widow whose only surviving child had himself been widowed — stranded on
+  // her own. Every host has two members or more and so is never itself a
+  // solitary, which is what keeps a move from cascading or depending on the
+  // order the solitaries are walked in.
+  const hostable = [...households.values()].filter((h) => h.id >= 0 && h.id < env.couples.length && h.members.length >= 2);
+
+  function sharesParent(a: Person, b: Person): boolean {
+    return a.id !== b.id && ((a.father >= 0 && a.father === b.father) || (a.mother >= 0 && a.mother === b.mother));
+  }
+
+  /** How near the couple heading `h` stands to `p` — the kin degree first,
+   * then a preference for taking shelter on the male side (the house is the
+   * son's or the brother's, and the holding descended through him), then
+   * seniority. Null where the tie is too distant to have moved anyone. */
+  function kinScore(p: Person, h: HouseholdState, minor: boolean): number | null {
+    const c = env.couples[h.id];
+    // Only the spouses actually under this roof this year can be the tie —
+    // a dead or departed one names a household his kin no longer live in.
+    const pair = [env.persons[c.husband], env.persons[c.wife]].filter((q) => h.members.includes(q.id));
+    const degreeOf = (q: Person): number | null => {
+      if (!minor && (q.father === p.id || q.mother === p.id)) return 0; // a married child's house
+      if (sharesParent(q, p)) return 1; // a married sibling's house
+      // An orphaned minor with no married sibling goes to an uncle or aunt —
+      // the wardship biography.ts already narrates. An adult who has outlived
+      // spouse, parents and siblings' households alike keeps their own hearth
+      // rather than being billeted on a cousin.
+      if (minor && ((p.father >= 0 && sharesParent(q, env.persons[p.father])) || (p.mother >= 0 && sharesParent(q, env.persons[p.mother])))) return 2;
+      return null;
+    };
+    let best: number | null = null;
+    for (const q of pair) {
+      const d = degreeOf(q);
+      if (d == null) continue;
+      const score = d * 10000 + (q.sex === "M" ? 0 : 1000) + q.birth - 1200;
+      if (best == null || score < best) best = score;
+    }
+    return best;
+  }
+
+  const solitary = [...households.values()].filter((h) => h.id >= 0 && h.members.length === 1).sort((a, b) => a.id - b.id);
+  for (const h of solitary) {
+    const p = env.persons[h.members[0]];
+    const st = states.get(p.id)!;
+    const minor = st.age < 16;
+    let host: HouseholdState | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const cand of hostable) {
+      const score = kinScore(p, cand, minor);
+      if (score == null || score >= bestScore) continue;
+      bestScore = score;
+      host = cand;
+    }
+    if (!host) continue;
+    households.delete(h.id);
+    st.householdId = host.id;
+    host.members.push(p.id);
   }
 
   // headOfHousehold flags

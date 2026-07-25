@@ -88,6 +88,9 @@ interface UiStrings {
   widowTag: string;
   widowerTag: string;
   kinTag: string;
+  /** § stem family: the head's own widowed parent, living in the heir's house. */
+  fatherTag: string;
+  motherTag: string;
   serviceTag: string;
   ordersTag: string;
   manorHouse: string;
@@ -204,6 +207,8 @@ export const UI: Record<Locale, UiStrings> = {
     widowTag: "widow",
     widowerTag: "widower",
     kinTag: "kin",
+    fatherTag: "father",
+    motherTag: "mother",
     serviceTag: "in service",
     ordersTag: "in orders",
     manorHouse: "The manor — servants & apprentices",
@@ -316,6 +321,8 @@ export const UI: Record<Locale, UiStrings> = {
     widowTag: "vídua",
     widowerTag: "vidu",
     kinTag: "parent",
+    fatherTag: "pare",
+    motherTag: "mare",
     serviceTag: "servint",
     ordersTag: "en ordes",
     manorHouse: "La casa senyorial — criats i aprenents",

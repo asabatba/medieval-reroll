@@ -44,18 +44,27 @@ import {
   VACANT_HOLDINGS,
   WAIT_FOR_HOLDING,
 } from "./capacity.js";
-import { CLASS_INFO, CLASSES, URBAN_CLASSES } from "./data/classes.js";
+import { CLASS_INFO, CLASSES, ceilingPressure, URBAN_CLASSES } from "./data/classes.js";
 import { demographyOf } from "./data/demography.js";
 import { placeOf } from "./data/placeNames.js";
 import { REGIONS } from "./data/regions.js";
 import { addrHash, makeRng, personStream } from "./hash.js";
 import { famineAt, rollDeath, warAt } from "./mortality.js";
 import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
+import { assignServiceMasters, resolveServiceSpells } from "./service.js";
 import { settlementTypeOf } from "./settlement.js";
-import type { Address, Couple, Death, Envelope, Person, Sex } from "./types.js";
+import type { Address, Couple, Death, Envelope, Person, Sex, SocialClass } from "./types.js";
 import { cacheClear, cacheGet, cacheSet, cacheSize } from "./villageCache.js";
 import { riskTradeOf, rollDownwardMobility, rollMobility, rollService } from "./villageMobility.js";
-import { isAffinal, isConsanguineous, isHeir } from "./villageRules.js";
+import { eldestSonOf, isAffinal, isConsanguineous, isHeir } from "./villageRules.js";
+
+// § downward mobility, partible custom: how much of the full non-heir
+// downgrade pressure a younger son feels where the land is divided rather
+// than passed whole. Well short of 1 — he does inherit something, and that
+// is the whole difference between the two customs — but not 0, which is
+// what it silently was before, and which left France and Tuscany with no
+// counterweight to the class ratchet at all.
+const PARTIBLE_SUBDIVISION = 0.75;
 
 export { ENVELOPE_CACHE_LIMIT } from "./villageCache.js";
 export { isHeir } from "./villageRules.js";
@@ -141,6 +150,27 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     return held / holdingsAt(worldSeed, regionKey, villageIdx, year);
   }
 
+  // § the estate ceiling (data/classes.ts): what share of the village's
+  // living souls a class already holds, as of a year. Read at the one moment
+  // it bites — a son being born into an estate that may or may not have room
+  // for another household of its kind — so the class structure regulates
+  // itself against the village instead of compounding on the luck of which
+  // founder lineages happened to survive.
+  //
+  // The denominator has a floor: in the founding years a village of a dozen
+  // souls would otherwise read its single gentry couple as a sixth of the
+  // parish and demote their sons on the strength of a sample of twelve.
+  function classShareAt(cls: SocialClass, year: number): number {
+    let held = 0;
+    let alive = 0;
+    for (const q of persons) {
+      if (q.birth > year || q.death.year <= year) continue;
+      alive++;
+      if (q.cls === cls) held++;
+    }
+    return held / Math.max(alive, 30);
+  }
+
   // § exogamy ceiling (capacity.ts): a running count of the marriages that
   // brought a spouse in from outside the parish, against which both import
   // paths below check themselves. Anyone turned away here isn't married off
@@ -204,7 +234,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // the existing mobility rolls (villageMobility.ts), so this single hook
   // is what drives the whole village's eventual class/wealth/occupation
   // mix toward "urban" or "rural".
-  const classTable = settlementTypeOf(worldSeed, regionKey, villageIdx) === "urban" ? URBAN_CLASSES : CLASSES;
+  const settlement = settlementTypeOf(worldSeed, regionKey, villageIdx);
+  const classTable = settlement === "urban" ? URBAN_CLASSES : CLASSES;
   for (let i = 0; i < founderCouples; i++) {
     const cls = rng.weighted(classTable);
     const wealth = CLASS_INFO[cls].wealth;
@@ -300,14 +331,34 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       father: H.id,
       mother: W.id,
     });
-    rollMobility(vHash, demo, child);
+    // § the estate ceiling: promotion answers to the same ceiling demotion
+    // does, from the other side — a village already full of trading houses
+    // makes few more, and one whose gentry line has failed for want of male
+    // heirs can raise another. Read at the child's birth year, which is the
+    // village the promotion would actually have to fit into.
+    rollMobility(vHash, demo, child, (into) => 1 / ceilingPressure(into, settlement, classShareAt(into, y)));
     // § male out-migration / § downward mobility: both class-transition
     // rolls happen BEFORE riskTradeOf, so the trade-hazard tag it derives
     // always reflects the child's FINAL class, never a stale pre-transition
     // one (occupation narrative in biography.ts reads p.cls fresh anyway,
     // but riskTrade is rolled once here and must agree with it).
     const nonHeirSon = child.sex === "M" && !isHeir(persons, region, regionKey, child);
-    rollDownwardMobility(vHash, demo, child, nonHeirSon);
+    // § downward mobility: how hard the class ratchet pushes back on this
+    // child. Under impartible custom it is the plain non-heir case — he gets
+    // nothing, so he keeps nothing. Under partible custom every son does get
+    // a share, which is why isHeir reads them all as heirs and the whole
+    // mechanism used to be inert in France and Tuscany; but a share is not
+    // the whole, and land divided among brothers every generation is exactly
+    // how a partible-inheritance house slid down a rung. So sons after the
+    // first face the same rungs at reduced weight rather than none at all.
+    const subdividing = !nonHeirSon && child.sex === "M" && region.inheritance === "partible" && !eldestSonOf(persons, child, regionKey);
+    const custom = nonHeirSon ? 1 : subdividing ? PARTIBLE_SUBDIVISION : 0;
+    // § the estate ceiling (data/classes.ts): and how much room his father's
+    // estate still has in this village. Rates that balance on average still
+    // let one lucky lineage compound into a village that is an eighth gentry
+    // — the ceiling is what actually holds the number of such households to
+    // the number of estates there are to hold.
+    rollDownwardMobility(vHash, demo, child, custom * ceilingPressure(child.cls, settlement, classShareAt(child.cls, y)));
     child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
     child.death = rollDeath(
       makeRng(personStream(vHash, 7001, child.id)),
@@ -1029,6 +1080,13 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     if (W.originId != null || W.emigrated) continue;
     if (!boreChildIn(W, W.death.year)) W.death = { ...W.death, cause: "disease" };
   }
+
+  // § service placement (service.ts): the two facts about a service spell
+  // that only the finished matching can supply — the year it ended (the
+  // servant's own marriage) and the house it was served in. Both draw from
+  // per-person streams of their own, so neither perturbs anything above.
+  resolveServiceSpells(persons, couples, vHash);
+  assignServiceMasters(persons, couples, vHash);
 
   const leftover = persons.filter((p) => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
   const diagnostics = { matchingRounds, truncated: leftover.length > 0, unmatched: leftover.length };

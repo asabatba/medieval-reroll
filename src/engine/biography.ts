@@ -595,16 +595,32 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // § service: adolescent years in another household, rolled at Tier 1
+  // § service: adolescent years in another household, rolled at Tier 1.
+  // § service placement: the master is a real householder on this same
+  // register (service.ts), so the entry names him and links to his record
+  // rather than leaving the reader with an anonymous "another household".
+  // Only where the village had nobody suitable standing that year does it
+  // fall back to the manorial familia, which is exactly what `serviceMaster`
+  // being unset means.
   if (p.service && p.death.year > p.service.from) {
     const years = Math.min(p.service.to, p.death.year) - p.service.from;
+    const span = years > 1 ? (ca ? `${years} anys` : `${years} years`) : ca ? "un any" : "a year";
+    const master = p.serviceMaster != null ? env.persons[p.serviceMaster] : null;
+    const house = master
+      ? ca
+        ? `a casa de ${master.name} ${master.surname}`
+        : `in the household of ${master.name} ${master.surname}`
+      : ca
+        ? "a la casa senyorial"
+        : "in the manor household";
     ev(
       p.service.from,
       ca
-        ? `Va entrar a servir en una altra casa, com era costum per als fills de cases humils, i hi va passar ${years > 1 ? `${years} anys` : "un any"} guanyant-se el llit, la taula i la soldada.`
-        : `Went into service in another household, as was the custom for children of humble houses, and spent ${years > 1 ? `${years} years` : "a year"} there earning bed, board, and a small wage.`,
+        ? `Va entrar a servir ${house}, com era costum per als fills de cases humils, i hi va passar ${span} guanyant-se el llit, la taula i la soldada${p.unions?.length ? ", fins que va tenir casa pròpia" : ""}.`
+        : `Went into service ${house}, as was the custom for children of humble houses, and spent ${span} there earning bed, board, and a small wage${p.unions?.length ? `, until there was a household of ${p.sex === "M" ? "his" : "her"} own to leave for` : ""}.`,
       "life",
       cite("account"),
+      master ? [nameRef(master, selfAddr)] : undefined,
     );
   }
 

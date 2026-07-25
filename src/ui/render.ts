@@ -248,16 +248,24 @@ export function renderVillageBody(E: typeof Engine, env: Envelope, year: number,
   const pseudo = state.households.filter((h) => h.id < 0).sort((a, b) => b.id - a.id); // manor before church
 
   function roleOf(id: number, h: HouseholdState): string {
-    if (h.id === E.MANOR_HOUSEHOLD) return t.serviceTag;
     if (h.id === E.CHURCH_HOUSEHOLD) return t.ordersTag;
     const st = byId.get(id)!;
     const p = env.persons[id];
+    // § service placement: a servant now sits in his master's own household,
+    // where "kin" would be exactly the wrong word for him — so the service
+    // tag is read off the person, not off which household he landed in.
+    if (st.inService) return t.serviceTag;
+    if (h.id === E.MANOR_HOUSEHOLD) return t.serviceTag;
     if (id === h.headId) return st.maritalStatus === "widowed" ? (p.sex === "F" ? t.widowTag : t.widowerTag) : t.headTag;
     if (st.spouseId === h.headId) return p.sex === "F" ? t.wife : t.husband;
     const headSpouse = byId.get(h.headId)?.spouseId;
     if (p.father === h.headId || p.mother === h.headId || (headSpouse != null && (p.father === headSpouse || p.mother === headSpouse)))
       return p.sex === "M" ? t.son : t.daughter;
     const head = env.persons[h.headId];
+    // § stem family: the retired generation living in the heir's house — the
+    // commonest new relationship in a household now that solitaries are
+    // taken in, and the one "kin" read worst.
+    if (head && (head.father === id || head.mother === id)) return p.sex === "M" ? t.fatherTag : t.motherTag;
     if (head && p.father >= 0 && p.father === head.father) return p.sex === "M" ? t.brother : t.sister;
     return t.kinTag;
   }

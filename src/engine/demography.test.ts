@@ -9,6 +9,7 @@
 // births; widowers remarrying far more often than widows.
 import { describe, expect, it } from "vitest";
 import { REGIONS } from "./data/regions.js";
+import { settlementTypeOf } from "./settlement.js";
 import type { Envelope } from "./types.js";
 import { resolveVillage } from "./village.js";
 
@@ -188,6 +189,50 @@ describe("aggregate demographic statistics stay within historical bands", () => 
     const nw = (STATS.england.serviceRate + STATS.germany.serviceRate) / 2;
     const med = (STATS.catalonia.serviceRate + STATS.italy.serviceRate) / 2;
     expect(nw).toBeGreaterThan(med * 1.5);
+  });
+
+  it("the estates above the land stay village-sized, cohort after cohort", () => {
+    // § downward mobility / § the estate ceiling. The failure this exists to
+    // catch is a slow one and invisible in any single life: with mortality
+    // softened by wealth and promotion running one way, the classes above the
+    // peasantry compounded across the register era into villages that were a
+    // quarter gentry and a fifth merchants by the 1450s (England's gentry
+    // share ran 9%→18% across these cohorts, Tuscany's 12%→26%, Catalonia's
+    // merchants 10%→23%). Measured on NATAL class, since that is what a child
+    // is actually born into, and on rural villages only — a chartered market
+    // town is supposed to be full of trades.
+    const COHORTS: [number, number][] = [
+      [1235, 1300],
+      [1300, 1350],
+      [1350, 1400],
+      [1400, 1450],
+      [1450, 1500],
+    ];
+    for (const rk of Object.keys(REGIONS)) {
+      const rural: Envelope[] = [];
+      for (let v = 0; v < VILLAGES_PER_REGION; v++) {
+        if (settlementTypeOf(SEED, rk, v) === "rural") rural.push(resolveVillage(SEED, rk, v));
+      }
+      for (const [from, to] of COHORTS) {
+        const counts = new Map<string, number>();
+        let n = 0;
+        for (const env of rural) {
+          for (const p of env.persons) {
+            if (p.birth < from || p.birth >= to) continue;
+            n++;
+            const natal = p.clsOrigin ?? p.cls;
+            counts.set(natal, (counts.get(natal) ?? 0) + 1);
+          }
+        }
+        const share = (c: string) => (counts.get(c) ?? 0) / n;
+        const where = `${rk} ${from}-${to}`;
+        // A village has an estate or two, not a shire's worth of them.
+        expect(share("gentry"), `${where} gentry`).toBeLessThan(0.14);
+        expect(share("merchant"), `${where} merchant`).toBeLessThan(0.16);
+        // and whatever else it holds, it is still a farming community
+        expect(share("serf") + share("freePeasant"), `${where} peasantry`).toBeGreaterThan(0.4);
+      }
+    }
   });
 
   it("upward class mobility rises after the Black Death (aggregated across regions)", () => {
