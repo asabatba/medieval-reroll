@@ -584,13 +584,28 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     if (decodedOcc.literate) literate = true;
     ev(decodedOcc.year, `${p.name} ${decodedOcc.text}.`, "life");
   }
+  // § the celibate estate: entry into religion (villageMobility.ts's
+  // rollVocation). Now reachable from any house and by either sex, so the
+  // text can no longer assume a tonsured chantry priest: a daughter of a
+  // dowried house went to a convent, and the entry gift her family found for
+  // it — a fraction of the marriage dowry they were spared — is the whole
+  // reason the cloister was where such a daughter ended up.
   if (p.inOrders) {
     literate = true;
+    const dowried = p.sex === "F" && CLASS_INFO[p.cls].wealth >= 3;
     ev(
       p.birth + 14,
-      ca
-        ? `Va ser destinat a l'Església: va aprendre llatí del capellà de la parròquia, va rebre la tonsura, i amb el temps va prendre els ordes. Va servir com a capellà de capellania, cantant misses pels morts dels anys de pesta.`
-        : `Was marked out for the Church: learned Latin from the parish priest, was tonsured, and in time took orders. Served as a chantry priest, singing masses for the dead of the plague years.`,
+      p.sex === "M"
+        ? ca
+          ? `Va ser destinat a l'Església: va aprendre llatí del capellà de la parròquia, va rebre la tonsura, i amb el temps va prendre els ordes. Va servir com a capellà de capellania, cantant misses pels morts dels anys de pesta.`
+          : `Was marked out for the Church: learned Latin from the parish priest, was tonsured, and in time took orders. Served as a chantry priest, singing masses for the dead of the plague years.`
+        : dowried
+          ? ca
+            ? `Va ser destinada al claustre en lloc del matrimoni: la casa va pagar la dot d'entrada — molt menor que la que li hauria calgut trobar per casar-la — i va prendre el vel, amb el saltiri i els comptes de la casa religiosa al seu càrrec.`
+            : `Was given to the cloister rather than to a husband: the house paid her entry gift — a fraction of the marriage dowry it was spared — and she took the veil, keeping her psalter and, in time, the convent's accounts.`
+          : ca
+            ? `Va entrar en religió: va prendre el vel en una casa petita de la comarca, on va aprendre les lletres que a casa no hauria après mai.`
+            : `Entered religion: took the veil in a small house within the county, and learned there the letters she would never have learned at home.`,
       "life",
     );
   }

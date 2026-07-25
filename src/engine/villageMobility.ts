@@ -118,6 +118,34 @@ export function rollDownwardMobility(vHash: number, demo: RegionDemography, p: P
   }
 }
 
+// § the celibate estate: entry into religion, rolled at birth from a stream
+// of its own (namespace 930000) like every other life-course allocation here.
+//
+// Rolled AT BIRTH, not inside the marriage matching where it used to live,
+// and that placement is the point. A child was marked out for the Church
+// young — oblation, or simply the Latin from the parish priest — and the
+// decision then shaped everything downstream: he is not in the marriage
+// market at all, rather than a man who failed to find a wife and was swept
+// into orders as the consolation prize. It also means the flag exists before
+// the matcher runs, so village.ts can filter on it instead of consuming a
+// draw mid-loop for one class of one sex.
+//
+// Only for children who live to see it: a vocation is not a fact about a
+// child who died at four, and recording one would put a chantry priest in
+// the register with a fourteen-year gap between his tonsure and his birth.
+export function rollVocation(vHash: number, demo: RegionDemography, p: Person, nonHeirSon: boolean): void {
+  if (p.death.age < 14) return;
+  const v = demo.vocation;
+  let chance = p.sex === "M" ? v.M : v.F;
+  if (p.cls === "clergyFamily") chance *= v.clergyMult;
+  if (nonHeirSon) chance *= v.nonHeirMult;
+  // A daughter of a house that would have had to find her a marriage dowry:
+  // the cloister's own gift was a fraction of it, and that arithmetic is why
+  // the dowry-regime regions' convents filled and NW Europe's did not.
+  else if (p.sex === "F" && CLASS_INFO[p.cls].wealth >= 3) chance *= v.dowriedMult;
+  if (makeRng(personStream(vHash, 930000, p.id)).chance(chance)) p.inOrders = true;
+}
+
 // § service: low-wealth children commonly spent adolescence in service or
 // apprenticeship in another household (the NW-European life-cycle-service
 // pattern; rarer in the Mediterranean — rates come from demography.ts).

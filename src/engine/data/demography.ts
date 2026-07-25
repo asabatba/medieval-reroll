@@ -105,6 +105,39 @@ export interface RegionDemography {
     /** Chance, per matching round, that a local woman without a local match marries a real immigrant groom instead of waiting. */
     groomPullChance: number;
   };
+  /** § the celibate estate: entry into religion — the third thing a life
+   * could be for, beside a holding and a trade, and the one this model had no
+   * room for at all. Orders used to be reachable only by a son of the
+   * `clergyFamily` class, at a flat 0.35, which produced between zero and
+   * seven religious across twelve villages of a region and NONE whatever in
+   * Germany or Portugal, whose founder draws happened to give them no such
+   * households. No parish priest, no monk, no friar, and — since the roll
+   * lived inside the men's marriage loop — no nun anywhere in Europe.
+   *
+   * That absence is not a rounding error. Roughly one to two per cent of the
+   * population was in religion, and more to the point the cloister was the
+   * standard alternative to marriage for a daughter of a dowried house: a
+   * convent's entry gift cost a fraction of a marriage dowry, which is
+   * exactly why the Mediterranean patriciate filled its convents while
+   * NW-European daughters stayed lay and simply married late or not at all.
+   * Without it, every surplus daughter in the model had nowhere to go but
+   * permanent lay spinsterhood, and the Mediterranean regions came out with
+   * HIGHER never-married shares than England and Scotland — the European
+   * Marriage Pattern's signature reading backwards. */
+  vocation: {
+    /** Base chance a son who reaches 14 takes orders. */
+    M: number;
+    /** Base chance a daughter who reaches 14 enters religion. */
+    F: number;
+    /** Multiplier for a non-heir son — the classic disposal of a younger son. */
+    nonHeirMult: number;
+    /** Multiplier for a daughter of a house that would owe a marriage dowry
+     * (wealth grade 3+). The dowry regime's own arithmetic, and the whole
+     * reason the Mediterranean figure is the one that moves. */
+    dowriedMult: number;
+    /** Multiplier for a child of a clerical household, who had the Latin. */
+    clergyMult: number;
+  };
   /** § illegitimacy: chance an adult woman who ends her days never formally
    * married (village.ts's own final outcome, not a mid-solve guess) bore one
    * child out of wedlock at some point regardless — the commonest documented
@@ -145,8 +178,17 @@ const NW_DEFAULT: RegionDemography = {
   },
   maternalMortalityPerBirth: 0.012,
   maleOutMigration: { nonHeirBase: 0.42, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.3 },
+  vocation: { M: 0.016, F: 0.007, nonHeirMult: 2.3, dowriedMult: 1.7, clergyMult: 3 },
   illegitimacyRate: 0.03,
 };
+
+/** § the celibate estate, the dowry regime. Where a daughter's marriage
+ * carried a dowry the family had to find, the cloister was the cheap way out,
+ * and the convents filled accordingly — most sharply in Tuscany, whose
+ * patrician houses put a very large share of their daughters behind the grille
+ * rather than dower them all. The male figure moves far less: a younger son
+ * went to the Church everywhere in Europe. */
+const DOWRY_REGIME_VOCATION = { M: 0.014, F: 0.015, nonHeirMult: 2.3, dowriedMult: 2.8, clergyMult: 3 };
 
 const DEMOGRAPHY_DATA = {
   england: { ...NW_DEFAULT },
@@ -191,6 +233,7 @@ const DEMOGRAPHY_DATA = {
     },
     maternalMortalityPerBirth: 0.0052,
     maleOutMigration: { nonHeirBase: 0.32, heirBase: 0.05, pressured: 0.5, groomPullChance: 0.22 }, // stronger land ties, less rural out-migration
+    vocation: DOWRY_REGIME_VOCATION,
     illegitimacyRate: 0.02, // tighter dowry-regime household surveillance
   },
   italy: {
@@ -220,6 +263,10 @@ const DEMOGRAPHY_DATA = {
     },
     maternalMortalityPerBirth: 0.0068,
     maleOutMigration: { nonHeirBase: 0.3, heirBase: 0.05, pressured: 0.48, groomPullChance: 0.2 }, // urban guild apprenticeship more local than rural flight
+    // Tuscany is the sharpest case of the whole pattern: a marriage dowry
+    // that ran ahead of what even patrician houses could find for every
+    // daughter, against a convent gift a fraction of the size.
+    vocation: { ...DOWRY_REGIME_VOCATION, F: 0.018, dowriedMult: 3.3 },
     illegitimacyRate: 0.035, // urban Tuscany's documented foundling/illegitimacy registers (Florence's Innocenti, founded 1445) ran higher than the rural NW-European norm
   },
   castile: {
@@ -231,6 +278,7 @@ const DEMOGRAPHY_DATA = {
     service: { M: 0.22, F: 0.26 },
     maternalMortalityPerBirth: 0.0065,
     maleOutMigration: { nonHeirBase: 0.36, heirBase: 0.06, pressured: 0.58, groomPullChance: 0.26 }, // frontier repoblación an outlet for younger sons, alongside the standing war
+    vocation: DOWRY_REGIME_VOCATION,
     illegitimacyRate: 0.028,
   },
   scotland: {
@@ -252,6 +300,7 @@ const DEMOGRAPHY_DATA = {
     service: { M: 0.22, F: 0.26 },
     maternalMortalityPerBirth: 0.0065,
     maleOutMigration: { nonHeirBase: 0.38, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.26 }, // North African garrisons and the African voyages drew off younger sons who once would simply have left for the towns
+    vocation: DOWRY_REGIME_VOCATION,
     illegitimacyRate: 0.03,
   },
 } satisfies Record<RegionKey, RegionDemography>;

@@ -248,7 +248,6 @@ export function renderVillageBody(E: typeof Engine, env: Envelope, year: number,
   const pseudo = state.households.filter((h) => h.id < 0).sort((a, b) => b.id - a.id); // manor before church
 
   function roleOf(id: number, h: HouseholdState): string {
-    if (h.id === E.CHURCH_HOUSEHOLD) return t.ordersTag;
     const st = byId.get(id)!;
     const p = env.persons[id];
     // § service placement: a servant now sits in his master's own household,
@@ -256,6 +255,8 @@ export function renderVillageBody(E: typeof Engine, env: Envelope, year: number,
     // tag is read off the person, not off which household he landed in.
     if (st.inService) return t.serviceTag;
     if (h.id === E.MANOR_HOUSEHOLD) return t.serviceTag;
+    // § the celibate estate: religion is no longer a men's tonsure only.
+    if (st.inOrders) return p.sex === "F" ? t.veiledTag : t.ordersTag;
     if (id === h.headId) return st.maritalStatus === "widowed" ? (p.sex === "F" ? t.widowTag : t.widowerTag) : t.headTag;
     if (st.spouseId === h.headId) return p.sex === "F" ? t.wife : t.husband;
     const headSpouse = byId.get(h.headId)?.spouseId;

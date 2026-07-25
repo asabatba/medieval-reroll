@@ -69,10 +69,12 @@ export function isHeir(persons: readonly Person[], region: Region, regionKey: st
   return region.inheritance === "partible" || eldestSonOf(persons, p, regionKey);
 }
 
-// § consanguinity: do H and W share a grandparent? Not a bar to marriage
-// (first-cousin matches were real, especially among gentry consolidating
-// property) — just flagged so Tier 2 can narrate the dispensation a match
-// this close actually required after Lateran IV (1215).
+// § consanguinity: do H and W share a grandparent? Not a hard bar (first-
+// cousin matches were real, especially among gentry consolidating property)
+// — just flagged so Tier 2 can narrate the dispensation a match this close
+// actually required after Lateran IV (1215), and, since the matchers now
+// weigh it (CONSANGUINITY_PENALTY below), avoided wherever the village has
+// anyone else to offer.
 export function grandparentsOf(persons: readonly Person[], p: Person): Set<number> {
   const gs = new Set<number>();
   const add = (parentId: number) => {
@@ -92,6 +94,35 @@ export function isConsanguineous(persons: readonly Person[], H: Person, W: Perso
   const gH = grandparentsOf(persons, H);
   for (const g of grandparentsOf(persons, W)) if (gH.has(g)) return true;
   return false;
+}
+
+// § consanguinity avoidance. Detecting a cousin match was never the same as
+// discouraging one, and nothing here used to discourage it: the matchers
+// scored candidates on age alone, so in a marriage pool as closed as a
+// village's the first cousins turned up at whatever rate random mixing
+// produced — 8 to 14 per cent of every region's couples, against a real
+// medieval West where canon law barred marriage to the fourth degree and a
+// dispensation had to be sought and paid for. A flag that fires on a tenth
+// of all marriages is not the notable event the narrative treats it as.
+//
+// So a cousin is scored as a far worse match rather than forbidden outright,
+// which leaves exactly the two cases the sources actually show: the man with
+// nobody else in the parish to marry, and the propertied house that wanted
+// the match and could afford the dispensation. The scores these are added to
+// are age-fit distances in years, so the penalty is deliberately larger than
+// any plausible age gap — it has to outweigh the whole rest of the score, not
+// merely tilt it.
+export const CONSANGUINITY_PENALTY = 55;
+
+/** Gentry and merchant houses married cousins ON PURPOSE — to keep land and
+ * capital in the family — and had the money for the dispensation that took.
+ * They are discouraged, not deterred. */
+export const CONSANGUINITY_PENALTY_PROPERTIED = 10;
+
+export function consanguinityPenalty(persons: readonly Person[], H: Person, W: Person): number {
+  if (!isConsanguineous(persons, H, W)) return 0;
+  const propertied = (p: Person) => p.cls === "gentry" || p.cls === "merchant";
+  return propertied(H) && propertied(W) ? CONSANGUINITY_PENALTY_PROPERTIED : CONSANGUINITY_PENALTY;
 }
 
 // § affinity: the spouse of p's MOST RECENT union, dead or alive — used to

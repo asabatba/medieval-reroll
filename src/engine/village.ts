@@ -55,8 +55,8 @@ import { assignServiceMasters, resolveServiceSpells } from "./service.js";
 import { settlementTypeOf } from "./settlement.js";
 import type { Address, Couple, Death, Envelope, Person, Sex, SocialClass } from "./types.js";
 import { cacheClear, cacheGet, cacheSet, cacheSize } from "./villageCache.js";
-import { riskTradeOf, rollDownwardMobility, rollMobility, rollService } from "./villageMobility.js";
-import { eldestSonOf, isAffinal, isConsanguineous, isHeir } from "./villageRules.js";
+import { riskTradeOf, rollDownwardMobility, rollMobility, rollService, rollVocation } from "./villageMobility.js";
+import { CONSANGUINITY_PENALTY, consanguinityPenalty, eldestSonOf, isAffinal, isConsanguineous, isHeir } from "./villageRules.js";
 
 // § downward mobility, partible custom: how much of the full non-heir
 // downgrade pressure a younger son feels where the land is divided rather
@@ -64,7 +64,7 @@ import { eldestSonOf, isAffinal, isConsanguineous, isHeir } from "./villageRules
 // is the whole difference between the two customs — but not 0, which is
 // what it silently was before, and which left France and Tuscany with no
 // counterweight to the class ratchet at all.
-const PARTIBLE_SUBDIVISION = 0.75;
+export const PARTIBLE_SUBDIVISION = 0.75;
 
 export { ENVELOPE_CACHE_LIMIT } from "./villageCache.js";
 export { isHeir } from "./villageRules.js";
@@ -374,6 +374,13 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // the low-wealth default rollService already covers — is likelier to be
     // sent into service or apprenticeship elsewhere, since he won't inherit.
     rollService(vHash, demo, child, nonHeirSon);
+    // § the celibate estate: whether this child was marked out for religion
+    // instead. Rolled here, at birth, so the marriage matching below can
+    // simply leave them out rather than deciding it mid-loop for one class
+    // of one sex — which is what confined the whole institution to sons of
+    // `clergyFamily` houses, and left regions with no such houses (Germany,
+    // Portugal) without a single religious in them.
+    rollVocation(vHash, demo, child, nonHeirSon);
     c.children.push(child.id);
     return child;
   }
@@ -477,7 +484,11 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   let matchingRounds = 0;
   function runMatchingRounds(): void {
     while (matchingRounds < MATCH_ROUND_LIMIT) {
-      const eligible = persons.filter((p) => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
+      // § the celibate estate: anyone already marked out for religion
+      // (villageMobility.ts's rollVocation, at birth) is not in the marriage
+      // market on either side of it — not a candidate, and not someone the
+      // truncation diagnostics below should count as an unresolved match.
+      const eligible = persons.filter((p) => !p.founder && !p.inOrders && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
       if (!eligible.length) break;
       matchingRounds++;
       eligible.forEach((p) => {
@@ -486,7 +497,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       eligible.sort((a, b) => a.birth - b.birth || a.id - b.id);
       const men = eligible.filter((p) => p.sex === "M");
       const women = persons
-        .filter((p) => p.sex === "F" && !p.founder && p.death.age >= 16 && p.spouse == null && !p.marriedOut)
+        .filter((p) => p.sex === "F" && !p.founder && !p.inOrders && p.death.age >= 16 && p.spouse == null && !p.marriedOut)
         .sort((a, b) => a.birth - b.birth || a.id - b.id);
       const takenW = new Set<number>();
 
@@ -504,10 +515,6 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         // marries at all, and how long he waits.
         const pressure = pressureAt(M.birth + region.marriageM[0]);
         if (rng.chance((heir ? 0.07 : 0.12) * celibacyMult(pressure))) continue; // never marries
-        if (M.cls === "clergyFamily" && rng.chance(0.35)) {
-          M.inOrders = true;
-          continue;
-        }
         const targetGap = rng.int(1, region.marriageM[0] - region.marriageF[0] + 3);
         const mAge = rng.int(region.marriageM[0], region.marriageM[1]) + marriageAgeShift(pressure);
         // § the preventive check, hard edge (capacity.ts): where every
@@ -523,7 +530,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         }
         // best local candidate: right age window, different household, alive at wantYear
         let best: Person | null = null,
-          bestScore = 1e9;
+          bestScore = 1e9,
+          bestPenalty = 0;
         for (const W of women) {
           if (takenW.has(W.id)) continue;
           if (W.father === M.father && M.father !== -1) continue; // no siblings (paternal)
@@ -531,13 +539,31 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           const wAgeAt = wantYear - W.birth;
           if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6) continue;
           if (W.death.year <= wantYear || M.death.year <= wantYear) continue;
-          const score = Math.abs(wAgeAt - (mAge - targetGap));
+          // § consanguinity avoidance: a first cousin is a last resort, not
+          // an equal candidate — the impediment and the cost of the
+          // dispensation are what kept these matches rare.
+          const penalty = consanguinityPenalty(persons, M, W);
+          const score = Math.abs(wAgeAt - (mAge - targetGap)) + penalty;
           if (score < bestScore) {
             bestScore = score;
             best = W;
+            bestPenalty = penalty;
           }
         }
-        if (best && rng.chance(0.8)) {
+        // § consanguinity avoidance, the second half of it. Scoring alone
+        // only decides WHICH local woman he takes, and in a pool as closed as
+        // a village's it is common for every candidate within his age window
+        // to be kin — at which point the penalty changes nothing and he
+        // marries a cousin anyway. That is why re-scoring on its own only
+        // took cousin matches from 8–14% of couples down to 4–6%.
+        //
+        // What a man in that position actually did is the thing the branch
+        // below already models: he looked outside the parish. So where the
+        // best the village can offer is a cousin he is far likelier to fall
+        // through to exogamy — unless both houses are propertied, where the
+        // match was often the whole point and the dispensation affordable.
+        const localChance = bestPenalty === CONSANGUINITY_PENALTY ? 0.15 : 0.8;
+        if (best && rng.chance(localChance)) {
           takenW.add(best.id);
           const c = marry(M, best, wantYear);
           if (c) genChildren(c, 1495);
@@ -703,7 +729,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // simply skipped for that woman.
   function rollIllegitimateBirths(): void {
     for (const W of persons.slice()) {
-      if (W.sex !== "F" || W.founder || W.spouse != null) continue;
+      if (W.sex !== "F" || W.founder || W.inOrders || W.spouse != null) continue;
       const r = makeRng(personStream(vHash, 970000, W.id));
       if (!r.chance(demo.illegitimacyRate)) continue;
       const ageLo = Math.max(14, region.marriageF[0] - 3);
@@ -816,7 +842,10 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // increasingly old widower-marriages before it ever got the chance to
   // leave, skewing the marriage-age statistics badly.
   for (const W of persons) {
-    if (W.sex !== "F" || W.founder || W.spouse != null || W.emigrated || W.death.age < region.marriageF[1]) continue;
+    // § the celibate estate: a woman in religion doesn't marry out — she has
+    // already left the marriage market by another door, and her house is the
+    // cloister, not another parish's.
+    if (W.sex !== "F" || W.founder || W.inOrders || W.spouse != null || W.emigrated || W.death.age < region.marriageF[1]) continue;
     const atYear = W.birth + region.marriageF[1];
     const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
     // § the preventive check: emigration is the release valve for crowding,
@@ -918,7 +947,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         // marriage window (an "old maid" he took on) over a young single
         // woman who simply didn't happen to emigrate.
         const stillYoung = !isWidow && age <= region.marriageF[1] + 4;
-        const score = Math.abs(year - m.birth - 8 - age) + (isWidow ? 0 : 2) + (stillYoung ? 6 : 0);
+        const score = Math.abs(year - m.birth - 8 - age) + (isWidow ? 0 : 2) + (stillYoung ? 6 : 0) + consanguinityPenalty(persons, m, W);
         if (score < bestScore) {
           bestScore = score;
           best = W;
@@ -971,7 +1000,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         if (M.death.year <= year) continue;
         const age = year - M.birth;
         if (age < 22 || age > 60) continue;
-        const score = Math.abs(age - (year - w.birth));
+        const score = Math.abs(age - (year - w.birth)) + consanguinityPenalty(persons, M, w);
         if (score < bestScore) {
           bestScore = score;
           best = M;
@@ -1088,7 +1117,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   resolveServiceSpells(persons, couples, vHash);
   assignServiceMasters(persons, couples, vHash);
 
-  const leftover = persons.filter((p) => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
+  const leftover = persons.filter((p) => !p.founder && !p.inOrders && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));
   const diagnostics = { matchingRounds, truncated: leftover.length > 0, unmatched: leftover.length };
 
   // index couples on persons for O(1) FIRST-marriage lookup (full history

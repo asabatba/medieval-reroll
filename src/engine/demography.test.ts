@@ -235,6 +235,50 @@ describe("aggregate demographic statistics stay within historical bands", () => 
     }
   });
 
+  it("§ consanguinity avoidance: cousin marriage is rare, and rarer than the marriage pool alone would make it", () => {
+    // Canon law barred marriage to the fourth degree and a dispensation had
+    // to be sought and paid for. Nothing in the matchers used to discourage
+    // one, though — they scored on age alone — so in a pool as closed as a
+    // village's, first cousins turned up at whatever rate random mixing gave:
+    // 8–14% of every region's couples. A flag that fires on a tenth of all
+    // marriages is not the notable event the narrative treats it as.
+    let propertiedRate = 0;
+    let plainRate = 0;
+    for (const rk of Object.keys(REGIONS)) {
+      let couples = 0;
+      let cousins = 0;
+      let propertied = 0;
+      let propertiedCousins = 0;
+      let plain = 0;
+      let plainCousins = 0;
+      for (let v = 0; v < VILLAGES_PER_REGION; v++) {
+        const env = resolveVillage(SEED, rk, v);
+        for (const c of env.couples) {
+          couples++;
+          const H = env.persons[c.husband];
+          const W = env.persons[c.wife];
+          const rich = (p: (typeof env.persons)[number]) => p.cls === "gentry" || p.cls === "merchant";
+          if (rich(H) && rich(W)) {
+            propertied++;
+            if (c.consanguineous) propertiedCousins++;
+          } else {
+            plain++;
+            if (c.consanguineous) plainCousins++;
+          }
+          if (c.consanguineous) cousins++;
+        }
+      }
+      // rare, but a real village still throws up the occasional dispensation
+      expect(cousins / couples, `${rk} cousin share`).toBeLessThan(0.04);
+      expect(cousins, `${rk} saw at least one`).toBeGreaterThan(0);
+      propertiedRate += propertiedCousins / Math.max(propertied, 1);
+      plainRate += plainCousins / Math.max(plain, 1);
+    }
+    // A gentry or merchant house married cousins ON PURPOSE, to keep land and
+    // capital together, and could afford the dispensation that took.
+    expect(propertiedRate).toBeGreaterThan(plainRate);
+  });
+
   it("upward class mobility rises after the Black Death (aggregated across regions)", () => {
     let pre = 0;
     let post = 0;

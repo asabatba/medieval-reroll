@@ -93,6 +93,8 @@ interface UiStrings {
   motherTag: string;
   serviceTag: string;
   ordersTag: string;
+  /** § the celibate estate: a woman in religion, as against a man in orders. */
+  veiledTag: string;
   manorHouse: string;
   churchHouse: string;
   orphanTag: string;
@@ -211,8 +213,9 @@ export const UI: Record<Locale, UiStrings> = {
     motherTag: "mother",
     serviceTag: "in service",
     ordersTag: "in orders",
+    veiledTag: "veiled",
     manorHouse: "The manor — servants & apprentices",
-    churchHouse: "The church",
+    churchHouse: "The church and the cloister",
     orphanTag: "orphaned kin",
     emptyYear: "No one is yet entered in this register.",
     famineBadge: "famine",
@@ -325,8 +328,9 @@ export const UI: Record<Locale, UiStrings> = {
     motherTag: "mare",
     serviceTag: "servint",
     ordersTag: "en ordes",
+    veiledTag: "monja",
     manorHouse: "La casa senyorial — criats i aprenents",
-    churchHouse: "L'església",
+    churchHouse: "L'església i el claustre",
     orphanTag: "orfes",
     emptyYear: "Encara no hi ha ningú inscrit en aquest registre.",
     famineBadge: "fam",

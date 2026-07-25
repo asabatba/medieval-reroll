@@ -4,10 +4,12 @@
 // Catalonia, and the succession.ts heir predicate several of these lean on.
 import { describe, expect, it } from "vitest";
 import { CLASS_INFO } from "./data/classes.js";
+import { demographyOf } from "./data/demography.js";
 import { REGIONS } from "./data/regions.js";
 import { isFirstBornSon } from "./succession.js";
-import type { Envelope } from "./types.js";
-import { isHeir, resolveVillage } from "./village.js";
+import type { Envelope, Person } from "./types.js";
+import { isHeir, PARTIBLE_SUBDIVISION, resolveVillage } from "./village.js";
+import { rollDownwardMobility } from "./villageMobility.js";
 
 const REGION_KEYS = Object.keys(REGIONS);
 const SEED = 1444;
@@ -277,28 +279,105 @@ describe("§ downward mobility", () => {
   // land divided among brothers generation after generation is exactly how a
   // partible-inheritance house came down a rung — so it happens here too, to
   // sons after the first, at reduced weight (village.ts's PARTIBLE_SUBDIVISION).
-  it("happens in partible regions too, but only to non-eldest sons and more rarely than under impartible custom", () => {
-    function rate(regionKey: string): number {
-      let sons = 0;
-      let demoted = 0;
+  it("happens in partible regions too, and there as everywhere only to a non-eldest son", () => {
+    let seen = 0;
+    for (const regionKey of ["france", "italy"]) {
       for (let villageIdx = 0; villageIdx < 20; villageIdx++) {
         const env = resolveVillage(SEED, regionKey, villageIdx);
-        for (const p of env.persons) {
-          if (p.sex !== "M" || p.founder || p.incomer || isFirstBornSon(env, p.id)) continue;
-          sons++;
-        }
         for (const p of downwardMobilized(env)) {
+          seen++;
           expect(p.sex).toBe("M");
           expect(isFirstBornSon(env, p.id)).toBe(false);
-          demoted++;
         }
       }
-      return demoted / sons;
     }
-    const partible = (rate("france") + rate("italy")) / 2;
-    const impartible = (rate("england") + rate("germany")) / 2;
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("the partible weight really is the lighter one, at equal crowding", () => {
+    // Tested on the roll itself rather than end-to-end, because end to end
+    // it is not a safe comparison: the § estate ceiling multiplies the same
+    // weight by how far past its plausible share the class already sits, and
+    // a partible region whose artisans are more crowded than an impartible
+    // one's will (correctly) demote harder despite the lighter custom. The
+    // claim the custom actually makes is this one — same class, same
+    // crowding, lighter hand where the land is divided rather than passed
+    // whole, because there a younger son does inherit something.
+    const demo = demographyOf("france");
+    function demotions(weight: number): number {
+      let n = 0;
+      for (let id = 0; id < 4000; id++) {
+        const p = { id, cls: "artisan", sex: "M", birth: 1300 } as Person;
+        rollDownwardMobility(12345, demo, p, weight);
+        if (p.clsOrigin) n++;
+      }
+      return n;
+    }
+    const full = demotions(1);
+    const partible = demotions(PARTIBLE_SUBDIVISION);
     expect(partible).toBeGreaterThan(0);
-    expect(partible).toBeLessThan(impartible);
+    expect(partible).toBeLessThan(full);
+  });
+});
+
+// § the celibate estate. Entry into religion used to be reachable only by a
+// son of the `clergyFamily` class, decided inside the men's marriage loop —
+// which produced between zero and seven religious across twelve villages of a
+// region, NONE AT ALL in Germany or Portugal (whose founder draws gave them no
+// such households), and not one woman in religion anywhere in Europe.
+describe("§ the celibate estate", () => {
+  function collect(regionKey: string) {
+    let persons = 0;
+    let men = 0;
+    let women = 0;
+    let dowriedWomen = 0;
+    let dowriedWomenInReligion = 0;
+    for (let villageIdx = 0; villageIdx < 16; villageIdx++) {
+      const env = resolveVillage(SEED, regionKey, villageIdx);
+      for (const p of env.persons) {
+        persons++;
+        const dowried = p.sex === "F" && !p.founder && p.death.age >= 14 && CLASS_INFO[p.cls].wealth >= 3;
+        if (dowried) dowriedWomen++;
+        if (!p.inOrders) continue;
+        if (p.sex === "M") men++;
+        else women++;
+        if (dowried) dowriedWomenInReligion++;
+      }
+    }
+    return { persons, men, women, dowriedRate: dowriedWomenInReligion / dowriedWomen };
+  }
+  const STATS = Object.fromEntries(REGION_KEYS.map((rk) => [rk, collect(rk)]));
+
+  it.each(REGION_KEYS)("%s: has religious of BOTH sexes, from whatever houses it happens to hold", (rk) => {
+    expect(STATS[rk].men).toBeGreaterThan(0);
+    expect(STATS[rk].women).toBeGreaterThan(0);
+  });
+
+  it.each(REGION_KEYS)("%s: religion is a real but small estate, not a rounding error and not a third of the parish", (rk) => {
+    const share = (STATS[rk].men + STATS[rk].women) / STATS[rk].persons;
+    expect(share).toBeGreaterThan(0.003);
+    expect(share).toBeLessThan(0.035);
+  });
+
+  it("a vocation never reaches anyone who did not live to take it, marry, or leave", () => {
+    for (const env of sampleEnvs()) {
+      for (const p of env.persons) {
+        if (!p.inOrders) continue;
+        expect(p.death.age).toBeGreaterThanOrEqual(14);
+        expect(p.unions?.length ?? 0).toBe(0);
+        expect(p.marriedOut).toBeFalsy();
+        expect(p.emigrated).toBeFalsy();
+      }
+    }
+  });
+
+  it("the cloister takes dowried daughters far more often under the dowry regime than in NW Europe", () => {
+    // The point of the whole mechanic: a convent's entry gift cost a fraction
+    // of a marriage dowry, so the Mediterranean patriciate filled its
+    // convents while NW-European daughters stayed lay.
+    const med = (STATS.catalonia.dowriedRate + STATS.italy.dowriedRate + STATS.portugal.dowriedRate) / 3;
+    const nw = (STATS.england.dowriedRate + STATS.germany.dowriedRate + STATS.scotland.dowriedRate) / 3;
+    expect(med).toBeGreaterThan(nw * 2);
   });
 });
 
