@@ -16,7 +16,12 @@ describe("envelope cache", () => {
       resolveVillage(99, "england", i * 7); // spread across clusters
       expect(envelopeCacheSize()).toBeLessThanOrEqual(ENVELOPE_CACHE_LIMIT);
     }
-  }, 20000);
+    // The slowest test in the suite by a wide margin, and deliberately so:
+    // a thousand addresses spread across clusters, each solve pulling its
+    // own cluster-mates, against envelopes that are now ~3x the size they
+    // were before § the preventive check (engine/capacity.ts) stopped
+    // villages from dwindling.
+  }, 240000);
 
   it("clearEnvelopeCache empties it, and a re-solve reproduces identical facts", () => {
     const before = resolveVillage(99, "france", 11);

@@ -32,6 +32,18 @@
 // and residence are cross-village facts rather than forked lives.
 // =====================================================================
 
+import {
+  celibacyMult,
+  EXOGAMY_SHARE,
+  emigrationMult,
+  HOLDINGS_FULL,
+  holdingsAt,
+  holdingsOf,
+  marriageAgeShift,
+  VACANCY_EXOGAMY_BONUS,
+  VACANT_HOLDINGS,
+  WAIT_FOR_HOLDING,
+} from "./capacity.js";
 import { CLASS_INFO, CLASSES, URBAN_CLASSES } from "./data/classes.js";
 import { demographyOf } from "./data/demography.js";
 import { placeOf } from "./data/placeNames.js";
@@ -89,6 +101,59 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   const vHash = addrHash(worldSeed, [regionKey, "village", villageIdx]);
   const rng = makeRng(vHash);
   const origin: Address = { regionKey, villageIdx };
+  // § plague waves: handed to every rollDeath below so a wave's arrival year
+  // is a fact about THIS village, shared by everyone who lived through it.
+  const villageAddr = { worldSeed, villageIdx };
+
+  // § the preventive check (capacity.ts): how much of the village's land is
+  // already spoken for, as of a given year. Read at the two moments a real
+  // community's answer to that question actually bit — when a man was
+  // deciding whether, and how long to wait, to marry, and when someone
+  // unmatched was deciding whether to stay — so the population regulates
+  // itself toward its own ceiling instead of compounding freely.
+  //
+  // A tenement counts as held while EITHER spouse of the union currently on
+  // it is alive: a widow kept the holding, and a village full of widows was
+  // still a full village. Only a spouse's current union counts, so a
+  // remarriage moves a household rather than founding a second one.
+  //
+  // Counting couples created SO FAR is exactly right: births and marriages
+  // are generated in order, so every union that existed in `year` already
+  // does by the time any decision dated to that year is taken. `emigrated`
+  // is only set during the emigration passes themselves, where it correctly
+  // makes the pressure ease as each departure is decided.
+  function currentUnionAt(p: Person, year: number): number | null {
+    let found: number | null = null;
+    for (const ci of p.unions ?? []) if (couples[ci].year <= year) found = ci;
+    return found;
+  }
+  function pressureAt(year: number): number {
+    let held = 0;
+    for (let ci = 0; ci < couples.length; ci++) {
+      const c = couples[ci];
+      if (c.year > year) continue;
+      const H = persons[c.husband];
+      const W = persons[c.wife];
+      const hHere = H.death.year > year && !H.emigrated;
+      const wHere = W.death.year > year && !W.emigrated;
+      if (hHere ? currentUnionAt(H, year) === ci : wHere && currentUnionAt(W, year) === ci) held++;
+    }
+    return held / holdingsAt(worldSeed, regionKey, villageIdx, year);
+  }
+
+  // § exogamy ceiling (capacity.ts): a running count of the marriages that
+  // brought a spouse in from outside the parish, against which both import
+  // paths below check themselves. Anyone turned away here isn't married off
+  // some other way — they fall through to the ordinary wait-or-leave
+  // machinery, which is exactly the outflow the imports used to suppress.
+  let exogamous = 0;
+  function exogamyAllowed(pressure: number): boolean {
+    const ceiling = EXOGAMY_SHARE * (pressure < VACANT_HOLDINGS ? VACANCY_EXOGAMY_BONUS : 1);
+    // The first handful of marriages in a village have no meaningful share
+    // to measure yet; the floor keeps the very first incomer from being
+    // rejected on a sample of one.
+    return exogamous < ceiling * Math.max(couples.length, 8);
+  }
 
   const place = placeOf(worldSeed, regionKey, villageIdx);
   const persons: Person[] = []; // id-indexed
@@ -120,7 +185,16 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
 
   // Founders: G0 couples born 1235–1275, already married. Their pre-history
   // is outside the register ("the register begins in 1290").
-  const founderCouples = rng.int(9, 13);
+  //
+  // § the preventive check: how many of them there are is the village's own
+  // holdings (capacity.ts) less a few still standing open, not an
+  // independent roll. A settlement that starts with a third of its
+  // tenements empty spends its first three generations filling them — which
+  // put the whole growth phase squarely on top of the fourteenth century,
+  // and left villages larger after the Black Death than before it. The real
+  // thing was already at its limit by 1300: that is what the land hunger,
+  // the assarting of marginal ground and the Great Famine all record.
+  const founderCouples = Math.max(6, holdingsOf(worldSeed, regionKey, villageIdx) - rng.int(1, 4));
   const surnamePool = region.surnames.slice();
   // § settlement: a market town's founders skew toward the trades a town
   // existed to house (data/classes.ts's URBAN_CLASSES) rather than the
@@ -152,8 +226,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     });
     H.riskTrade = riskTradeOf(vHash, H.id, H.cls, H.sex);
     W.riskTrade = riskTradeOf(vHash, W.id, W.cls, W.sex);
-    H.death = rollDeath(makeRng(personStream(vHash, 7001, H.id)), hb, "M", wealth, region, H.riskTrade, regionKey);
-    W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", wealth, region, W.riskTrade, regionKey);
+    H.death = rollDeath(makeRng(personStream(vHash, 7001, H.id)), hb, "M", wealth, region, H.riskTrade, regionKey, villageAddr);
+    W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", wealth, region, W.riskTrade, regionKey, villageAddr);
     // founders are guaranteed to reach marriage (they existed to found the
     // line) — extend a death that would otherwise fall on or before the
     // marriage year itself, not just one that's short of a fixed age floor.
@@ -235,7 +309,16 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const nonHeirSon = child.sex === "M" && !isHeir(persons, region, regionKey, child);
     rollDownwardMobility(vHash, demo, child, nonHeirSon);
     child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
-    child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
+    child.death = rollDeath(
+      makeRng(personStream(vHash, 7001, child.id)),
+      y,
+      sex,
+      CLASS_INFO[child.cls].wealth,
+      region,
+      child.riskTrade,
+      regionKey,
+      villageAddr,
+    );
     // § male out-migration: a non-heir son — of ANY wealth grade, not just
     // the low-wealth default rollService already covers — is likelier to be
     // sent into service or apprenticeship elsewhere, since he won't inherit.
@@ -284,7 +367,14 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     while (y < endYear && y <= capYear && c.children.length < 11) {
       const child = makeChild(c, H, W, y);
       maybeTwin(c, H, W, y, child);
-      y += rng.int(demo.birthSpacing[0], demo.birthSpacing[1]);
+      // § lactation interruption: nursing suppressed conception, and it was
+      // the single strongest brake on birth spacing in a population with no
+      // other — which is why family reconstitution finds intervals after a
+      // baby who died at the breast running markedly shorter than intervals
+      // after one who lived. The draw happens either way, so which branch is
+      // taken never changes the shared stream's draw count.
+      const spacing = rng.int(demo.birthSpacing[0], demo.birthSpacing[1]);
+      y += child.death.age === 0 ? demo.birthSpacing[0] : spacing;
     }
   }
 
@@ -357,14 +447,29 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         // § male out-migration: an heir had a tenement to offer a bride and
         // marries reliably; a non-heir is a somewhat less attractive match.
         const heir = isHeir(persons, region, regionKey, M);
-        if (rng.chance(heir ? 0.07 : 0.12)) continue; // never marries
+        // § the preventive check (capacity.ts): read as he comes of age, so
+        // the village he is actually deciding within is the one that has to
+        // find him a holding. It moves both instruments at once — whether he
+        // marries at all, and how long he waits.
+        const pressure = pressureAt(M.birth + region.marriageM[0]);
+        if (rng.chance((heir ? 0.07 : 0.12) * celibacyMult(pressure))) continue; // never marries
         if (M.cls === "clergyFamily" && rng.chance(0.35)) {
           M.inOrders = true;
           continue;
         }
         const targetGap = rng.int(1, region.marriageM[0] - region.marriageF[0] + 3);
-        const mAge = rng.int(region.marriageM[0], region.marriageM[1]);
-        const wantYear = M.birth + mAge;
+        const mAge = rng.int(region.marriageM[0], region.marriageM[1]) + marriageAgeShift(pressure);
+        // § the preventive check, hard edge (capacity.ts): where every
+        // holding in the village is taken there is nowhere to put another
+        // household, so he waits for one to fall vacant — and if none does
+        // within reach, he never marries, and falls through to the
+        // out-migration pass below like any other unmatched man.
+        let wantYear = M.birth + mAge;
+        if (pressureAt(wantYear) >= HOLDINGS_FULL) {
+          const wait = WAIT_FOR_HOLDING.find((d) => pressureAt(wantYear + d) < HOLDINGS_FULL);
+          if (wait === undefined) continue;
+          wantYear += wait;
+        }
         // best local candidate: right age window, different household, alive at wantYear
         let best: Person | null = null,
           bestScore = 1e9;
@@ -392,6 +497,11 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           // local cluster has nobody to offer.
           // most men without a local match DO find a bride outside (skip only ~12%)
           if (M.death.year <= wantYear || rng.chance(0.12)) continue;
+          // § exogamy ceiling: past the share a parish really exchanged with
+          // its neighbours, he waits rather than founding a household on an
+          // incomer — and, being still unmarried, becomes a candidate for
+          // the out-migration pass below like any other unmatched man.
+          if (!exogamyAllowed(pressure)) continue;
           const pulled = pullImmigrantBride(wantYear, region.marriageF[0] - 1, region.marriageF[1] + 6);
           let W: Person;
           if (pulled) {
@@ -422,14 +532,17 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
               incomer: true,
               origin: null,
             });
-            W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region, "normal", regionKey);
+            W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region, "normal", regionKey, villageAddr);
             if (W.death.year <= wantYear) {
               const deathYear = wantYear + 1 + rng.int(0, 25);
               W.death = { year: deathYear, age: deathYear - wb, cause: "disease" };
             }
           }
           const c = marry(M, W, wantYear);
-          if (c) genChildren(c, 1495);
+          if (c) {
+            exogamous++;
+            genChildren(c, 1495);
+          }
         }
       }
 
@@ -442,29 +555,76 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       // register, not a fabrication on either side.
       for (const W of women) {
         if (takenW.has(W.id) || W.spouse != null || W.marriedOut) continue;
-        const wantYear = W.birth + rng.int(region.marriageF[0], region.marriageF[1]);
+        // § the preventive check: she waits (or doesn't) for the same reason
+        // he does — the men's loop above already shifts her age wherever she
+        // was matched there, and this keeps the immigrant-groom route from
+        // being the one door that ignores how full the village is.
+        const wantYear = W.birth + rng.int(region.marriageF[0], region.marriageF[1]) + marriageAgeShift(pressureAt(W.birth + region.marriageF[0]));
         if (W.death.year <= wantYear) continue;
-        if (!rng.chance(demo.maleOutMigration.groomPullChance)) continue;
+        // § vacant holdings: a village with tenements standing empty was a
+        // village worth coming to, and it is the reason the post-plague
+        // countryside refilled from outside rather than only from its own
+        // cradles — so both the chance of an incomer turning up and the
+        // willingness to take one who has no register of his own answer to
+        // how much land is going spare. Without this the inbound side of
+        // migration was one-directional by construction: a village at the
+        // bottom of its cluster (rank.ts) has nobody below it to pull from,
+        // so it could only ever export daughters and drain itself.
+        const pressure = pressureAt(wantYear);
+        // § the preventive check, hard edge: an incomer groom needs a holding
+        // to marry onto exactly as a native son does.
+        if (pressure >= HOLDINGS_FULL) continue;
+        const vacancy = pressure < VACANT_HOLDINGS;
+        if (!rng.chance(demo.maleOutMigration.groomPullChance + (vacancy ? 0.1 : 0))) continue;
+        if (!exogamyAllowed(pressure)) continue;
         const pulled = pullImmigrantGroom(wantYear, region.marriageM[0] - 3, region.marriageM[1] + 8);
-        if (!pulled) continue;
-        const { srcIdx, cand } = pulled;
-        const M = addPerson({
-          name: cand.name,
-          surname: cand.surname,
-          sex: "M",
-          birth: cand.birth,
-          cls: cand.cls,
-          father: -1,
-          mother: -1,
-          incomer: true,
-          origin: { regionKey, villageIdx: srcIdx },
-          originId: cand.id,
-        });
-        M.death = { ...cand.death }; // copy of the ORIGIN's canonical roll: the two records never disagree on when he died
-        M.riskTrade = cand.riskTrade ?? "normal";
+        if (!pulled && !vacancy) continue;
+        let M: Person;
+        if (pulled) {
+          const { srcIdx, cand } = pulled;
+          M = addPerson({
+            name: cand.name,
+            surname: cand.surname,
+            sex: "M",
+            birth: cand.birth,
+            cls: cand.cls,
+            father: -1,
+            mother: -1,
+            incomer: true,
+            origin: { regionKey, villageIdx: srcIdx },
+            originId: cand.id,
+          });
+          M.death = { ...cand.death }; // copy of the ORIGIN's canonical roll: the two records never disagree on when he died
+          M.riskTrade = cand.riskTrade ?? "normal";
+        } else {
+          // Nobody in the cluster to pull, but a holding going begging: an
+          // unaddressable incomer, exactly as the bride path above already
+          // falls back to when the cluster has no real emigrant to offer.
+          const mb = wantYear - rng.int(region.marriageM[0], region.marriageM[1]);
+          M = addPerson({
+            name: rng.pick(region.maleNames),
+            surname: drawSurname(),
+            sex: "M",
+            birth: mb,
+            cls: W.cls,
+            father: -1,
+            mother: -1,
+            incomer: true,
+            origin: null,
+          });
+          M.riskTrade = riskTradeOf(vHash, M.id, M.cls, M.sex);
+          M.death = rollDeath(makeRng(personStream(vHash, 7001, M.id)), mb, "M", CLASS_INFO[W.cls].wealth, region, M.riskTrade, regionKey, villageAddr);
+          if (M.death.year <= wantYear) {
+            const deathYear = wantYear + 1 + rng.int(0, 25);
+            M.death = { year: deathYear, age: deathYear - mb, cause: "disease" };
+          }
+        }
         takenW.add(W.id);
         const c = marry(M, W, wantYear);
-        if (c) genChildren(c, 1495);
+        if (c) {
+          exogamous++;
+          genChildren(c, 1495);
+        }
       }
     }
   }
@@ -498,8 +658,15 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       const ageLo = Math.max(14, region.marriageF[0] - 3);
       const ageHi = Math.max(ageLo + 1, Math.min(region.marriageF[1] + 8, W.death.age - 1));
       if (ageHi <= ageLo) continue;
-      const y = W.birth + r.int(ageLo, ageHi);
-      if (y >= W.death.year) continue;
+      // § childbed deaths: an unmarried woman the mortality roll says died in
+      // childbed has exactly one confinement the register could mean — date
+      // the birth to her own death year rather than an unrelated drawn one.
+      // The draw itself still happens either way, so her stream stays aligned
+      // with the branch not taken.
+      const drawnYear = W.birth + r.int(ageLo, ageHi);
+      const childbed = W.death.cause === "childbirth" && W.death.age >= ageLo && W.death.age <= ageHi + 1;
+      const y = childbed ? W.death.year : drawnYear;
+      if (!childbed && y >= W.death.year) continue;
       const fatherCandidates = persons.filter(
         (m) =>
           m.sex === "M" &&
@@ -523,7 +690,16 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         illegitimate: true,
       });
       child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
-      child.death = rollDeath(makeRng(personStream(vHash, 7001, child.id)), y, sex, CLASS_INFO[child.cls].wealth, region, child.riskTrade, regionKey);
+      child.death = rollDeath(
+        makeRng(personStream(vHash, 7001, child.id)),
+        y,
+        sex,
+        CLASS_INFO[child.cls].wealth,
+        region,
+        child.riskTrade,
+        regionKey,
+        villageAddr,
+      );
       // § legitimation: a substantial share of these were exactly a betrothed
       // or courting couple whose child simply arrived before the wedding —
       // if the father happens to still be unmarried, roll whether they go on
@@ -592,7 +768,11 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     if (W.sex !== "F" || W.founder || W.spouse != null || W.emigrated || W.death.age < region.marriageF[1]) continue;
     const atYear = W.birth + region.marriageF[1];
     const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
-    if (!rng.chance(pressured ? demo.emigration.pressured : demo.emigration.base)) continue;
+    // § the preventive check: emigration is the release valve for crowding,
+    // so it has to answer to it. A village with tenements standing empty
+    // after the plague kept its daughters; one with none to give could not.
+    const base = (pressured ? demo.emigration.pressured : demo.emigration.base) * emigrationMult(pressureAt(atYear));
+    if (!rng.chance(base)) continue;
     W.emigrated = true;
     W.marriedOut = true;
     assignDestination(W);
@@ -612,7 +792,10 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const atYear = M.birth + region.marriageM[1];
     const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
     const chance = pressured ? demo.maleOutMigration.pressured : heir ? demo.maleOutMigration.heirBase : demo.maleOutMigration.nonHeirBase;
-    if (!rng.chance(chance)) continue;
+    // § the preventive check: same valve as the women's pass above. A
+    // younger son with no holding to wait for left; a younger son in a
+    // village half-emptied by plague had a vacant tenement to take up.
+    if (!rng.chance(chance * emigrationMult(pressureAt(atYear)))) continue;
     M.emigrated = true;
     assignDestination(M);
   }
@@ -644,7 +827,18 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       .sort((a, b) => a.lost - b.lost || a.m.id - b.m.id);
     for (const { m, lost } of widowers) {
       if (takenSpouse.has(m.id)) continue; // matched earlier in this same pass
-      if (!rng.chance(demo.remarry.M)) continue;
+      // § remarriage: rolled once per BEREAVEMENT, off the person's own
+      // stream, rather than once per pass off the shared one. The passes
+      // re-scan the same widower up to a dozen times (three passes inside a
+      // phase, four interleaved phases), and a fresh roll each time drove
+      // the effective rate toward 1 for everyone — which flattened exactly
+      // the difference between men's and women's remarriage that
+      // demography.ts's region table exists to express, to the point where
+      // Germany's widows came out marginally likelier to remarry than its
+      // widowers on a configured 0.55 against 0.30. Keying the namespace on
+      // the year of the loss keeps a second or third widowhood a genuinely
+      // new roll.
+      if (!makeRng(personStream(vHash, 960000 + lost, m.id)).chance(demo.remarry.M)) continue;
       const year = lost + 1 + rng.int(0, 2);
       if (year >= m.death.year) continue;
       let best: Person | null = null,
@@ -707,7 +901,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       .sort((a, b) => a.lost - b.lost || a.w.id - b.w.id);
     for (const { w, lost } of widows) {
       if (takenSpouse.has(w.id)) continue;
-      if (!rng.chance(demo.remarry.F)) continue;
+      // § remarriage: once per bereavement, same as matchWidowers above.
+      if (!makeRng(personStream(vHash, 961000 + lost, w.id)).chance(demo.remarry.F)) continue;
       const year = lost + 1 + rng.int(0, 3);
       if (year >= w.death.year) continue;
       let best: Person | null = null,
@@ -771,6 +966,68 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const any = remarriagePhase();
     runMatchingRounds();
     if (!any) break;
+  }
+
+  // =====================================================================
+  // § childbed deaths. mortality.ts applies a real maternal hazard across a
+  // woman's WHOLE fertile-age ramp — it has to: death is rolled before the
+  // marriage matching that would tell it whether she ever bore a child at
+  // all. That leaves the CAUSE label running ahead of the register's own
+  // facts, and a "died in childbed" entry on the page of a woman with no
+  // confinement that year, often no husband and no child ever, reads as a
+  // straightforward contradiction.
+  //
+  // Both passes below settle it from opposite ends, and neither touches the
+  // hazard itself — the same women die in the same years, so the life table
+  // and every band in demography.test.ts are unaffected.
+  // =====================================================================
+  function boreChildIn(W: Person, year: number): boolean {
+    return persons.some((p) => p.mother === W.id && p.birth === year);
+  }
+
+  // The union she was actually in that year: married strictly before it, and
+  // a husband still living — or dead within the year before, which is what a
+  // posthumous child is.
+  function unionAliveAt(W: Person, year: number): Couple | null {
+    if (!W.unions?.length) return null;
+    for (let i = W.unions.length - 1; i >= 0; i--) {
+      const c = couples[W.unions[i]];
+      if (c.year < year && persons[c.husband].death.year >= year - 1) return c;
+    }
+    return null;
+  }
+
+  // Pass one — where she really was in a marriage that year, record the
+  // birth the label implies. A last confinement that kills the mother is
+  // precisely what the cause describes, and the child it leaves is an
+  // ordinary register entry: named, parented, and (after the matching call
+  // below) eligible for the marriage market like anyone else. Runs for a
+  // pulled residence record too, whose copied cause came from an origin
+  // village that never saw the marriage this one recorded.
+  function recordChildbedConfinements(): void {
+    for (const W of persons.slice()) {
+      if (W.sex !== "F" || W.death.cause !== "childbirth") continue;
+      const y = W.death.year;
+      if (y > 1495 || boreChildIn(W, y)) continue;
+      const c = unionAliveAt(W, y);
+      if (!c || c.children.length >= 12) continue;
+      makeChild(c, persons[c.husband], W, y);
+    }
+  }
+  recordChildbedConfinements();
+  runMatchingRounds();
+
+  // Pass two — whatever pass one could not give a real confinement (she
+  // never married, or was already widowed, or the register era closed first)
+  // was never a childbed death, so only the LABEL moves. Left alone for a
+  // residence record, whose cause is its origin register's canonical fact
+  // and was already settled by that village's own solve, and for an
+  // emigrant, whose confinement — if there was one — belongs to a register
+  // this village never kept.
+  for (const W of persons) {
+    if (W.sex !== "F" || W.death.cause !== "childbirth") continue;
+    if (W.originId != null || W.emigrated) continue;
+    if (!boreChildIn(W, W.death.year)) W.death = { ...W.death, cause: "disease" };
   }
 
   const leftover = persons.filter((p) => !p.founder && p.death.age >= 16 && p.spouse == null && !processed.has(p.id));

@@ -2,7 +2,7 @@ import type { Locale } from "../i18n/locale.js";
 import { demographyOf, periodMult, wealthIdx } from "./data/demography.js";
 import { plagueAt } from "./data/plagues.js";
 import { addrHash, hashStr, makeRng } from "./hash.js";
-import type { Death, DeathCause, Region, RiskTrade, Rng, Sex } from "./types.js";
+import type { Death, DeathCause, Plague, Region, RiskTrade, Rng, Sex } from "./types.js";
 
 const FALLBACK_WAR: Record<Locale, string> = { en: "the wars", ca: "les guerres" };
 
@@ -30,6 +30,24 @@ export function warAt(year: number, region: Region, locale: Locale = "en"): stri
   return null;
 }
 
+// § plague waves: WHICH YEAR of a multi-year pandemic window the pestilence
+// actually reached THIS village. A wave is dated in the chronicles by the
+// span it took to cross a kingdom, but any one parish was struck over weeks,
+// not years — the dead of 1349 were buried together, and their neighbours
+// remembered one year, not five. Seeded per (village, wave), the same
+// deterministic, non-memoized pattern as registerBlackoutAt below and
+// hierarchy.ts's parishOf/manorOf, so every villager's own death roll agrees
+// on when the plague came here without anything having to be threaded
+// through the solve. The region key is folded into the hash, so the
+// west/south-to-north/east spread the region data implies survives as a
+// staggering ACROSS regions — it just no longer smears a single village's
+// dead across the whole window.
+export function plagueArrivalYear(worldSeed: number, regionKey: string, villageIdx: number, plague: Plague): number {
+  const span = plague[1] - plague[0] + 1;
+  if (span <= 1) return plague[0];
+  return plague[0] + makeRng(addrHash(worldSeed, [regionKey, villageIdx, "plague-arrival", plague[0]])).int(0, span - 1);
+}
+
 // § register blackout: real parish registers went dark for everyone in a
 // village at once during a crisis — the scribe himself could die of plague
 // or flee before soldiers, not just any one villager having bad luck. Seeded
@@ -38,12 +56,19 @@ export function warAt(year: number, region: Region, locale: Locale = "en"): stri
 // non-memoized pattern as hierarchy.ts's parishOf/manorOf. Famine is
 // deliberately excluded: it starves a household, it doesn't kill or scatter
 // the scribe.
+//
+// § plague waves: the year the wave actually reached this village (above) is
+// far likelier to break the count than the quiet residual years on either
+// side of it — that is the year the clerk himself was burying neighbours, or
+// being buried. Without this the register could go dark in a window year in
+// which nobody here actually died.
 export function registerBlackoutAt(worldSeed: number, regionKey: string, villageIdx: number, year: number, region: Region): boolean {
   const plague = plagueAt(year);
   const war = warAt(year, region);
   if (!plague && !war) return false;
   const rng = makeRng(addrHash(worldSeed, [regionKey, villageIdx, "register-blackout", year]));
-  return rng.chance(plague ? 0.4 : 0.15);
+  if (!plague) return rng.chance(0.15);
+  return rng.chance(year === plagueArrivalYear(worldSeed, regionKey, villageIdx, plague) ? 0.55 : 0.1);
 }
 
 // § maternal mortality: rollDeath is called before marriage is resolved, so
@@ -74,7 +99,20 @@ function fertileRamp(age: number, marriageF: readonly [number, number]): number 
 // the region/period/class dataset in data/demography.ts when `regionKey` is
 // given; omitting it keeps the neutral NW-European default (used by unit
 // tests that compare trades in isolation).
-export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, region: Region, riskTrade: RiskTrade = "normal", regionKey?: string): Death {
+export function rollDeath(
+  rng: Rng,
+  birth: number,
+  sex: Sex,
+  wealth: number,
+  region: Region,
+  riskTrade: RiskTrade = "normal",
+  regionKey?: string,
+  // § plague waves: the village whose own arrival year decides when a
+  // multi-year wave struck this person. Omitted by the isolated unit tests
+  // that compare trades/regions with no village address to speak of, which
+  // fall back to the per-person stagger below.
+  village?: { worldSeed: number; villageIdx: number },
+): Death {
   const demo = demographyOf(regionKey);
   const wi = wealthIdx(wealth);
   let age = 0;
@@ -97,21 +135,35 @@ export function rollDeath(rng: Rng, birth: number, sex: Sex, wealth: number, reg
       // compounding years of Black Death hazard kill ~70% of the living,
       // well past the 40–60% the sources support.
       const span = plague[1] - plague[0] + 1;
-      // Regional stagger: without regionKey folded in, every person born in
-      // the same year anywhere in the modelled world hits a given wave's
-      // peak in the identical calendar year — collapsing the real
-      // west/south-to-north/east spread the region data otherwise implies.
-      // Omitted (falls back to 0) only for the regionKey-less isolated calls
-      // unit tests use to compare trades independent of any one region.
+      // § plague waves: the year the wave reached this person's own village
+      // — one year, shared by every villager, so a parish buries its dead
+      // together the way it really did. Keyed off the village address
+      // (plagueArrivalYear), which also carries the regional stagger.
+      //
+      // Without a village address (the isolated unit calls), fall back to
+      // the older per-person stagger: at minimum the regional offset keeps
+      // every person born in the same year anywhere in the modelled world
+      // from hitting a given wave's peak in the identical calendar year.
       const regionOffset = regionKey ? hashStr(0, regionKey) : 0;
-      const exposureYear = plague[0] + ((birth * 31 + plague[0] * 7 + regionOffset) % span);
+      const exposureYear =
+        village && regionKey
+          ? plagueArrivalYear(village.worldSeed, regionKey, village.villageIdx, plague)
+          : plague[0] + ((birth * 31 + plague[0] * 7 + regionOffset) % span);
       if (span === 1 || year === exposureYear) {
         let mult = plague[2];
         if (plague[4] && age < 15) mult *= plague[4];
         if (wealth >= 4) mult *= 0.75;
         h = Math.min(0.9, h * mult + (plague[2] >= 10 ? 0.15 : 0.025));
       } else {
-        h = Math.min(0.9, h * 2 + (plague[2] >= 10 ? 0.02 : 0.008));
+        // § plague waves: the residual in the window's other years is what
+        // the wave left behind after it passed through — a sickly season,
+        // not a second visitation. Kept low deliberately: at the old level
+        // the four quiet years of a five-year window still buried a third of
+        // the wave's dead between them, so a parish's plague deaths read as
+        // a slow attrition rather than the one catastrophic year the
+        // chronicles, the burial evidence, and the register blackout above
+        // all describe.
+        h = Math.min(0.9, h * 1.35 + (plague[2] >= 10 ? 0.004 : 0.002));
       }
     }
     if (famine) h += age < 5 || age > 55 ? 0.1 : 0.03;

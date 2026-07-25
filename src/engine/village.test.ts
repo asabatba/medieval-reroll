@@ -169,7 +169,7 @@ describe("resolveVillage invariants", () => {
     }
   });
 
-  it("children are born after their parents' marriage and before either parent dies (except a § legitimation splice, born before by definition)", () => {
+  it("children are born after their parents' marriage and before either parent dies (except a § legitimation splice, born before by definition, and a § childbed death, born in the mother's own last year)", () => {
     for (const env of envs) {
       for (const c of env.couples) {
         const H = env.persons[c.husband];
@@ -181,8 +181,20 @@ describe("resolveVillage invariants", () => {
           } else {
             expect(child.birth).toBeGreaterThan(c.year);
           }
-          expect(child.birth).toBeLessThan(H.death.year);
-          expect(child.birth).toBeLessThan(W.death.year);
+          // § childbed deaths: the one confinement a mother does not outlive
+          // is the one that killed her, and that birth is dated to her own
+          // death year on purpose (village.ts) — so the register shows the
+          // child the cause of death refers to, rather than asserting she
+          // died bearing a child who appears nowhere. That birth alone may
+          // also come the year after the father's own death, which is what a
+          // posthumous child is.
+          const childbed = W.death.cause === "childbirth" && child.birth === W.death.year;
+          if (childbed) {
+            expect(child.birth).toBeLessThanOrEqual(H.death.year + 1);
+          } else {
+            expect(child.birth).toBeLessThan(H.death.year);
+            expect(child.birth).toBeLessThan(W.death.year);
+          }
         }
       }
     }

@@ -482,9 +482,12 @@ describe("§ age text removed from event prose", () => {
       }
     }
     expect(checked).toBeGreaterThan(0);
-    // Cost scales with REGION_KEYS.length (§ Adding a region) — a fixed
-    // budget generous enough for the current region count, not tied to it.
-  }, 40000);
+    // Cost scales with REGION_KEYS.length (§ Adding a region) AND with how
+    // many people a village holds — which roughly tripled when § the
+    // preventive check (engine/capacity.ts) stopped villages dwindling away
+    // over the register era. A fixed budget generous enough for both at
+    // today's size, not tied to either.
+  }, 180000);
 
   it("the wardship event no longer states the orphaned age (still fires, still dated correctly)", () => {
     let seen = 0;
