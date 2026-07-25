@@ -4,6 +4,7 @@ import { getTheme, setTheme, type Theme } from "../i18n/theme.js";
 import { UI } from "../i18n/ui.js";
 import {
   buildViewHTML,
+  chartYearAt,
   type HouseNode,
   isPersonNode,
   type KingNode,
@@ -195,17 +196,49 @@ export function initApp(): void {
     const vbody = out.querySelector<HTMLElement>("#vbody");
     if (slider && yearOut && vbody && isPersonNode(node)) {
       const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
+      // § population curve: the chart's own now-marker. Moved by setting two
+      // attributes rather than re-rendering the figure — the curve itself
+      // never changes, only where you are standing on it.
+      const chart = out.querySelector<SVGSVGElement>(".popsvg");
+      const nowLine = out.querySelector<SVGLineElement>("#vnow");
       let frame: number | null = null;
-      slider.addEventListener("input", () => {
-        const year = +slider.value;
+      const show = (year: number): void => {
         yearOut.textContent = String(year);
+        if (nowLine && chart) {
+          const w = chart.viewBox.baseVal.width;
+          const x = String(((year - +slider.min) / (+slider.max - +slider.min)) * w);
+          nowLine.setAttribute("x1", x);
+          nowLine.setAttribute("x2", x);
+        }
         if (frame != null) cancelAnimationFrame(frame);
         frame = requestAnimationFrame(() => {
           frame = null;
           vbody.innerHTML = renderVillageBody(E, env, year, locale, node.personId);
           bindGoto(vbody);
         });
-      });
+      };
+      slider.addEventListener("input", () => show(+slider.value));
+      // § population curve: the curve is also the control. Dragging along it
+      // reads far better than hunting for the year the trough sits in, and it
+      // is how anyone who sees a graph expects to interrogate one. The slider
+      // stays the keyboard-accessible path and the two are kept in step.
+      if (chart) {
+        const seek = (e: PointerEvent): void => {
+          const r = chart.getBoundingClientRect();
+          if (!r.width) return;
+          const year = chartYearAt((e.clientX - r.left) / r.width);
+          slider.value = String(year);
+          show(year);
+        };
+        chart.addEventListener("pointerdown", (e) => {
+          chart.setPointerCapture(e.pointerId);
+          seek(e);
+        });
+        chart.addEventListener("pointermove", (e) => {
+          if (chart.hasPointerCapture(e.pointerId)) seek(e);
+        });
+        chart.addEventListener("pointerup", (e) => chart.releasePointerCapture(e.pointerId));
+      }
     }
   }
 

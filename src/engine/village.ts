@@ -44,7 +44,7 @@ import {
   VACANT_HOLDINGS,
   WAIT_FOR_HOLDING,
 } from "./capacity.js";
-import { CLASS_INFO, CLASSES, ceilingPressure, URBAN_CLASSES } from "./data/classes.js";
+import { CLASS_INFO, CLASSES, ceilingPressure, hasCeiling, URBAN_CLASSES } from "./data/classes.js";
 import { demographyOf } from "./data/demography.js";
 import { placeOf } from "./data/placeNames.js";
 import { REGIONS } from "./data/regions.js";
@@ -56,7 +56,17 @@ import { settlementTypeOf } from "./settlement.js";
 import type { Address, Couple, Death, Envelope, Person, Sex, SocialClass } from "./types.js";
 import { cacheClear, cacheGet, cacheSet, cacheSize } from "./villageCache.js";
 import { riskTradeOf, rollDownwardMobility, rollMobility, rollService, rollVocation } from "./villageMobility.js";
-import { CONSANGUINITY_PENALTY, consanguinityPenalty, eldestSonOf, isAffinal, isConsanguineous, isHeir } from "./villageRules.js";
+import {
+  CONSANGUINITY_PENALTY,
+  consanguinityCost,
+  consanguinityPenalty,
+  eldestSonOf,
+  grandparentsOf,
+  isAffinal,
+  isConsanguineous,
+  isHeir,
+  sharesGrandparent,
+} from "./villageRules.js";
 
 // § downward mobility, partible custom: how much of the full non-heir
 // downgrade pressure a younger son feels where the land is divided rather
@@ -160,7 +170,12 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // The denominator has a floor: in the founding years a village of a dozen
   // souls would otherwise read its single gentry couple as a sixth of the
   // parish and demote their sons on the strength of a sample of twelve.
-  function classShareAt(cls: SocialClass, year: number): number {
+  //
+  // Measuring a share means walking the whole village, and this is called as
+  // every child is born, so it is guarded by hasCeiling: the peasantry has no
+  // ceiling and is most of the village, so most births skip the walk entirely.
+  function ceilingMult(cls: SocialClass, year: number): number {
+    if (!hasCeiling(cls, settlement)) return 1;
     let held = 0;
     let alive = 0;
     for (const q of persons) {
@@ -168,7 +183,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       alive++;
       if (q.cls === cls) held++;
     }
-    return held / Math.max(alive, 30);
+    return ceilingPressure(cls, settlement, held / Math.max(alive, 30));
   }
 
   // § exogamy ceiling (capacity.ts): a running count of the marriages that
@@ -336,7 +351,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // makes few more, and one whose gentry line has failed for want of male
     // heirs can raise another. Read at the child's birth year, which is the
     // village the promotion would actually have to fit into.
-    rollMobility(vHash, demo, child, (into) => 1 / ceilingPressure(into, settlement, classShareAt(into, y)));
+    rollMobility(vHash, demo, child, (into) => 1 / ceilingMult(into, y));
     // § male out-migration / § downward mobility: both class-transition
     // rolls happen BEFORE riskTradeOf, so the trade-hazard tag it derives
     // always reflects the child's FINAL class, never a stale pre-transition
@@ -358,7 +373,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // let one lucky lineage compound into a village that is an eighth gentry
     // — the ceiling is what actually holds the number of such households to
     // the number of estates there are to hold.
-    rollDownwardMobility(vHash, demo, child, custom * ceilingPressure(child.cls, settlement, classShareAt(child.cls, y)));
+    rollDownwardMobility(vHash, demo, child, custom * ceilingMult(child.cls, y));
     child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
     child.death = rollDeath(
       makeRng(personStream(vHash, 7001, child.id)),
@@ -532,6 +547,9 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         let best: Person | null = null,
           bestScore = 1e9,
           bestPenalty = 0;
+        // § consanguinity avoidance: his grandparents, once, rather than
+        // rebuilt against every woman in the village (see sharesGrandparent).
+        const gM = grandparentsOf(persons, M);
         for (const W of women) {
           if (takenW.has(W.id)) continue;
           if (W.father === M.father && M.father !== -1) continue; // no siblings (paternal)
@@ -542,7 +560,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           // § consanguinity avoidance: a first cousin is a last resort, not
           // an equal candidate — the impediment and the cost of the
           // dispensation are what kept these matches rare.
-          const penalty = consanguinityPenalty(persons, M, W);
+          const penalty = sharesGrandparent(gM, persons, W) ? consanguinityCost(M, W) : 0;
           const score = Math.abs(wAgeAt - (mAge - targetGap)) + penalty;
           if (score < bestScore) {
             bestScore = score;

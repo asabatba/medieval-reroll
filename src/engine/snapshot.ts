@@ -114,6 +114,28 @@ export function residentAt(p: Person, env: Envelope, year: number): boolean {
   return true;
 }
 
+/** § population curve: the resident head count for every year in a span, in
+ * one pass.
+ *
+ * Deliberately not `villageStateAt(y).population` per year: that builds the
+ * whole household structure for each of two hundred years, and the resident
+ * test itself calls into other villages' envelopes to date an emigrant's
+ * departure. Here each person's residency is resolved ONCE into the interval
+ * they were actually on the register for, and the interval is added to the
+ * years it covers — so the curve costs about what a single snapshot does.
+ *
+ * The interval below has to agree with residentAt exactly, or the curve and
+ * the household view would disagree about the same year. */
+export function populationSeries(env: Envelope, from: number, to: number): number[] {
+  const counts = new Array(Math.max(0, to - from + 1)).fill(0);
+  for (const p of env.persons) {
+    const start = p.incomer && !p.founder ? Math.max(p.birth, arrivalYearOf(p, env)) : p.birth;
+    const end = p.emigrated ? Math.min(p.death.year, emigrationYearOf(p, env)) : p.death.year; // exclusive
+    for (let y = Math.max(from, start); y <= Math.min(to, end - 1); y++) counts[y - from]++;
+  }
+  return counts;
+}
+
 export function villageStateAt(env: Envelope, year: number): VillageState {
   const residents = env.persons.filter((p) => residentAt(p, env, year));
   const states = new Map<number, PersonState>();

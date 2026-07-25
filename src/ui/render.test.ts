@@ -5,7 +5,17 @@
 import { describe, expect, it } from "vitest";
 import type { EventRef } from "../engine/index.js";
 import * as E from "../engine/index.js";
-import { buildRecordHTML, buildViewHTML, defaultVillageYear, linkifyEventText, renderVillageBody, type StackNode, VILLAGE_YEAR_MIN } from "./render.js";
+import {
+  buildRecordHTML,
+  buildViewHTML,
+  chartYearAt,
+  defaultVillageYear,
+  linkifyEventText,
+  renderVillageBody,
+  type StackNode,
+  VILLAGE_YEAR_MAX,
+  VILLAGE_YEAR_MIN,
+} from "./render.js";
 
 const ADDR = { regionKey: "england", villageIdx: 3 };
 function ref(id: number, name: string): EventRef {
@@ -255,5 +265,50 @@ describe("renderVillageBody", () => {
   it("renders an empty state for a year before the register begins", () => {
     const html = renderVillageBody(E, env, VILLAGE_YEAR_MIN, "en", person.id);
     expect(html.length).toBeGreaterThan(0); // never blank/crashes even with nobody alive yet
+  });
+});
+
+// § population curve: the chart is the one place the carrying-capacity model
+// (engine/capacity.ts) is actually visible — before it, the shape it produces
+// could only be found by dragging the year slider across two centuries and
+// remembering what you saw.
+describe("the population curve", () => {
+  const node: StackNode = { regionKey: "england", villageIdx: 0, personId: 0 };
+  const env = E.resolveVillage(1444, "england", 0);
+  const html = buildRecordHTML(E, 1444, [node], "en");
+
+  it("draws a curve, the crisis bands, and the now-marker into the record", () => {
+    expect(html).toContain('class="popsvg"');
+    expect(html).toContain('class="pc-line"');
+    expect(html).toContain('class="pc-plague"'); // the Great Mortality and the waves after it
+    expect(html).toContain('class="pc-famine"');
+    expect(html).toContain('id="vnow"');
+  });
+
+  it("names the peak and the trough, and the trough follows the peak", () => {
+    const peak = html.match(/peak (\d+) · (\d+)/);
+    const low = html.match(/low (\d+) · (\d+)/);
+    expect(peak).toBeTruthy();
+    expect(low).toBeTruthy();
+    expect(+low![1]).toBeLessThan(+peak![1]);
+    expect(+low![2]).toBeGreaterThan(+peak![2]);
+  });
+
+  it("chartYearAt maps the drawn width onto exactly the slider's own range, and clamps outside it", () => {
+    expect(chartYearAt(0)).toBe(VILLAGE_YEAR_MIN);
+    expect(chartYearAt(1)).toBe(VILLAGE_YEAR_MAX);
+    expect(chartYearAt(0.5)).toBe(Math.round((VILLAGE_YEAR_MIN + VILLAGE_YEAR_MAX) / 2));
+    expect(chartYearAt(-3)).toBe(VILLAGE_YEAR_MIN);
+    expect(chartYearAt(3)).toBe(VILLAGE_YEAR_MAX);
+  });
+
+  it("the curve agrees with the household view it sits above, year for year", () => {
+    // Two different code paths answer "who is here in year X" — the per-year
+    // snapshot and the single-pass series the chart draws. If they ever
+    // disagreed, the graph would be describing a village nobody could visit.
+    const series = E.populationSeries(env, VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX);
+    for (const year of [1290, 1301, 1347, 1352, 1400, 1451, VILLAGE_YEAR_MAX]) {
+      expect(series[year - VILLAGE_YEAR_MIN], `year ${year}`).toBe(E.villageStateAt(env, year).population);
+    }
   });
 });

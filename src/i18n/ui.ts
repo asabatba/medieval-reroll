@@ -84,6 +84,13 @@ interface UiStrings {
   villageHeader: (place: string) => string;
   yearLabel: string;
   hearthCount: (souls: number, hearths: number) => string;
+  // ---- § population curve ----
+  chartPeak: (souls: number, year: number) => string;
+  chartLow: (souls: number, year: number) => string;
+  /** `from`/`to` are passed in rather than read from render.ts's own
+   * VILLAGE_YEAR_MIN/MAX: render.ts imports this file, so importing back
+   * would close a cycle. */
+  chartAria: (place: string, from: number, to: number, peak: number, peakYear: number, low: number, lowYear: number) => string;
   headTag: string;
   widowTag: string;
   widowerTag: string;
@@ -205,6 +212,10 @@ export const UI: Record<Locale, UiStrings> = {
     villageHeader: (place: string) => `Visit ${place} through the years`,
     yearLabel: "Anno Domini",
     hearthCount: (souls: number, hearths: number) => `${souls} souls · ${hearths} hearths`,
+    chartPeak: (souls: number, year: number) => `peak ${souls} · ${year}`,
+    chartLow: (souls: number, year: number) => `low ${souls} · ${year}`,
+    chartAria: (place: string, from: number, to: number, peak: number, peakYear: number, low: number, lowYear: number) =>
+      `Population of ${place}, ${from} to ${to}: at its height ${peak} souls in ${peakYear}, falling to ${low} in ${lowYear}. Plague and famine years are shaded. Use the year slider below to visit any year.`,
     headTag: "head",
     widowTag: "widow",
     widowerTag: "widower",
@@ -320,6 +331,10 @@ export const UI: Record<Locale, UiStrings> = {
     villageHeader: (place: string) => `Visita ${place} a través dels anys`,
     yearLabel: "Anno Domini",
     hearthCount: (souls: number, hearths: number) => `${souls} ànimes · ${hearths} focs`,
+    chartPeak: (souls: number, year: number) => `màxim ${souls} · ${year}`,
+    chartLow: (souls: number, year: number) => `mínim ${souls} · ${year}`,
+    chartAria: (place: string, from: number, to: number, peak: number, peakYear: number, low: number, lowYear: number) =>
+      `Població de ${place}, ${from}–${to}: al seu punt àlgid ${peak} ànimes el ${peakYear}, i ${low} el ${lowYear}. Els anys de pesta i de fam són ombrejats. Feu servir el control d'any de sota per visitar qualsevol any.`,
     headTag: "cap de casa",
     widowTag: "vídua",
     widowerTag: "vidu",

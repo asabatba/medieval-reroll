@@ -53,13 +53,24 @@ describe("settlementTypeOf", () => {
 describe("settlement effects on the village solve", () => {
   // Explicit timeout: cost scales with REGION_KEYS.length (§ Adding a
   // region) — a fixed budget generous enough for the current region count.
+  //
+  // The sample is deliberately smaller than the other settlement tests here,
+  // because this is the only one that has to SOLVE each village rather than
+  // just read its address: an urban solve runs around 45ms (its holdings, and
+  // so its population, are roughly double a rural one's, and several passes in
+  // the solve are quadratic in population), so every village in the loop is
+  // paid for in full, eight times over. At sixty per region this sat right on
+  // the budget standalone and tipped past it whenever vitest ran another file
+  // alongside it. Thirty still gives 240 solved villages across a spread of
+  // both settlement types, which is far more than a mean-wealth comparison
+  // needs to be stable.
   it("urban villages' founders skew toward higher-wealth classes than rural ones", () => {
     let urbanWealthSum = 0;
     let urbanFounders = 0;
     let ruralWealthSum = 0;
     let ruralFounders = 0;
     for (const regionKey of REGION_KEYS) {
-      for (let villageIdx = 0; villageIdx < 60; villageIdx++) {
+      for (let villageIdx = 0; villageIdx < 30; villageIdx++) {
         const env = resolveVillage(SEED, regionKey, villageIdx);
         const founders = env.persons.filter((p) => p.founder);
         const wealthSum = founders.reduce((sum, p) => sum + CLASS_INFO[p.cls].wealth, 0);

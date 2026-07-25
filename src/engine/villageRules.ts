@@ -119,10 +119,26 @@ export const CONSANGUINITY_PENALTY = 55;
  * They are discouraged, not deterred. */
 export const CONSANGUINITY_PENALTY_PROPERTIED = 10;
 
-export function consanguinityPenalty(persons: readonly Person[], H: Person, W: Person): number {
-  if (!isConsanguineous(persons, H, W)) return 0;
+/** What a match this close costs, GIVEN that it is one. Split from the
+ * relatedness test so the matcher can hoist the expensive half. */
+export function consanguinityCost(H: Person, W: Person): number {
   const propertied = (p: Person) => p.cls === "gentry" || p.cls === "merchant";
   return propertied(H) && propertied(W) ? CONSANGUINITY_PENALTY_PROPERTIED : CONSANGUINITY_PENALTY;
+}
+
+/** Does `p` share a grandparent with someone whose grandparents are already
+ * to hand? The bride loop tests one man against every eligible woman in the
+ * village, so building both sets per PAIR made the matcher quadratic in a
+ * way that showed up as whole seconds on the larger urban solves. The man's
+ * set is built once and reused across the loop. */
+export function sharesGrandparent(gH: ReadonlySet<number>, persons: readonly Person[], p: Person): boolean {
+  if (!gH.size || (p.father < 0 && p.mother < 0)) return false;
+  for (const g of grandparentsOf(persons, p)) if (gH.has(g)) return true;
+  return false;
+}
+
+export function consanguinityPenalty(persons: readonly Person[], H: Person, W: Person): number {
+  return isConsanguineous(persons, H, W) ? consanguinityCost(H, W) : 0;
 }
 
 // § affinity: the spouse of p's MOST RECENT union, dead or alive — used to

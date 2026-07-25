@@ -304,9 +304,96 @@ export function renderVillageBody(E: typeof Engine, env: Envelope, year: number,
   );
 }
 
+// ---- § population curve ----
+// The whole point of the carrying-capacity model (engine/capacity.ts) is a
+// SHAPE: a village pressed against its land through the thirteenth century,
+// gutted in one year by the Black Death, and never quite refilling the ground
+// the fifteenth century had given up farming. None of that was visible
+// anywhere. The year slider could show it, but only to someone who thought to
+// drag it across two centuries and remember what they saw — so the single
+// most interesting thing the engine computes was, in practice, hidden.
+//
+// Drawn full-bleed on purpose: the x axis runs edge to edge over exactly
+// [VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX], so a click anywhere maps to a year by
+// plain proportion and app.ts needs no shared geometry to invert it.
+const CHART_W = 840;
+const CHART_H = 96;
+/** Room at the top so the peak's stroke isn't clipped by the viewBox edge. */
+const CHART_TOP = 6;
+/** The last year Tier 1 actually generates births for (village.ts's own
+ * genChildren cap). The curve is still drawn past it — those people really are
+ * on the register and you can still visit them — but the trough label is not
+ * taken from there: with births stopped and deaths continuing, the final years
+ * fall away steeply, and reading that as the village's low point would report
+ * a fact about where the register ends rather than about the village. */
+const REGISTER_LAST_FULL_YEAR = 1495;
+
+export function chartYearAt(fraction: number): number {
+  const span = VILLAGE_YEAR_MAX - VILLAGE_YEAR_MIN;
+  return Math.max(VILLAGE_YEAR_MIN, Math.min(VILLAGE_YEAR_MAX, Math.round(VILLAGE_YEAR_MIN + fraction * span)));
+}
+
+/** The x of a year, and of the marker line, share this one mapping. */
+function chartX(year: number): number {
+  return ((year - VILLAGE_YEAR_MIN) / (VILLAGE_YEAR_MAX - VILLAGE_YEAR_MIN)) * CHART_W;
+}
+
+function renderPopulationChart(E: typeof Engine, env: Envelope, year: number, locale: Locale): string {
+  const t = UI[locale];
+  const counts = E.populationSeries(env, VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX);
+  const peak = counts.reduce((best, n, i) => (n > counts[best] ? i : best), 0);
+  // The trough that means something is the one AFTER the height — the Black
+  // Death and the century that never refilled the ground it emptied — not the
+  // handful of souls the village started the register with.
+  const lastFull = Math.min(counts.length - 1, REGISTER_LAST_FULL_YEAR - VILLAGE_YEAR_MIN);
+  const low = counts.reduce((best, n, i) => (i >= peak && i <= lastFull && n < counts[best] ? i : best), peak);
+  const ceiling = Math.max(1, counts[peak]);
+  const yOf = (n: number) => CHART_H - (n / ceiling) * (CHART_H - CHART_TOP);
+
+  const points = counts.map((n, i) => `${chartX(VILLAGE_YEAR_MIN + i).toFixed(1)},${yOf(n).toFixed(1)}`);
+  const line = `M${points.join("L")}`;
+  const area = `${line}L${CHART_W},${CHART_H}L0,${CHART_H}Z`;
+
+  // Crisis bands, in the same three colours the year badges already use, so
+  // the trough in the curve and the badge that explains it read as one thing.
+  const band = (from: number, to: number, cls: string, label: string) => {
+    const x = chartX(Math.max(VILLAGE_YEAR_MIN, from));
+    const w = Math.max(1.5, chartX(Math.min(VILLAGE_YEAR_MAX, to)) - x);
+    return `<rect class="${cls}" x="${x.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${CHART_H}"><title>${esc(label)}</title></rect>`;
+  };
+  const bands = E.PLAGUES.filter((pl) => pl[1] >= VILLAGE_YEAR_MIN && pl[0] <= VILLAGE_YEAR_MAX)
+    .map((pl) => band(pl[0], pl[1], "pc-plague", `${pl[3][locale]} · ${pl[0]}${pl[1] > pl[0] ? `–${pl[1]}` : ""}`))
+    .join("");
+  const famine = band(
+    env.region.famine[0],
+    env.region.famine[1],
+    "pc-famine",
+    `${env.region.famineName[locale]} · ${env.region.famine[0]}–${env.region.famine[1]}`,
+  );
+
+  const peakYear = VILLAGE_YEAR_MIN + peak;
+  const lowYear = VILLAGE_YEAR_MIN + low;
+  return `<figure class="popchart">
+    <svg class="popsvg" viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none" role="img"
+         aria-label="${esc(t.chartAria(env.place[locale], VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX, counts[peak], peakYear, counts[low], lowYear))}">
+      ${bands}${famine}
+      <path class="pc-area" d="${area}"/>
+      <path class="pc-line" d="${line}" vector-effect="non-scaling-stroke"/>
+      <line class="pc-now" id="vnow" x1="${chartX(year).toFixed(1)}" x2="${chartX(year).toFixed(1)}" y1="0" y2="${CHART_H}" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <figcaption class="poplegend">
+      <span>${VILLAGE_YEAR_MIN}</span>
+      <span class="pc-peak">${esc(t.chartPeak(counts[peak], peakYear))}</span>
+      <span class="pc-low">${esc(t.chartLow(counts[low], lowYear))}</span>
+      <span>${VILLAGE_YEAR_MAX}</span>
+    </figcaption>
+  </figure>`;
+}
+
 function renderVillageSection(E: typeof Engine, env: Envelope, year: number, locale: Locale, currentId: number): string {
   const t = UI[locale];
   return `<details class="register village reveal"><summary>${esc(t.villageHeader(env.place[locale]))}</summary>
+    ${renderPopulationChart(E, env, year, locale)}
     <div class="village-controls">
       <label class="vyear-lbl" for="vyear">${esc(t.yearLabel)}</label>
       <input type="range" id="vyear" min="${VILLAGE_YEAR_MIN}" max="${VILLAGE_YEAR_MAX}" step="1" value="${year}">

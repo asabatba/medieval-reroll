@@ -49,6 +49,14 @@ export const CLASS_CEILING: Record<SettlementType, Partial<Record<SocialClass, n
   urban: { gentry: 0.06, merchant: 0.22, clergyFamily: 0.07, artisan: 0.42 },
 };
 
+/** Whether a class is bounded at all. The peasantry is not — it is the
+ * residual everyone else falls back into — and checking this FIRST lets
+ * callers skip measuring a share they would only multiply by 1 anyway, which
+ * matters because measuring one means walking the whole village. */
+export function hasCeiling(cls: SocialClass, settlement: SettlementType): boolean {
+  return CLASS_CEILING[settlement][cls] !== undefined;
+}
+
 /** How far past its ceiling a class already sits, as a multiplier on the
  * downgrade pressure its younger sons face. 1 at the ceiling, and bounded at
  * both ends — a class with room to grow is not forced down, and one badly

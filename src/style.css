@@ -1015,12 +1015,69 @@ button.reign-head:focus-visible {
 details.village {
   margin-top: 14px;
 }
+/* § population curve: the shape the carrying-capacity model produces —
+   pressed against the land, gutted in 1348, never quite refilling. Drawn
+   full-bleed so the x axis is exactly the slider's own range and a click
+   maps to a year by plain proportion (see ui/render.ts). */
+.popchart {
+  border-top: 1px solid var(--line);
+  padding: 12px 18px 0;
+}
+.popsvg {
+  display: block;
+  width: 100%;
+  height: 96px;
+  cursor: crosshair;
+  touch-action: none;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.pc-plague {
+  fill: rgba(var(--rubric-rgb), 0.16);
+}
+.pc-famine {
+  fill: rgba(var(--gilt-rgb), 0.14);
+}
+.pc-area {
+  fill: rgba(var(--verdigris-rgb), 0.2);
+}
+.pc-line {
+  fill: none;
+  stroke: var(--verdigris);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+/* Gilt to match the slider's own accent — the two are one control. Drawn
+   heavier than the crisis bands are tinted so the cursor never reads as
+   another band when it happens to be standing on the famine years. */
+.pc-now {
+  stroke: var(--gilt);
+  stroke-width: 2;
+}
+.poplegend {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim2);
+  padding: 6px 1px 0;
+}
+.poplegend .pc-peak {
+  color: var(--verdigris);
+}
+.poplegend .pc-low {
+  color: var(--rubric);
+}
 .village-controls {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 18px 6px;
-  border-top: 1px solid var(--line);
+  padding: 10px 18px 6px;
 }
 .vyear-lbl {
   font-family: "JetBrains Mono", monospace;

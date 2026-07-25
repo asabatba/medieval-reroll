@@ -63,7 +63,7 @@ export { randomCitizen, roster } from "./roster.js";
 export { settlementTypeOf } from "./settlement.js";
 export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";
 // Temporal resolver (§ year layer): the village population/households AS OF a year.
-export { CHURCH_HOUSEHOLD, MANOR_HOUSEHOLD, residentAt, villageStateAt } from "./snapshot.js";
+export { CHURCH_HOUSEHOLD, MANOR_HOUSEHOLD, populationSeries, residentAt, villageStateAt } from "./snapshot.js";
 // Inheritance/household succession (§ family transitions), shared by Tier 2 and the snapshot layer.
 export { childrenOf, heirOf, inheritedFromFather } from "./succession.js";
 export type {
