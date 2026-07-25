@@ -576,29 +576,25 @@ describe("§ godparents", () => {
 describe("§ shared parish narrative", () => {
   // Explicit timeout: cost scales with REGION_KEYS.length (§ Adding a
   // region) — a fixed budget generous enough for the current region count.
-  it(
-    "mentions the mother church only when jurisdiction.shared is true, never otherwise",
-    () => {
-      let sharedSeen = 0;
-      for (const regionKey of REGION_KEYS) {
-        for (let v = 0; v < 20; v++) {
-          const env = resolveVillage(1444, regionKey, v);
-          const j = parishOf(1444, regionKey, v, "en");
-          for (const p of env.persons) {
-            const bio = decodePerson(env, p.id, "en")!;
-            const mentionsMother = bio.events.some((e) => e.text.includes("mother church") || e.text.includes("mother parish"));
-            if (j.shared) {
-              if (mentionsMother) sharedSeen++;
-            } else {
-              expect(mentionsMother).toBe(false);
-            }
+  it("mentions the mother church only when jurisdiction.shared is true, never otherwise", () => {
+    let sharedSeen = 0;
+    for (const regionKey of REGION_KEYS) {
+      for (let v = 0; v < 20; v++) {
+        const env = resolveVillage(1444, regionKey, v);
+        const j = parishOf(1444, regionKey, v, "en");
+        for (const p of env.persons) {
+          const bio = decodePerson(env, p.id, "en")!;
+          const mentionsMother = bio.events.some((e) => e.text.includes("mother church") || e.text.includes("mother parish"));
+          if (j.shared) {
+            if (mentionsMother) sharedSeen++;
+          } else {
+            expect(mentionsMother).toBe(false);
           }
         }
       }
-      expect(sharedSeen).toBeGreaterThan(0);
-    },
-    20000,
-  );
+    }
+    expect(sharedSeen).toBeGreaterThan(0);
+  }, 20000);
 });
 
 describe("§ named wills", () => {
