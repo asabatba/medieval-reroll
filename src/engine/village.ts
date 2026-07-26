@@ -51,7 +51,7 @@ import { REGIONS } from "./data/regions.js";
 import { DEARTH, fertilityMult, harvestAt, marriageDeferral } from "./harvest.js";
 import { addrHash, makeRng, personStream } from "./hash.js";
 import { type HarvestReader, rollDeath, warAt } from "./mortality.js";
-import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
+import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER, longDistanceDestination } from "./rank.js";
 import { assignServiceMasters, resolveServiceSpells } from "./service.js";
 import { settlementTypeOf } from "./settlement.js";
 import { tenementsOf } from "./tenement.js";
@@ -1129,9 +1129,23 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         }
       }
     } else {
+      // § the far end (migration.ts): the destination is now COMPUTED, by
+      // an invertible pairing with the region one rung up, rather than
+      // rolled. `rng.int(0, 200)` produced an address no village could
+      // work backwards from, which is precisely why a long-distance
+      // emigrant was a dead end: the far end had no way to know she was
+      // coming without searching every village of every region below it.
+      // The roll is still consumed so the draw count is unchanged.
       const higher = higherRankRegions(regionKey);
+      const paired = longDistanceDestination(worldSeed, regionKey, villageIdx);
       if (higher.length && rng.chance(0.6)) {
-        p.emigrateTo = { regionKey: rng.pick(higher), villageIdx: rng.int(0, 200) };
+        // BOTH legacy draws are still consumed, in their original order.
+        // Taking only one of them shifted the shared stream and moved the
+        // aggregate demography off its bands — the destination address is
+        // the only thing that should be changing here.
+        const fallbackRegion = rng.pick(higher);
+        const fallbackIdx = rng.int(0, 200);
+        p.emigrateTo = paired ?? { regionKey: fallbackRegion, villageIdx: fallbackIdx };
         p.longDistance = true;
       } else {
         p.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + LOCAL_CLUSTER + rng.int(0, LOCAL_CLUSTER - 1) };

@@ -75,6 +75,13 @@ export { canonicalRef, findResidenceRecord, residenceRef } from "./identity.js";
 export type { AncestorNode, DescendantNode, ParentRecord } from "./lineage.js";
 // Lineage traversal (§ family tree): multi-generation ancestors/descendants.
 export { ancestorsOf, descendantsOf, parentsOf } from "./lineage.js";
+// § the far end: long-distance migration, with both ends able to name each
+// other. The pairing is invertible, so the destination can compute its one
+// possible origin instead of searching; the lookup is READ-ONLY and never
+// called from the solve (see migration.ts on why that distinction is the
+// whole feature).
+export type { InboundMigrant } from "./migration.js";
+export { inboundLongDistance, longDistanceDestination, longDistanceOrigin, outboundLongDistance, regionAbove, regionBelow } from "./migration.js";
 export { famineAt, warAt } from "./mortality.js";
 // Nobility (§ nobility): real royal lines (sovereignAt is a data lookup) and
 // generated noble houses — the honour's baronial line and each manor's

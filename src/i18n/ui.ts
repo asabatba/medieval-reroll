@@ -214,6 +214,11 @@ interface UiStrings {
   holdersCount: (n: number) => string;
   holdingLabel: string;
   undersettle: string;
+  // ---- § the far end: long-distance migration, both ends named ----
+  farEndHeader: string;
+  farEndNote: string;
+  farEndIn: (n: number) => string;
+  farEndOut: (n: number) => string;
   // ---- § the harvest / § the deserted village ----
   desertedNote: (year: number) => string;
   harvestHeader: string;
@@ -450,6 +455,11 @@ export const UI: Record<Locale, UiStrings> = {
     holdersCount: (n) => `${n} ${n === 1 ? "family" : "families"}`,
     holdingLabel: "Holding",
     undersettle: "None — an undersettle",
+    farEndHeader: "The long road",
+    farEndNote:
+      "Migration out of the region. These people have no record in the register they arrived at — a village may not write people into another village's book — so each row opens their OWN register, the one that holds their birth, their kin and their death. Both ends name each other; neither invents the other.",
+    farEndIn: (n) => `${n === 1 ? "One who came" : `${n} who came`} from far off`,
+    farEndOut: (n) => `${n === 1 ? "One who left" : `${n} who left`} for another region`,
     desertedNote: (year) =>
       `The village stood empty by ${year}. Its land went back to pasture and its name survived on a map: something like a tenth of English villages ended this way, and a run of failed harvests on thin ground is how.`,
     harvestHeader: "The harvest",
@@ -677,6 +687,11 @@ export const UI: Record<Locale, UiStrings> = {
     holdersCount: (n) => `${n} ${n === 1 ? "família" : "famílies"}`,
     holdingLabel: "Mas",
     undersettle: "Cap — hi vivia de rellogat",
+    farEndHeader: "El camí llarg",
+    farEndNote:
+      "Migració fora de la regió. Aquesta gent no té registre al poble on va arribar — un poble no pot escriure gent al llibre d'un altre — i per això cada fila obre el SEU registre, el que en guarda el naixement, la parentela i la mort. Els dos extrems s'anomenen l'un a l'altre; cap dels dos no s'inventa l'altre.",
+    farEndIn: (n) => `${n === 1 ? "Un que vingué" : `${n} que vingueren`} de lluny`,
+    farEndOut: (n) => `${n === 1 ? "Un que marxà" : `${n} que marxaren`} cap a una altra regió`,
     desertedNote: (year) =>
       `El poble era buit el ${year}. La terra tornà a pastura i el nom va sobreviure en un mapa: alguna cosa com un desè dels pobles anglesos van acabar així, i una seguida de collites fallides en terra prima és com.`,
     harvestHeader: "La collita",

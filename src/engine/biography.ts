@@ -930,6 +930,12 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
           ? `Es va casar fora de la parròquia${destText}; el seu nom surt d'aquest registre cap a un altre, i la resta de la seva vida hi queda escrita.`
           : `Married out of the parish${destText}; her name leaves this register for another, and the rest of her life is written there.`,
         "marriage",
+        undefined,
+        // § the far end: there is no record of her at the other end — the
+        // rank rule forbids inventing one — but the PLACE is real, and it
+        // can name her among its incomers. So the destination is a link
+        // rather than a full stop.
+        destPlace && dest ? [{ id: -1, name: destPlace, addr: dest, route: "village" }] : undefined,
       );
     }
   } else if (!own && p.cityService) {
@@ -1007,15 +1013,22 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             `Took service in a lord's armed retinue, and the register can say no more than that he left.`,
             `Went to serve in another manor's household${destText}, there being no tenement here for a second son.`,
           ];
-      ev(
-        departureYear!,
+      const leftText =
         heirApparent || p.death.age < region.marriageM[1] + 3
           ? ca
             ? `Va marxar de la parròquia${destText}; el seu nom surt d'aquest registre cap a un altre, i la resta de la seva vida hi queda escrita.`
             : `Left the parish${destText}; his name leaves this register for another, and the rest of his life is written there.`
-          : rng.pick(reasons),
-        "life",
-      );
+          : rng.pick(reasons);
+      // § the far end: same as the married-out case — the place he went to
+      // is a real, browsable address even though he has no record in its
+      // register. Gated on the chosen text ACTUALLY naming it: one of the
+      // reasons above ("took service in a lord's armed retinue, and the
+      // register can say no more than that he left") deliberately does not,
+      // and a ref whose name is not a substring of its own event breaks the
+      // one contract linkifyEventText has.
+      const placeRef: EventRef[] | undefined =
+        destPlace && dest && leftText.includes(destPlace) ? [{ id: -1, name: destPlace, addr: dest, route: "village" }] : undefined;
+      ev(departureYear!, leftText, "life", undefined, placeRef);
     }
   } else if (!own && !p.marriedOut && !p.emigrated && p.death.age >= 30 && !p.inOrders && rng.chance(0.7)) {
     ev(

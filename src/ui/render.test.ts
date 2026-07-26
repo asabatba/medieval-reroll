@@ -590,6 +590,44 @@ describe("the population curve", () => {
     expect((html.match(/data-goto="tenement:england:0:\d+"/g) ?? []).length).toBe(tens.length);
   });
 
+  // § the far end: both ends of a long-distance move naming each other.
+  it("lists arrivals from beyond the region, each opening the register that actually holds them", () => {
+    // Find a village that really received someone from the region below.
+    let found: { rk: string; v: number; n: number } | null = null;
+    for (const rk of ["france", "catalonia", "italy"]) {
+      for (let v = 0; v < 10 && !found; v++) {
+        const inbound = E.inboundLongDistance(1444, rk, v);
+        if (inbound.length) found = { rk, v, n: inbound.length };
+      }
+      if (found) break;
+    }
+    expect(found).not.toBeNull();
+    const inbound = E.inboundLongDistance(1444, found!.rk, found!.v);
+    const html = buildViewHTML(E, 1444, [{ kind: "village", regionKey: found!.rk, villageIdx: found!.v }], "en");
+    expect(html).toContain("The long road");
+    for (const m of inbound) {
+      // The row opens HER OWN register, not a record here — she has none here.
+      expect(html).toContain(`${m.origin.regionKey}:${m.origin.villageIdx}:${m.person.id}`);
+      expect(html).toContain(m.person.name);
+    }
+  });
+
+  it("makes a long-distance departure a link to the place, not a full stop", () => {
+    // Her own record names where she went; that place is browsable even
+    // though the register there never recorded her.
+    let seen = 0;
+    for (const rk of ["england", "france"]) {
+      const venv = E.resolveVillage(1444, rk, 0);
+      for (const p of venv.persons) {
+        if (!p.longDistance || !p.emigrateTo || p.emigrateTo.regionKey === rk) continue;
+        const html = buildRecordHTML(E, 1444, [{ regionKey: rk, villageIdx: 0, personId: p.id }], "en");
+        if (!html.includes(`data-goto="village:${p.emigrateTo.regionKey}:${p.emigrateTo.villageIdx}"`)) continue;
+        seen++;
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
   // § the harvest: emphasis, never a diverging colour pair.
   it("draws the harvest series with one bar a year and the failures accented", () => {
     const html = buildViewHTML(E, 1444, [{ kind: "village", regionKey: "england", villageIdx: 0 }], "en");

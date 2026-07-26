@@ -243,7 +243,9 @@ describe("§ nobility: biography integration", () => {
             if (!r.route) continue;
             expect(e.text, `${rk}: "${r.name}"`).toContain(r.name);
             expect(r.id).toBe(-1);
-            expect(r.routeIdx).toBeGreaterThanOrEqual(0);
+            // Every route EXCEPT "village" indexes into a line; a place has
+            // no index, only an address (§ the far end).
+            if (r.route !== "village") expect(r.routeIdx).toBeGreaterThanOrEqual(0);
             if (r.route === "royal") {
               const reign = reigns[r.routeIdx!];
               expect(reign, `${rk}: "${r.name}" -> ${r.routeIdx}`).toBeDefined();
@@ -256,6 +258,13 @@ describe("§ nobility: biography integration", () => {
                 const answers = f.style.en.includes(r.name) || f.name.en.includes(r.name) || (f.aka ?? []).some((a) => a.en === r.name);
                 if (answers) expect(r.routeIdx, `${rk} ${e.year}: "${r.name}"`).toBe(inForce);
               }
+            } else if (r.route === "village") {
+              // § the far end: a place, not a person — so there is no index
+              // into any line, and what has to hold is that the address is
+              // a real village whose register can be opened.
+              expect(r.routeIdx).toBeUndefined();
+              expect(REGION_KEYS, `${rk}: ${r.name}`).toContain(r.addr.regionKey);
+              expect(r.addr.villageIdx).toBeGreaterThanOrEqual(0);
             } else if (r.route === "pope") {
               // § the Schism: the index is into the REGION's own papal
               // series, not into the shared pontificate data — a pope this

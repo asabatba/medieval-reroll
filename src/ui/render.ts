@@ -190,6 +190,11 @@ function gotoOf(ref: EventRef): string {
   if (ref.route === "lord") return ref.routeIdx != null && ref.routeIdx >= 0 ? lordGoto("lord", ref.addr, ref.routeIdx) : houseGoto(ref.addr);
   if (ref.route === "pope") return ref.routeIdx != null && ref.routeIdx >= 0 ? pontiffGoto(ref.addr.regionKey, ref.routeIdx) : papacyGoto(ref.addr.regionKey);
   if (ref.route === "rector") return ref.routeIdx != null && ref.routeIdx >= 0 ? lordGoto("rector", ref.addr, ref.routeIdx) : parishGoto("parish", ref.addr);
+  // § the far end: a PLACE, not a person — where a long-distance emigrant
+  // went. She has no record in that register (the rank rule forbids
+  // inventing one), but the village is real, browsable, and lists her
+  // among its incomers, so the trail continues instead of stopping.
+  if (ref.route === "village") return villageGoto(ref.addr);
   return addrStr(ref.addr, ref.id);
 }
 
@@ -1396,6 +1401,58 @@ function renderIncumbents(E: typeof Engine, worldSeed: number, node: ParishNode,
   );
 }
 
+// ---- § the far end ----
+//
+// The other half of the loop. A long-distance emigrant's own register says
+// where she went; this is the destination saying she came. She has no
+// record here — the rank rule forbids one village inventing people in
+// another's register — so what is listed is her ENTRY IN HER OWN REGISTER,
+// linking back to it. Both ends name each other and neither depends on the
+// other's solve.
+//
+// Only rendered on a village's own page, never inside resolveVillage:
+// resolving the paired origin is one memoized solve of a strictly
+// lower-ranked address, which is affordable on demand and would have been
+// ruinous inside the solve (see engine/migration.ts).
+function renderFarEndSection(E: typeof Engine, worldSeed: number, env: Envelope, locale: Locale): string {
+  const t = UI[locale];
+  const inbound = E.inboundLongDistance(worldSeed, env.regionKey, env.villageIdx);
+  const outbound = E.outboundLongDistance(env);
+  if (!inbound.length && !outbound.length) return "";
+
+  const row = (m: Engine.InboundMigrant, addr: Engine.Address, place: string, region: string) =>
+    `<button class="ryrow tenure" data-goto="${addrStr(addr, m.person.id)}">
+      <span class="ry-years">${m.year}</span>
+      <span class="ry-style">${esc(`${m.person.name} ${m.person.surname}`)}</span>
+      <span class="ry-house">${esc(`${place}, ${region}`)}</span>
+    </button>`;
+
+  let html = `<details class="register reveal"><summary>${esc(t.farEndHeader)}</summary>
+    <div class="honour-note">${esc(t.farEndNote)}</div>`;
+  if (inbound.length) {
+    const src = inbound[0].origin;
+    const place = E.placeShortOf(worldSeed, src.regionKey, src.villageIdx);
+    const region = E.REGIONS[src.regionKey].name[locale];
+    html += `<div class="sect"><h2>${esc(t.farEndIn(inbound.length))}</h2></div><div class="reigns">${inbound
+      .map((m) => row(m, m.origin, place, region))
+      .join("")}</div>`;
+  }
+  if (outbound.length) {
+    html += `<div class="sect"><h2>${esc(t.farEndOut(outbound.length))}</h2></div><div class="reigns">${outbound
+      .map((m) => {
+        const to = m.person.emigrateTo!;
+        return row(
+          m,
+          { regionKey: env.regionKey, villageIdx: env.villageIdx },
+          E.placeShortOf(worldSeed, to.regionKey, to.villageIdx),
+          E.REGIONS[to.regionKey].name[locale],
+        );
+      })
+      .join("")}</div>`;
+  }
+  return `${html}</details>`;
+}
+
 // ---- § the harvest ----
 //
 // Deliberately NOT a diverging colour pair. The data is polarity — above
@@ -1611,6 +1668,10 @@ function buildVillageHTML(E: typeof Engine, worldSeed: number, stack: StackNode[
   // which is a fact about the place, so it lives on the place's page.
   html += renderSeasonSection(E, env, locale);
   html += renderHarvestSection(E, worldSeed, env, locale);
+  // § the far end: who came from beyond the region, and who left for it —
+  // the one section that reads another region's register, and the reason
+  // it is here rather than inside the solve.
+  html += renderFarEndSection(E, worldSeed, env, locale);
   html += renderParishRegister(E, env, locale, -1);
   return html;
 }

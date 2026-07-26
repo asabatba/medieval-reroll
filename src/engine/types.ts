@@ -348,8 +348,11 @@ export interface EventRef {
    * "pope" = the pontiff page for term `routeIdx` of `addr`'s region's own
    * papal series (§ the Schism — the series is region-specific, so the
    * index means nothing without the region); "rector" = the incumbent page
-   * for incumbency `routeIdx` of `addr`'s parish clergy line. */
-  route?: "royal" | "lord" | "pope" | "rector";
+   * for incumbency `routeIdx` of `addr`'s parish clergy line; "village" =
+   * `addr`'s own place page (§ the far end — a long-distance emigrant has
+   * no record at the other end, but the PLACE is real and browsable, and
+   * it can name her among its incomers). */
+  route?: "royal" | "lord" | "pope" | "rector" | "village";
   /** Reign index (route "royal"), manor-line head index (route "lord"),
    * papal-series term index (route "pope"), or incumbency index (route
    * "rector"). */
