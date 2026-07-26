@@ -252,6 +252,112 @@ describe("nobility views", () => {
   });
 });
 
+// § the village route / § the parish route: the place and the church it
+// answers to, as records of their own.
+describe("village and parish views", () => {
+  it("the village page carries the land, the curve, the year view and the register", () => {
+    const html = buildViewHTML(E, 1444, [{ kind: "village", regionKey: "england", villageIdx: 0 }], "en");
+    const env = E.resolveVillage(1444, "england", 0);
+    expect(html).toContain("1444:england:0");
+    expect(html).toContain(env.place.en);
+    // § carrying capacity, the number the whole preventive check is measured
+    // against and which had nowhere to be read
+    expect(html).toContain(`${E.holdingsOf(1444, "england", 0)} tenements`);
+    // the year view, open rather than folded shut on its own subject
+    expect(html).toMatch(/<details class="register village reveal" open>/);
+    expect(html).toContain('id="vyear"');
+    expect(html).toContain("popsvg");
+    // the full register, and nobody marked as the current record
+    expect(html).toContain("register-list");
+    expect(html).not.toContain("regrow current");
+    // it opens at the year of GREATEST EXTENT, not a person's birth+30
+    const counts = E.populationSeries(env, VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX);
+    let peak = 0;
+    for (let i = 1; i < counts.length; i++) if (counts[i] > counts[peak]) peak = i;
+    expect(html).toContain(`value="${VILLAGE_YEAR_MIN + peak}"`);
+  });
+
+  it("a person's record links out to their village, parish, deanery and diocese", () => {
+    const html = buildViewHTML(E, 1444, [{ regionKey: "england", villageIdx: 0, personId: 40 }], "en");
+    for (const goto of ["village:england:0", "parish:england:0", "deanery:england:0", "diocese:england:0"]) {
+      expect(html, goto).toContain(`data-goto="${goto}"`);
+    }
+  });
+
+  it("a shared parish names its mother church and lists every village under it", () => {
+    // Find a block the engine actually made shared — roughly a third are.
+    let idx = -1;
+    for (let v = 0; v < 40 && idx < 0; v++) if (E.parishOf(1444, "england", v, "en").shared) idx = v;
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const html = buildViewHTML(E, 1444, [{ kind: "parish", regionKey: "england", villageIdx: idx }], "en");
+    const mother = E.parishMotherVillageIdx(idx);
+    expect(html).toContain(E.placeShortOf(1444, "england", mother));
+    expect(html).toContain("mother church");
+    expect(html).toContain("chapelry");
+    // every village of the block is there, and each opens its own page
+    for (let i = mother; i < mother + E.PARISH_CLUSTER; i++) {
+      expect(html, `village ${i}`).toContain(`data-goto="village:england:${i}"`);
+    }
+  });
+
+  it("an unshared parish serves its one village and claims no others", () => {
+    let idx = -1;
+    for (let v = 0; v < 40 && idx < 0; v++) if (!E.parishOf(1444, "england", v, "en").shared) idx = v;
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const html = buildViewHTML(E, 1444, [{ kind: "parish", regionKey: "england", villageIdx: idx }], "en");
+    expect(html).toContain("serving that village alone");
+    expect(html).not.toContain("chapelry");
+    expect([...html.matchAll(/data-goto="village:england:\d+"/g)]).toHaveLength(1);
+  });
+
+  it("the deanery lists parishes it really holds; the diocese lists its deaneries exactly", () => {
+    const deanery = buildViewHTML(E, 1444, [{ kind: "deanery", regionKey: "england", villageIdx: 0 }], "en");
+    const here = E.bareParishOf(1444, "england", 0);
+    expect(deanery).toContain(here.deanery);
+    // every parish row it shows really is of this deanery
+    for (const m of deanery.matchAll(/data-goto="parish:england:(\d+)"/g)) {
+      expect(E.bareParishOf(1444, "england", Number(m[1])).deanery, `village ${m[1]}`).toBe(here.deanery);
+    }
+    // A deanery's parishes are unbounded, so that page owes a caveat; the
+    // diocese's deaneries are a fixed list, so it is exact and owes none.
+    expect(deanery).toContain("visitation");
+    const diocese = buildViewHTML(E, 1444, [{ kind: "diocese", regionKey: "england", villageIdx: 0 }], "en");
+    expect(diocese).not.toContain("visitation");
+    const expected = E.deaneriesOf("england").filter((d) => E.dioceseOfDeanery(1444, "england", d) === here.diocese);
+    expect(expected.length).toBeGreaterThan(0);
+    for (const d of expected) expect(diocese, d).toContain(d);
+    for (const d of E.deaneriesOf("england")) {
+      if (!expected.includes(d)) expect(diocese, `${d} is not in this diocese`).not.toContain(`>${d}<`);
+    }
+  });
+
+  it("the ecclesiastical tree links upward as well as down", () => {
+    const parish = buildViewHTML(E, 1444, [{ kind: "parish", regionKey: "england", villageIdx: 0 }], "en");
+    expect(parish).toContain('data-goto="deanery:england:0"');
+    expect(parish).toContain('data-goto="diocese:england:0"');
+    const deanery = buildViewHTML(E, 1444, [{ kind: "deanery", regionKey: "england", villageIdx: 0 }], "en");
+    expect(deanery).toContain('data-goto="diocese:england:0"');
+    // the diocese is the top rung the app addresses — nothing above to link
+    const diocese = buildViewHTML(E, 1444, [{ kind: "diocese", regionKey: "england", villageIdx: 0 }], "en");
+    expect(diocese).not.toContain('data-goto="diocese:');
+  });
+
+  it("bareParishOf agrees with parishOf, in both locales", () => {
+    // bareParishOf re-walks parishOf's own draw sequence to get at the names
+    // behind the localized phrases — if the two ever drift, a village's
+    // deanery page would be about a different deanery than its record says.
+    for (let v = 0; v < 25; v++) {
+      const bare = E.bareParishOf(1444, "england", v);
+      for (const locale of ["en", "ca"] as const) {
+        const j = E.parishOf(1444, "england", v, locale);
+        expect(j.shared, `v${v} ${locale}`).toBe(bare.shared);
+        expect(j.deanery, `v${v} ${locale}`).toContain(bare.deanery);
+        expect(j.diocese, `v${v} ${locale}`).toContain(bare.diocese);
+      }
+    }
+  });
+});
+
 describe("renderVillageBody", () => {
   const env = E.resolveVillage(1444, "england", 0);
   const person = env.persons.find((p) => !p.founder) ?? env.persons[0];

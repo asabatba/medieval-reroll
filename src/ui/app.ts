@@ -24,6 +24,18 @@ import {
 // #worldseed:region:village:house (a manor's noble house), and
 // #worldseed:region:village:lord|baron:head (one lord's page — the manor's
 // line or the honour's baronial line respectively).
+// § the village route / § the parish route add two more:
+// #worldseed:region:village (the place itself — a person's locator with the
+// person taken off the end, so truncating any record URL walks up to it), and
+// #worldseed:region:village:parish|deanery|diocese (the ecclesiastical tree,
+// addressed by a village that belongs to it since it does not nest inside the
+// civil one — see engine/hierarchy.ts).
+const PARISH_LEVELS = ["parish", "deanery", "diocese"] as const;
+type ParishLevel = (typeof PARISH_LEVELS)[number];
+function isParishLevel(s: string): s is ParishLevel {
+  return (PARISH_LEVELS as readonly string[]).includes(s);
+}
+
 function parseLocator(s: string): { worldSeed: number; node: StackNode } | null {
   const parts = s.trim().replace(/^#/, "").split(":");
   if (parts.length < 3 || parts.length > 5) return null;
@@ -43,6 +55,8 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   }
   const villageIdx = Number(parts[2]);
   if (!Number.isSafeInteger(villageIdx) || villageIdx < 0) return null;
+  // § the village route: three segments and no more is the place itself.
+  if (parts.length === 3) return { worldSeed, node: { kind: "village", regionKey: parts[1], villageIdx } };
   if (parts.length === 5) {
     if (parts[3] !== "lord" && parts[3] !== "baron") return null;
     const headIdx = Number(parts[4]);
@@ -51,6 +65,7 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   }
   if (parts.length !== 4) return null;
   if (parts[3] === "house") return { worldSeed, node: { kind: "house", regionKey: parts[1], villageIdx } };
+  if (isParishLevel(parts[3])) return { worldSeed, node: { kind: parts[3], regionKey: parts[1], villageIdx } };
   const personId = Number(parts[3]);
   if (!Number.isSafeInteger(personId) || personId < 0) return null;
   return { worldSeed, node: { regionKey: parts[1], villageIdx, personId } };
@@ -112,6 +127,10 @@ export function initApp(): void {
         return true;
       case "king":
         return (a as KingNode).reignIdx === (b as KingNode).reignIdx;
+      case "village":
+      case "parish":
+      case "deanery":
+      case "diocese":
       case "house":
         return (a as HouseNode).villageIdx === (b as HouseNode).villageIdx;
       case "lord":
@@ -136,6 +155,8 @@ export function initApp(): void {
     const parts = goto.split(":");
     if (parts[0] === "royal") return { kind: "royal", regionKey: parts[1] };
     if (parts[0] === "king") return { kind: "king", regionKey: parts[1], reignIdx: +parts[2] };
+    if (parts[0] === "village") return { kind: "village", regionKey: parts[1], villageIdx: +parts[2] };
+    if (isParishLevel(parts[0])) return { kind: parts[0], regionKey: parts[1], villageIdx: +parts[2] };
     if (parts[0] === "house") return { kind: "house", regionKey: parts[1], villageIdx: +parts[2] };
     if (parts[0] === "lord" || parts[0] === "baron") return { kind: parts[0], regionKey: parts[1], villageIdx: +parts[2], headIdx: +parts[3] };
     return { regionKey: parts[0], villageIdx: +parts[1], personId: +parts[2] };
@@ -189,13 +210,17 @@ export function initApp(): void {
       });
     });
 
-    // village-in-year slider: re-render only the household body on input
-    // (person records only — the nobility views have no village section)
+    // village-in-year slider: re-render only the household body on input.
+    // § the village route: the section now appears on two kinds of page — a
+    // person's record and the village's own — so the highlighted member is
+    // whoever the page is about, and on the village's page that is nobody.
     const slider = out.querySelector<HTMLInputElement>("#vyear");
     const yearOut = out.querySelector<HTMLOutputElement>("#vyearout");
     const vbody = out.querySelector<HTMLElement>("#vbody");
-    if (slider && yearOut && vbody && isPersonNode(node)) {
-      const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
+    const villageOf = isPersonNode(node) ? node : node.kind === "village" ? node : null;
+    if (slider && yearOut && vbody && villageOf) {
+      const currentId = isPersonNode(villageOf) ? villageOf.personId : -1;
+      const env = E.resolveVillage(worldSeed, villageOf.regionKey, villageOf.villageIdx);
       // § population curve: the chart's own now-marker. Moved by setting two
       // attributes rather than re-rendering the figure — the curve itself
       // never changes, only where you are standing on it.
@@ -213,7 +238,7 @@ export function initApp(): void {
         if (frame != null) cancelAnimationFrame(frame);
         frame = requestAnimationFrame(() => {
           frame = null;
-          vbody.innerHTML = renderVillageBody(E, env, year, locale, node.personId);
+          vbody.innerHTML = renderVillageBody(E, env, year, locale, currentId);
           bindGoto(vbody);
         });
       };

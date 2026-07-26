@@ -19,9 +19,12 @@
 */
 
 export { decodePerson } from "./biography.js";
+// § the village route: the land itself, which the UI now has a page for.
+export { holdingsAt, holdingsOf } from "./capacity.js";
 export { CLASS_INFO } from "./data/classes.js";
 export { DEFAULT_DEMOGRAPHY, DEMOGRAPHY, demographyOf } from "./data/demography.js";
 export { CAUSE_LABEL } from "./data/narrative.js";
+export { placeOf, placeShortOf } from "./data/placeNames.js";
 export { PLAGUES, plagueAt } from "./data/plagues.js";
 export { REGIONS } from "./data/regions.js";
 export { citeDocument } from "./documents.js";
@@ -29,7 +32,10 @@ export { fatherOccupation } from "./fatherOccupation.js";
 export { addrHash, makeRng } from "./hash.js";
 // Overlapping hierarchies (§10): independent trees over the same village
 // addresses, joined by a deterministic assignment table.
-export { manorOf, parishOf } from "./hierarchy.js";
+// § the parish route: PARISH_CLUSTER and parishMotherVillageIdx let the UI
+// name the other villages under a shared mother church without duplicating
+// the block arithmetic.
+export { bareParishOf, deaneriesOf, dioceseOfDeanery, manorOf, PARISH_CLUSTER, parishMotherVillageIdx, parishOf } from "./hierarchy.js";
 // Canonical cross-village identity (§ canonical identity): resolve either of
 // a migrant's records (natal / residence) to the other.
 export { canonicalRef, findResidenceRecord, residenceRef } from "./identity.js";

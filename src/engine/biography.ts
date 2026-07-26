@@ -249,12 +249,20 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // occur, same role p.death.year already plays for ev() itself, just
   // narrower. The Marriage section below still fires the actual departure
   // event/text at exactly this year.
+  // § the marriage squeeze: a departure for service in a town is dated to the
+  // departure itself, never to a marriage — she left to work, and whether she
+  // married at the far end is the destination register's fact, not this one's.
   const departureYear: number | null =
     !own && p.marriedOut
       ? (destUnion?.year ?? p.birth + region.marriageF[1])
-      : !own && p.sex === "M" && p.emigrated
-        ? (destUnion?.year ?? p.birth + region.marriageM[1])
-        : null;
+      : !own && p.cityService
+        ? // she went to work, then (sometimes) married there — never the
+          // reverse, so a destination marriage the far register happens to
+          // date early still can't precede her leaving.
+          Math.min(p.birth + region.marriageF[1], destUnion?.year ?? Number.POSITIVE_INFINITY)
+        : !own && p.sex === "M" && p.emigrated
+          ? (destUnion?.year ?? p.birth + region.marriageM[1])
+          : null;
 
   const events: BioEvent[] = [];
   // § register blackout: years the crisis-year check below actually
@@ -892,6 +900,42 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         "marriage",
       );
     }
+  } else if (!own && p.cityService) {
+    // § the marriage squeeze: she left for service in a town. Narrated
+    // distinctly from "married out", because that is the whole point of the
+    // flag: the parish register recorded a daughter leaving, not a wedding it
+    // never saw. If the destination register did go on to record a marriage,
+    // say so and link it — but as that village's fact, arrived at afterward.
+    const dest = p.emigrateTo;
+    const destPlace = placeNameOf(env.worldSeed, dest, locale);
+    const destText =
+      destPlace && dest
+        ? ca
+          ? p.longDistance
+            ? ` a ${destPlace}, a ${REGIONS[dest.regionKey].name.ca}`
+            : ` a ${destPlace}`
+          : p.longDistance
+            ? ` in ${destPlace}, in ${REGIONS[dest.regionKey].name.en}`
+            : ` in ${destPlace}`
+        : "";
+    ev(
+      departureYear!,
+      ca
+        ? `Va entrar a servir en una casa${destText}, com tantes filles que no tenien dot; els anys de soldada eren, de fet, com es reunia el dot.`
+        : `Went into service in a household${destText}, as so many daughters did who had no dowry; the wage years were how a dowry was got together.`,
+      "life",
+    );
+    if (destPerson && destUnion && destSpouse && destRecord) {
+      ev(
+        destUnion.year,
+        ca
+          ? `Es va casar allà, amb ${destSpouse.name} ${destSpouse.surname}; el registre d'aquell poble la recull des d'aleshores, i la resta de la seva vida hi queda escrita.`
+          : `Married there, to ${destSpouse.name} ${destSpouse.surname}; that village's register carries her from then on, and the rest of her life is written there.`,
+        "marriage",
+        undefined,
+        [nameRef(destSpouse, destRecord)],
+      );
+    }
   } else if (!own && p.sex === "M" && p.emigrated) {
     // § male out-migration: a non-heir who left, narrated distinctly from a
     // woman's "married out" — he may or may not have gone to marry.
@@ -1385,6 +1429,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     incomer: !!p.incomer,
     founder: !!p.founder,
     marriedOut: !!p.marriedOut,
+    cityService: !!p.cityService,
     originPlace: p.incomer && p.origin ? placeNameOf(env.worldSeed, p.origin, locale) : null,
     jurisdiction,
     fief,

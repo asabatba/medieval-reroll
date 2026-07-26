@@ -108,6 +108,39 @@ interface UiStrings {
   emptyYear: string;
   famineBadge: string;
   warBadge: (name: string) => string;
+  // ---- § the village route: the village as a record of its own ----
+  /** The place's own page heading — "Elmleigh, Kent", the register's subject. */
+  settlementRural: string;
+  settlementUrban: string;
+  holdingsLabel: string;
+  /** "17 tenements · 13 in cultivation by 1470" — the land the whole
+   * preventive check is measured against (engine/capacity.ts). */
+  holdingsValue: (stock: number, cultivated: number, year: number) => string;
+  peakLabel: string;
+  peakValue: (souls: number, year: number) => string;
+  registerSpan: string;
+  registerSpanValue: (from: number, to: number) => string;
+  openVillage: string;
+  // ---- § the parish route: the ecclesiastical tree, walkable ----
+  province: string;
+  parishOfHeader: (parish: string) => string;
+  deaneryOfHeader: (deanery: string) => string;
+  dioceseOfHeader: (diocese: string) => string;
+  /** The shared-parish case: several villages under one mother church. */
+  sharedParishNote: (mother: string, n: number) => string;
+  ownParishNote: (place: string) => string;
+  villagesInParish: string;
+  parishesInDeanery: string;
+  deaneriesInDiocese: string;
+  motherChurchTag: string;
+  chapelryTag: string;
+  /** A deanery's parishes run on as far as the village address space does, so
+   * that one page says how far it actually walked. (The diocese level needs no
+   * such caveat — its deaneries are a fixed list, enumerated exactly.) */
+  visitationNote: (villages: number) => string;
+  /** How many parishes of a deanery the same visitation window turned up. */
+  parishesFound: (n: number) => string;
+  soulsOnRegister: (n: number) => string;
   // ---- family tree (§ one-step tree: parents / self+siblings+spouses / children) ----
   familyTree: string;
   self: (sex: "M" | "F") => string;
@@ -117,12 +150,19 @@ interface UiStrings {
   themeLight: string;
 }
 
+/** Catalan elides `de` before a vowel or a mute h — "d'Osona", not "de
+ * Osona". Place names come from the generated tables, so the article has to
+ * be chosen at the point of use rather than baked into the data. */
+function deCa(name: string): string {
+  return /^[aeiouAEIOUhH]/.test(name) ? `d'${name}` : `de ${name}`;
+}
+
 export const UI: Record<Locale, UiStrings> = {
   en: {
     brandSuffix: "REROLL",
     seedboxPlaceholder: "record locator",
     seedboxLabel: "Record locator",
-    seedboxTitle: "worldseed:region:village:person",
+    seedboxTitle: "worldseed:region:village:person — drop the last part for the village itself",
     openRecord: "Open record",
     openRecordTitle: "Open this exact record",
     rollALife: "Another life",
@@ -231,6 +271,31 @@ export const UI: Record<Locale, UiStrings> = {
     emptyYear: "No one is yet entered in this register.",
     famineBadge: "famine",
     warBadge: (name: string) => name,
+    settlementRural: "Village",
+    settlementUrban: "Market town",
+    holdingsLabel: "Holdings",
+    holdingsValue: (stock, cultivated, year) => `${stock} tenements · ${cultivated} still in cultivation by ${year}`,
+    peakLabel: "Greatest extent",
+    peakValue: (souls, year) => `${souls} souls in ${year}`,
+    registerSpan: "Register",
+    registerSpanValue: (from, to) => `${from}–${to}`,
+    openVillage: "Open the village record",
+    province: "Province",
+    parishOfHeader: (parish) => `${parish[0].toUpperCase()}${parish.slice(1)}`,
+    deaneryOfHeader: (deanery) => `${deanery[0].toUpperCase()}${deanery.slice(1)}`,
+    dioceseOfHeader: (diocese) => `${diocese[0].toUpperCase()}${diocese.slice(1)}`,
+    sharedParishNote: (mother, n) =>
+      `A mother church at ${mother}, serving ${n} villages — the rest have no font of their own, and are christened and buried here.`,
+    ownParishNote: (place) => `The parish church of ${place}, serving that village alone.`,
+    villagesInParish: "Villages of this parish",
+    parishesInDeanery: "Parishes of this deanery",
+    deaneriesInDiocese: "Deaneries of this diocese",
+    motherChurchTag: "mother church",
+    chapelryTag: "chapelry",
+    visitationNote: (villages) =>
+      `As found on visitation of the first ${villages} villages of the region. A deanery reaches further than any one visitation did.`,
+    parishesFound: (n) => (n === 1 ? "1 parish found" : `${n} parishes found`),
+    soulsOnRegister: (n) => `${n} souls on the register`,
     familyTree: "Family tree",
     self: (sex) => (sex === "F" ? "Herself" : "Himself"),
     outOfWedlock: "Born out of wedlock",
@@ -241,7 +306,7 @@ export const UI: Record<Locale, UiStrings> = {
     brandSuffix: "REROLL",
     seedboxPlaceholder: "localitzador de registre",
     seedboxLabel: "Localitzador de registre",
-    seedboxTitle: "llavordelmón:regió:poble:persona",
+    seedboxTitle: "llavordelmón:regió:poble:persona — treu-ne l'última part per al poble mateix",
     openRecord: "Obre el registre",
     openRecordTitle: "Obre exactament aquest registre",
     rollALife: "Una altra vida",
@@ -350,6 +415,31 @@ export const UI: Record<Locale, UiStrings> = {
     emptyYear: "Encara no hi ha ningú inscrit en aquest registre.",
     famineBadge: "fam",
     warBadge: (name: string) => name,
+    settlementRural: "Poble",
+    settlementUrban: "Vila de mercat",
+    holdingsLabel: "Tinences",
+    holdingsValue: (stock, cultivated, year) => `${stock} tinences · ${cultivated} encara conreades el ${year}`,
+    peakLabel: "Màxima extensió",
+    peakValue: (souls, year) => `${souls} ànimes el ${year}`,
+    registerSpan: "Registre",
+    registerSpanValue: (from, to) => `${from}–${to}`,
+    openVillage: "Obre el registre del poble",
+    province: "Província",
+    parishOfHeader: (parish) => `${parish[0].toUpperCase()}${parish.slice(1)}`,
+    deaneryOfHeader: (deanery) => `${deanery[0].toUpperCase()}${deanery.slice(1)}`,
+    dioceseOfHeader: (diocese) => `${diocese[0].toUpperCase()}${diocese.slice(1)}`,
+    sharedParishNote: (mother, n) =>
+      `Una església mare a ${mother}, que serveix ${n} pobles — els altres no tenen pila baptismal pròpia, i s'hi bategen i s'hi enterren.`,
+    ownParishNote: (place) => `L'església parroquial ${deCa(place)}, que serveix només aquell poble.`,
+    villagesInParish: "Pobles d'aquesta parròquia",
+    parishesInDeanery: "Parròquies d'aquest deganat",
+    deaneriesInDiocese: "Deganats d'aquest bisbat",
+    motherChurchTag: "església mare",
+    chapelryTag: "sufragània",
+    visitationNote: (villages) =>
+      `Tal com es va trobar en la visita als primers ${villages} pobles de la regió. Un deganat s'estén més enllà del que cap visita va arribar.`,
+    parishesFound: (n) => (n === 1 ? "1 parròquia trobada" : `${n} parròquies trobades`),
+    soulsOnRegister: (n) => `${n} ànimes al registre`,
     familyTree: "Arbre genealògic",
     self: (sex) => (sex === "F" ? "Ella mateixa" : "Ell mateix"),
     outOfWedlock: "Nascuts fora del matrimoni",

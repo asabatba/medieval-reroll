@@ -180,6 +180,86 @@ describe("app navigation", () => {
     }
   });
 
+  // § the village route: the place itself, at the shortest locator in the app.
+  it("clicking the place name on a record opens the village's own page at #seed:region:village", async () => {
+    await start();
+    const placeBtn = document.querySelector<HTMLButtonElement>('.dates [data-goto^="village:"]');
+    expect(placeBtn).not.toBeNull();
+    placeBtn!.click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:\d+$/);
+    expect(document.querySelectorAll(".crumb[data-jump]").length).toBe(2);
+    // the village page IS the register and the year view — both present, and
+    // the household section open rather than folded shut on its own subject
+    expect(document.querySelector("details.village")?.hasAttribute("open")).toBe(true);
+    expect(document.querySelector("#vyear")).not.toBeNull();
+    expect(document.querySelectorAll(".regrow").length).toBeGreaterThan(0);
+    // and nobody is the "current" record on a page that is about no one
+    expect(document.querySelectorAll(".regrow.current")).toHaveLength(0);
+  });
+
+  it("the year slider works on the village's own page, where there is no subject to highlight", async () => {
+    await start("#1444:england:0");
+    const slider = document.getElementById("vyear") as HTMLInputElement;
+    expect(slider).not.toBeNull();
+    slider.value = "1400";
+    slider.dispatchEvent(new Event("input"));
+    expect(document.getElementById("vyearout")?.textContent).toBe("1400");
+    expect(document.querySelectorAll("#vbody .member").length).toBeGreaterThan(0);
+  });
+
+  it("a village locator round-trips, and truncating a person's locator walks up to their place", async () => {
+    await start("#1444:england:0:12");
+    const input = document.getElementById("seedbox") as HTMLInputElement;
+    expect(input.value).toBe("1444:england:0:12");
+    input.value = "1444:england:0";
+    (document.getElementById("replay") as HTMLButtonElement).click();
+    expect(document.getElementById("locator-error")?.textContent).toBe("");
+    expect(location.hash).toBe("#1444:england:0");
+  });
+
+  // § the parish route: the ecclesiastical tree, which the record used to
+  // print as dead text while every other jurisdiction opened a page.
+  it("parish, deanery and diocese vitals each open their own page", async () => {
+    for (const level of ["parish", "deanery", "diocese"]) {
+      await start();
+      const btn = document.querySelector<HTMLButtonElement>(`[data-goto^="${level}:"]`);
+      expect(btn, level).not.toBeNull();
+      btn!.click();
+      expect(location.hash, level).toMatch(new RegExp(`^#1444:[a-z]+:\\d+:${level}$`));
+      expect(document.querySelector(".card .name")?.textContent, level).toBeTruthy();
+    }
+  });
+
+  it("a parish page lists its villages, and each row opens that village", async () => {
+    await start("#1444:england:0:parish");
+    const rows = document.querySelectorAll<HTMLButtonElement>('.reigns [data-goto^="village:"]');
+    expect(rows.length).toBeGreaterThan(0);
+    rows[0].click();
+    expect(location.hash).toMatch(/^#1444:england:\d+$/);
+  });
+
+  it("the ecclesiastical tree walks upward too: a parish page links its deanery, a deanery its diocese", async () => {
+    await start("#1444:england:0:parish");
+    document.querySelector<HTMLButtonElement>('.vitals [data-goto^="deanery:"]')!.click();
+    expect(location.hash).toMatch(/^#1444:england:\d+:deanery$/);
+    document.querySelector<HTMLButtonElement>('.vitals [data-goto^="diocese:"]')!.click();
+    expect(location.hash).toMatch(/^#1444:england:\d+:diocese$/);
+  });
+
+  it("somewhere in a run of villages, several really do share one mother church", async () => {
+    // § the parish route: the shared-parish case is the whole reason this
+    // view exists — roughly a third of blocks (engine/hierarchy.ts) put
+    // several villages under one font. Scan until one turns up rather than
+    // assuming village 0 is it.
+    let sharedSeen = 0;
+    for (let v = 0; v < 12 && !sharedSeen; v++) {
+      await start(`#1444:england:${v}:parish`);
+      const rows = document.querySelectorAll('.reigns [data-goto^="village:"]');
+      if (rows.length > 1) sharedSeen = rows.length;
+    }
+    expect(sharedSeen).toBeGreaterThan(1);
+  });
+
   it("browser back restores the full breadcrumb trail, not just the single node being navigated to", async () => {
     await start();
     const firstHash = location.hash;

@@ -677,7 +677,10 @@ describe("§ departure cutoff", () => {
   // set only for someone with no local union who married out or (male) emigrated.
   function departureInfoOf(env: ReturnType<typeof resolveVillage>, p: (typeof env.persons)[number]) {
     const region = REGIONS[env.regionKey];
-    const departed = (!p.unions || p.unions.length === 0) && (p.marriedOut || (p.sex === "M" && p.emigrated));
+    // § the marriage squeeze: `cityService` is the third way out of the
+    // parish — she left for service in a town rather than to be married — and
+    // it closes the register on her exactly as the other two do.
+    const departed = (!p.unions || p.unions.length === 0) && (p.marriedOut || p.cityService || (p.sex === "M" && p.emigrated));
     if (!departed) return null;
     const bio = decodePerson(env, p.id, "en")!;
     const departureYear = bio.marriageYear != null ? bio.marriageYear : p.birth + (p.sex === "F" ? region.marriageF[1] : region.marriageM[1]);

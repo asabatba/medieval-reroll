@@ -40,13 +40,38 @@ export interface LordNode {
   headIdx: number;
   crumb?: string;
 }
-export type StackNode = PersonNode | RoyalNode | KingNode | HouseNode | LordNode;
+/** § the village route: the village itself as a first-class record, not a
+ * section buried inside whichever inhabitant you happened to open. The
+ * shortest locator in the app — `seed:region:village`, with no fourth
+ * segment — which is also what a person's locator looks like with the person
+ * taken off the end, so truncating any record URL walks you up to its place. */
+export interface VillageNode {
+  kind: "village";
+  regionKey: string;
+  villageIdx: number;
+  crumb?: string;
+}
+/** § the parish route: a rung of the ECCLESIASTICAL tree, which does not nest
+ * inside the civil one (hierarchy.ts) — so it is addressed by a village that
+ * belongs to it rather than by an index of its own, and resolves from there to
+ * whichever mother church that village answers to. `level` is which rung: the
+ * parish, its deanery, or the diocese above both. */
+export interface ParishNode {
+  kind: "parish" | "deanery" | "diocese";
+  regionKey: string;
+  villageIdx: number;
+  crumb?: string;
+}
+export type StackNode = PersonNode | RoyalNode | KingNode | HouseNode | LordNode | VillageNode | ParishNode;
 
 export function isPersonNode(node: StackNode): node is PersonNode {
   return node.kind == null || node.kind === "person";
 }
 
 export function locator(worldSeed: number, node: StackNode | PersonAddress): string {
+  if ("kind" in node && node.kind === "village") return `${worldSeed}:${node.regionKey}:${node.villageIdx}`;
+  if ("kind" in node && (node.kind === "parish" || node.kind === "deanery" || node.kind === "diocese"))
+    return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.kind}`;
   if ("kind" in node && node.kind === "royal") return `${worldSeed}:${node.regionKey}:royal`;
   if ("kind" in node && node.kind === "king") return `${worldSeed}:${node.regionKey}:royal:${node.reignIdx}`;
   if ("kind" in node && node.kind === "house") return `${worldSeed}:${node.regionKey}:${node.villageIdx}:house`;
@@ -75,6 +100,12 @@ function kingGoto(regionKey: string, reignIdx: number): string {
 }
 function houseGoto(addr: Address): string {
   return `house:${addr.regionKey}:${addr.villageIdx}`;
+}
+export function villageGoto(addr: Address): string {
+  return `village:${addr.regionKey}:${addr.villageIdx}`;
+}
+function parishGoto(kind: "parish" | "deanery" | "diocese", addr: Address): string {
+  return `${kind}:${addr.regionKey}:${addr.villageIdx}`;
 }
 function lordGoto(kind: "lord" | "baron", addr: Address, headIdx: number): string {
   return `${kind}:${addr.regionKey}:${addr.villageIdx}:${headIdx}`;
@@ -395,9 +426,32 @@ function renderPopulationChart(E: typeof Engine, env: Envelope, year: number, lo
   </figure>`;
 }
 
-function renderVillageSection(E: typeof Engine, env: Envelope, year: number, locale: Locale, currentId: number): string {
+// The full roster of a village, as clickable rows. Shared by the person
+// record (where it is one section among many) and the village's own page
+// (§ the village route), which is the register and little else.
+function renderParishRegister(E: typeof Engine, env: Envelope, locale: Locale, currentId: number, open = false): string {
   const t = UI[locale];
-  return `<details class="register village reveal"><summary>${esc(t.villageHeader(env.place[locale]))}</summary>
+  const reg = E.roster(env)
+    .slice()
+    .sort((a, b) => a.birth - b.birth);
+  return (
+    `<details class="register reveal"${open ? " open" : ""}><summary>${esc(t.parishRegisterHeader(reg.length, env.place[locale]))}</summary><div class="register-list">` +
+    reg
+      .map(
+        (r) => `<button class="regrow${r.id === currentId ? " current" : ""}" data-goto="${env.regionKey}:${env.villageIdx}:${r.id}">
+      <span class="rr-name">${esc(r.name)} ${esc(r.surname)}${r.founder ? ` <i>${t.founderTag}</i>` : r.incomer ? ` <i>${t.incomerTag}</i>` : r.emigrated ? ` <i>${t.emigratedTag}</i>` : ""}</span>
+      <span class="rr-dates">${r.birth}–${r.death.year}</span>
+      <span class="rr-cause${r.death.cause === "plague" ? " plague" : ""}">${esc(E.CAUSE_LABEL[locale][r.death.cause])}</span>
+    </button>`,
+      )
+      .join("") +
+    `</div></details>`
+  );
+}
+
+function renderVillageSection(E: typeof Engine, env: Envelope, year: number, locale: Locale, currentId: number, open = false): string {
+  const t = UI[locale];
+  return `<details class="register village reveal"${open ? " open" : ""}><summary>${esc(t.villageHeader(env.place[locale]))}</summary>
     ${renderPopulationChart(E, env, year, locale)}
     <div class="village-controls">
       <label class="vyear-lbl" for="vyear">${esc(t.yearLabel)}</label>
@@ -449,6 +503,8 @@ function renderLineageBar(stack: StackNode[], t: (typeof UI)[Locale]): string {
 // person record, royal line, or noble house (§ nobility routes).
 export function buildViewHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], locale: Locale): string {
   const node = stack[stack.length - 1];
+  if (node.kind === "village") return buildVillageHTML(E, worldSeed, stack, node, locale);
+  if (node.kind === "parish" || node.kind === "deanery" || node.kind === "diocese") return buildParishHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "royal") return buildRoyalLineHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "king") return buildKingHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "house") return buildNobleHouseHTML(E, worldSeed, stack, node, locale);
@@ -480,7 +536,10 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
         ? t.bornRaised(bio.children.length, bio.children.filter((c) => c.death.age >= 16).length)
         : bio.inOrders
           ? t.noneInOrders
-          : bio.marriedOut
+          : // § the marriage squeeze: she left for service in a town, so this
+            // register is as unable to answer for her issue as if she had
+            // married out — which is what "in another register" says.
+            bio.marriedOut || bio.cityService
             ? t.inAnotherRegister
             : t.none,
       bio.children.some((c) => c.death.age >= 16) ? "gold" : "",
@@ -492,7 +551,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   <article class="card reveal">
     <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
     <h1 class="name"><span class="init">${esc(bio.name[0])}</span>${esc(bio.name.slice(1))} ${esc(bio.surname)}</h1>
-    <div class="dates">natus <b>${bio.birth}</b> · <span class="obiit">obiit ${bio.death.year}</span> · ${esc(bio.place)}, ${esc(bio.region)}</div>
+    <div class="dates">natus <b>${bio.birth}</b> · <span class="obiit">obiit ${bio.death.year}</span> · <button class="namelink" data-goto="${villageGoto(node)}">${esc(bio.place)}</button>, ${esc(bio.region)}</div>
     <div class="vitals">${vitals.map((v) => `<div class="vital"><div class="k">${v[0]}</div><div class="v ${v[2]}">${esc(v[1])}</div></div>`).join("")}</div>
   </article>`;
 
@@ -506,9 +565,9 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   const sovereignVitalGoto = birthReignIdx >= 0 ? kingGoto(node.regionKey, birthReignIdx) : royalGoto(node.regionKey);
   html += `<div class="sect reveal"><h2>${esc(t.jurisdictions)}</h2></div>
   <div class="vitals reveal">
-    <div class="vital"><div class="k">${t.parish}</div><div class="v">${esc(bio.jurisdiction.parish)}</div></div>
-    <div class="vital"><div class="k">${t.deanery}</div><div class="v">${esc(bio.jurisdiction.deanery)}</div></div>
-    <div class="vital"><div class="k">${t.diocese}</div><div class="v">${esc(bio.jurisdiction.diocese)}</div></div>
+    <div class="vital"><div class="k">${t.parish}</div><div class="v"><button class="namelink" data-goto="${parishGoto("parish", node)}">${esc(bio.jurisdiction.parish)}</button></div></div>
+    <div class="vital"><div class="k">${t.deanery}</div><div class="v"><button class="namelink" data-goto="${parishGoto("deanery", node)}">${esc(bio.jurisdiction.deanery)}</button></div></div>
+    <div class="vital"><div class="k">${t.diocese}</div><div class="v"><button class="namelink" data-goto="${parishGoto("diocese", node)}">${esc(bio.jurisdiction.diocese)}</button></div></div>
     <div class="vital"><div class="k">${t.manor}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(bio.fief.manor)}</button></div></div>
     <div class="vital"><div class="k">${t.honour}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(bio.fief.honour)}</button></div></div>
     <div class="vital"><div class="k">${t.lord}</div><div class="v"><button class="namelink" data-goto="${lordVitalGoto}">${esc(bio.fief.lord)}</button></div></div>
@@ -585,21 +644,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   }
 
   // Parish register browser
-  const reg = E.roster(env)
-    .slice()
-    .sort((a, b) => a.birth - b.birth);
-  html +=
-    `<details class="register reveal"><summary>${esc(t.parishRegisterHeader(reg.length, bio.place))}</summary><div class="register-list">` +
-    reg
-      .map(
-        (r) => `<button class="regrow${r.id === node.personId ? " current" : ""}" data-goto="${node.regionKey}:${node.villageIdx}:${r.id}">
-      <span class="rr-name">${esc(r.name)} ${esc(r.surname)}${r.founder ? ` <i>${t.founderTag}</i>` : r.incomer ? ` <i>${t.incomerTag}</i>` : r.emigrated ? ` <i>${t.emigratedTag}</i>` : ""}</span>
-      <span class="rr-dates">${r.birth}–${r.death.year}</span>
-      <span class="rr-cause${r.death.cause === "plague" ? " plague" : ""}">${esc(E.CAUSE_LABEL[locale][r.death.cause])}</span>
-    </button>`,
-      )
-      .join("") +
-    `</div></details>`;
+  html += renderParishRegister(E, env, locale, node.personId);
 
   // Village-in-year view (§ year layer), defaulting to the subject's prime
   html += renderVillageSection(E, env, defaultVillageYear(bio.birth), locale, node.personId);
@@ -803,5 +848,202 @@ function buildLordHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], 
   }
 
   html += `<div class="royal-link reveal"><button class="namelink" data-goto="${houseGoto(node)}">${esc(t.houseOf(line.surname))}</button></div>`;
+  return html;
+}
+
+// ---- § the village route ----
+// The village as a record in its own right. Everything here already existed
+// and was reachable only sideways: the year slider, the population curve and
+// the full register were sections of whichever INHABITANT you happened to
+// open, so a place could not be linked to, bookmarked, or arrived at — you
+// had to go through a person to look at their village, and the crumb trail
+// then said their name for a page that was mostly about the parish.
+//
+// The locator is a person's with the person taken off the end, so truncating
+// any record URL walks up to its place — and this page is where every place
+// name in the app now points.
+function buildVillageHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: VillageNode, locale: Locale): string {
+  const t = UI[locale];
+  const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
+  const title = env.place[locale];
+  node.crumb = E.placeShortOf(worldSeed, node.regionKey, node.villageIdx);
+
+  const urban = E.settlementTypeOf(worldSeed, node.regionKey, node.villageIdx) === "urban";
+  const jur = E.parishOf(worldSeed, node.regionKey, node.villageIdx, locale);
+  const fief = E.manorOf(worldSeed, node.regionKey, node.villageIdx, locale);
+  const lordVitalGoto = lordGoto("lord", node, E.tenureIndexAt(E.manorLineOf(worldSeed, node.regionKey, node.villageIdx).heads, E.ANCHOR_YEAR));
+
+  // § carrying capacity, made visible. The whole preventive check is measured
+  // against these two numbers (engine/capacity.ts) and neither was anywhere on
+  // the page — so the model's central constraint was invisible next to the
+  // curve it produces.
+  const stock = E.holdingsOf(worldSeed, node.regionKey, node.villageIdx);
+  const cultivated = Math.round(E.holdingsAt(worldSeed, node.regionKey, node.villageIdx, VILLAGE_YEAR_MAX));
+  const counts = E.populationSeries(env, VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX);
+  let peak = 0;
+  for (let i = 1; i < counts.length; i++) if (counts[i] > counts[peak]) peak = i;
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(urban ? t.settlementUrban : t.settlementRural)} · ${esc(env.region.name[locale])} · ${t.registerSpanValue(VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX)}</div>
+    <div class="vitals">
+      <div class="vital"><div class="k">${t.holdingsLabel}</div><div class="v">${esc(t.holdingsValue(stock, cultivated, VILLAGE_YEAR_MAX))}</div></div>
+      <div class="vital"><div class="k">${t.peakLabel}</div><div class="v gold">${esc(t.peakValue(counts[peak], VILLAGE_YEAR_MIN + peak))}</div></div>
+      <div class="vital"><div class="k">${t.registerSpan}</div><div class="v">${esc(t.soulsOnRegister(env.persons.length))}</div></div>
+    </div>
+  </article>`;
+
+  html += `<div class="sect reveal"><h2>${esc(t.jurisdictions)}</h2></div>
+  <div class="vitals reveal">
+    <div class="vital"><div class="k">${t.parish}</div><div class="v"><button class="namelink" data-goto="${parishGoto("parish", node)}">${esc(jur.parish)}</button></div></div>
+    <div class="vital"><div class="k">${t.deanery}</div><div class="v"><button class="namelink" data-goto="${parishGoto("deanery", node)}">${esc(jur.deanery)}</button></div></div>
+    <div class="vital"><div class="k">${t.diocese}</div><div class="v"><button class="namelink" data-goto="${parishGoto("diocese", node)}">${esc(jur.diocese)}</button></div></div>
+    <div class="vital"><div class="k">${t.manor}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(fief.manor)}</button></div></div>
+    <div class="vital"><div class="k">${t.honour}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(fief.honour)}</button></div></div>
+    <div class="vital"><div class="k">${t.lord}</div><div class="v"><button class="namelink" data-goto="${lordVitalGoto}">${esc(fief.lord)}</button></div></div>
+  </div>`;
+
+  // Open by default: on a person's page the village is an aside, but on the
+  // village's own page it is the subject, and a page whose subject is folded
+  // shut is a page that looks empty. It opens on the year of greatest
+  // extent, not defaultVillageYear's birth-plus-thirty — that is a PERSON's
+  // prime, and a place has no such thing.
+  html += renderVillageSection(E, env, VILLAGE_YEAR_MIN + peak, locale, -1, true);
+  html += renderParishRegister(E, env, locale, -1);
+  return html;
+}
+
+// ---- § the parish route ----
+// The ecclesiastical tree, walkable. parish/deanery/diocese were the only
+// jurisdiction vitals on a record that were dead text while manor, honour,
+// lord and sovereign all opened pages — and the parish is the one rung of the
+// whole structure that a medieval person would have felt every week.
+//
+// It is also where the model says something the civil tree cannot: parishes
+// do not nest inside villages (hierarchy.ts), and roughly a third of blocks
+// put several villages under one mother church. That fact existed in the
+// engine, was flagged on `Jurisdiction.shared`, and had nowhere to be seen.
+//
+// A deanery and a diocese have no bounded extent — villageIdx runs on
+// forever — so those two levels walk a fixed window of the address space and
+// say so, as a visitation would.
+const VISITATION_WINDOW = 60;
+
+function buildParishHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: ParishNode, locale: Locale): string {
+  const t = UI[locale];
+  const jur = E.parishOf(worldSeed, node.regionKey, node.villageIdx, locale);
+  const region = E.REGIONS[node.regionKey];
+  const mother = E.parishMotherVillageIdx(node.villageIdx);
+  // A shared block hangs off its mother village's own parish; an unshared one
+  // is the village's own. Either way THIS is the address that names it.
+  const parishSeat = jur.shared ? mother : node.villageIdx;
+
+  const placeRow = (idx: number, tag: string): string => {
+    const seatEnv = E.parishOf(worldSeed, node.regionKey, idx, locale);
+    return `<button class="ryrow" data-goto="${villageGoto({ regionKey: node.regionKey, villageIdx: idx })}">
+      <span class="ry-years">${idx}</span>
+      <span class="ry-style">${esc(E.placeShortOf(worldSeed, node.regionKey, idx))}</span>
+      <span class="ry-house">${esc(tag || seatEnv.parish)}</span>
+    </button>`;
+  };
+
+  let title: string;
+  let subtitle: string;
+  let body: string;
+
+  if (node.kind === "parish") {
+    title = t.parishOfHeader(jur.parish);
+    const siblings: number[] = [];
+    for (let i = mother; i < mother + E.PARISH_CLUSTER; i++) if (jur.shared || i === node.villageIdx) siblings.push(i);
+    subtitle = jur.shared
+      ? t.sharedParishNote(E.placeShortOf(worldSeed, node.regionKey, mother), siblings.length)
+      : t.ownParishNote(E.placeShortOf(worldSeed, node.regionKey, node.villageIdx));
+    body =
+      `<div class="sect reveal"><h2>${esc(t.villagesInParish)}</h2></div><div class="reigns reveal">` +
+      siblings.map((i) => placeRow(i, jur.shared ? (i === mother ? t.motherChurchTag : t.chapelryTag) : t.motherChurchTag)).join("") +
+      `</div>`;
+  } else if (node.kind === "deanery") {
+    title = t.deaneryOfHeader(jur.deanery);
+    subtitle = `${jur.diocese} · ${jur.province}`;
+    // A deanery's parishes really are unbounded — parishes run on as far as
+    // the village address space does — so this is the one level that has to
+    // walk a window and say so.
+    const here = E.bareParishOf(worldSeed, node.regionKey, node.villageIdx).deanery;
+    // One row per PARISH SEAT, not per village: a shared block would
+    // otherwise list the same church up to five times over.
+    const seen = new Set<number>();
+    const rows: string[] = [];
+    for (let i = 0; i < VISITATION_WINDOW; i++) {
+      const b = E.bareParishOf(worldSeed, node.regionKey, i);
+      if (b.deanery !== here) continue;
+      const seat = b.shared ? E.parishMotherVillageIdx(i) : i;
+      if (seen.has(seat)) continue;
+      seen.add(seat);
+      rows.push(`<button class="ryrow${seat === parishSeat ? " lived" : ""}" data-goto="${parishGoto("parish", { regionKey: node.regionKey, villageIdx: seat })}">
+        <span class="ry-years">${seat}</span>
+        <span class="ry-style">${esc(E.parishOf(worldSeed, node.regionKey, seat, locale).parish)}</span>
+        <span class="ry-house">${esc(E.placeShortOf(worldSeed, node.regionKey, seat))}</span>
+      </button>`);
+    }
+    body =
+      `<div class="sect reveal"><h2>${esc(t.parishesInDeanery)}</h2></div>` +
+      `<div class="honour-note reveal">${esc(t.visitationNote(VISITATION_WINDOW))}</div>` +
+      `<div class="reigns reveal">${rows.join("")}</div>`;
+  } else {
+    title = t.dioceseOfHeader(jur.diocese);
+    subtitle = jur.province;
+    // Exact, not sampled: a region's deaneries are a fixed short list and
+    // each answers to one diocese by name alone (engine/hierarchy.ts), so
+    // this really is EVERY deanery of this diocese and no visitation caveat
+    // is owed. Only the village used to address each row has to be looked
+    // for, and any village of that deanery will do.
+    const here = E.bareParishOf(worldSeed, node.regionKey, node.villageIdx);
+    const rows = E.deaneriesOf(node.regionKey)
+      .filter((d) => E.dioceseOfDeanery(worldSeed, node.regionKey, d) === here.diocese)
+      .map((d) => {
+        let seat = -1;
+        const seen = new Set<number>();
+        for (let i = 0; i < VISITATION_WINDOW; i++) {
+          const b = E.bareParishOf(worldSeed, node.regionKey, i);
+          if (b.deanery !== d) continue;
+          if (seat < 0) seat = i;
+          seen.add(b.shared ? E.parishMotherVillageIdx(i) : i);
+        }
+        const label = `<span class="ry-years">${seat < 0 ? "—" : seat}</span><span class="ry-style">${esc(d)}</span><span class="ry-house">${esc(t.parishesFound(seen.size))}</span>`;
+        // No village of this deanery turned up nearby — it is still part of
+        // the diocese, just not somewhere this page can open.
+        if (seat < 0) return `<div class="ryrow">${label}</div>`;
+        return `<button class="ryrow${d === here.deanery ? " lived" : ""}" data-goto="${parishGoto("deanery", { regionKey: node.regionKey, villageIdx: seat })}">${label}</button>`;
+      });
+    body = `<div class="sect reveal"><h2>${esc(t.deaneriesInDiocese)}</h2></div><div class="reigns reveal">${rows.join("")}</div>`;
+  }
+  node.crumb = title;
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(subtitle)}</div>
+  </article>`;
+
+  // The rungs above this one, each a link — so the tree walks both ways.
+  const up: string[] = [];
+  if (node.kind !== "diocese") {
+    if (node.kind === "parish")
+      up.push(
+        `<div class="vital"><div class="k">${t.deanery}</div><div class="v"><button class="namelink" data-goto="${parishGoto("deanery", node)}">${esc(jur.deanery)}</button></div></div>`,
+      );
+    up.push(
+      `<div class="vital"><div class="k">${t.diocese}</div><div class="v"><button class="namelink" data-goto="${parishGoto("diocese", node)}">${esc(jur.diocese)}</button></div></div>`,
+    );
+  }
+  up.push(`<div class="vital"><div class="k">${t.province}</div><div class="v">${esc(jur.province)}</div></div>`);
+  up.push(`<div class="vital"><div class="k">${t.region}</div><div class="v">${esc(region.name[locale])}</div></div>`);
+  html += `<div class="vitals reveal">${up.join("")}</div>`;
+  html += body;
   return html;
 }

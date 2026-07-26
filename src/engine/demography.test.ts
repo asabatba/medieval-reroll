@@ -355,6 +355,101 @@ describe("aggregate demographic statistics stay within historical bands", () => 
     }
   });
 
+  it("§ the marriage squeeze: permanent celibacy falls on the MEN in the Mediterranean, not the women", () => {
+    // The European Marriage Pattern's signature, and this engine used to print
+    // it backwards. Female lay celibacy came out at 15–22% in the Mediterranean
+    // against 11–12% in the north-west — the exact reverse of the thing the EMP
+    // is named for, and produced by nothing anyone had chosen: female celibacy
+    // was a pure RESIDUAL here (only men roll a never-marry chance), so it
+    // simply recorded whichever surplus the machinery happened to leave.
+    //
+    // Three causes, all now addressed in village.ts and demography.ts. A
+    // widower was hard-coded to want a widow, which is NW Europe's answer and
+    // the reverse of the dowry regime's, where remarriage to a girl is what
+    // absorbed the surplus the wide spousal age gap created. The groom-import
+    // path refused to invent an incomer unless holdings stood empty while the
+    // bride-import path always would, making every village a net importer of
+    // wives. And a daughter's only way out of the parish was to marry out of
+    // it — there was no city service at all, which is where a Mediterranean
+    // village's surplus daughters actually went.
+    //
+    // What is asserted here is the SHAPE, not the levels: that the surplus
+    // falls on the sex the historical record puts it on. In the Mediterranean
+    // the catasto and its like show near-universal female marriage alongside a
+    // great many men who never married; in the north-west the two sexes are of
+    // a kind, both substantial.
+    const med = ["catalonia", "italy", "castile", "portugal"];
+    const nw = ["england", "germany", "scotland", "france"];
+    const never: Record<string, { F: number; M: number; city: number }> = {};
+    for (const rk of [...med, ...nw]) {
+      let nF = 0;
+      let nFnever = 0;
+      let nM = 0;
+      let nMnever = 0;
+      let cohort = 0;
+      let city = 0;
+      for (let v = 0; v < VILLAGES_PER_REGION; v++) {
+        const env = resolveVillage(SEED, rk, v);
+        for (const p of env.persons) {
+          if (p.founder) continue;
+          // "Never married at 45", the standard EMP indicator: of those who
+          // lived to see it and stayed in the parish as lay people.
+          if (p.death.age >= 45 && !p.emigrated && !p.inOrders) {
+            if (p.sex === "F") {
+              nF++;
+              if (!p.unions?.length) nFnever++;
+            } else {
+              nM++;
+              if (!p.unions?.length) nMnever++;
+            }
+          }
+          if (p.sex === "F" && p.death.age >= REGIONS[rk].marriageF[1]) {
+            cohort++;
+            if (p.cityService) city++;
+          }
+        }
+      }
+      never[rk] = { F: nFnever / nF, M: nMnever / nM, city: city / cohort };
+      // Both sexes stay inside a band the late-medieval evidence supports —
+      // this is a real and sizeable estate everywhere, never a rounding error
+      // and never most of the parish.
+      expect(never[rk].F, `${rk} female celibacy`).toBeGreaterThan(0.04);
+      expect(never[rk].F, `${rk} female celibacy`).toBeLessThan(0.2);
+      expect(never[rk].M, `${rk} male celibacy`).toBeGreaterThan(0.06);
+      expect(never[rk].M, `${rk} male celibacy`).toBeLessThan(0.32);
+    }
+    const mean = (ks: string[], f: (s: { F: number; M: number; city: number }) => number) => ks.reduce((a, k) => a + f(never[k]), 0) / ks.length;
+    // The signature itself: in the Mediterranean the men carry it, by a wide
+    // margin; in the north-west the two sexes are within reach of each other.
+    // Tuscany clears by the least (~1.45 against 2.0–2.2 for the Iberian
+    // three), and for a reason worth leaving on the record: its spousal age
+    // gap is the widest in the model at eleven years, so it generates the
+    // largest surplus of young unmarried women of anywhere — which is exactly
+    // why it needed the widower-remarriage channel most, and why it still
+    // shows the most residue after it. The obvious further outlet, the
+    // Tuscan convent, is NOT available: raising it drains fertile women out
+    // of villages that have none to spare and turns the region's fifteenth
+    // century from a plateau into a slow emptying (measured: end/post-plague
+    // 1.04 down to 0.85). See demography.ts's own note on that vocation rate.
+    for (const rk of med) expect(never[rk].M, `${rk} men bear the squeeze`).toBeGreaterThan(never[rk].F * 1.35);
+    const ratio = (ks: string[]) => mean(ks, (s) => s.M / s.F);
+    expect(ratio(med), "Mediterranean men bear it").toBeGreaterThan(1.6);
+    expect(ratio(nw), "north-western men and women alike").toBeLessThan(1.4);
+    expect(mean(med, (s) => s.M)).toBeGreaterThan(mean(nw, (s) => s.M) * 1.4);
+    // And the half that was actually inverted: Mediterranean women are no
+    // likelier to die unmarried than north-western ones. Asserted as "not
+    // above" rather than "well below" because it is measured over villages,
+    // where the contrast is milder than the urban figures the EMP is usually
+    // quoted from — but the direction may never go back.
+    expect(mean(med, (s) => s.F)).toBeLessThan(mean(nw, (s) => s.F) * 1.1);
+    // The outlet that makes it possible, and its regional shape: a real
+    // destination for Mediterranean daughters, next to nothing in the
+    // north-west, where life-cycle service happened inside the village and
+    // ended in a local marriage instead.
+    for (const rk of med) expect(never[rk].city, `${rk} city service`).toBeGreaterThan(0.03);
+    for (const rk of nw) expect(never[rk].city, `${rk} city service`).toBeLessThan(0.02);
+  });
+
   it("upward class mobility rises after the Black Death (aggregated across regions)", () => {
     let pre = 0;
     let post = 0;

@@ -28,7 +28,7 @@ import type { Fief, Jurisdiction } from "./types.js";
 // village, but occasionally several small villages in a block share a
 // single mother parish (a "several villages share a parish" constraint,
 // resolved once per block, deterministically).
-const PARISH_CLUSTER = 5;
+export const PARISH_CLUSTER = 5;
 
 // The anchor village of a shared block — the one whose own parish (slot 0)
 // every other village in the block is baptized/buried under when
@@ -36,6 +36,35 @@ const PARISH_CLUSTER = 5;
 // duplicate the block math to name that village.
 export function parishMotherVillageIdx(villageIdx: number): number {
   return Math.floor(villageIdx / PARISH_CLUSTER) * PARISH_CLUSTER;
+}
+
+/** Which diocese a deanery answers to. A pure function of the deanery's NAME,
+ * which is what makes the diocese the one rung of this tree that can be
+ * enumerated exactly (§ the parish route): the region's deanery list is fixed
+ * and short, so "every deanery of this diocese" is a filter over that list
+ * rather than a guess from however far a caller happened to look. */
+export function dioceseOfDeanery(worldSeed: number, regionKey: string, deanery: string): string {
+  return makeRng(addrHash(worldSeed, [regionKey, "deanery-diocese", deanery])).pick(JURISDICTIONS[regionKey].dioceses);
+}
+
+/** The region's whole deanery list — a fixed set, unlike parishes, which run
+ * on as far as the village address space does. */
+export function deaneriesOf(regionKey: string): readonly string[] {
+  return JURISDICTIONS[regionKey].deaneries;
+}
+
+/** The bare names behind parishOf's localized phrases ("Ashcombe", not "the
+ * deanery of Ashcombe"), for callers that need to COMPARE two villages'
+ * jurisdictions rather than print one. */
+export function bareParishOf(worldSeed: number, regionKey: string, villageIdx: number): { shared: boolean; deanery: string; diocese: string } {
+  const j = JURISDICTIONS[regionKey];
+  const block = Math.floor(villageIdx / PARISH_CLUSTER);
+  const shared = makeRng(addrHash(worldSeed, [regionKey, "parish-block", block])).chance(0.3);
+  const parishSlot = shared ? 0 : villageIdx % PARISH_CLUSTER;
+  const pRng = makeRng(addrHash(worldSeed, [regionKey, "parish", block, parishSlot]));
+  pRng.pick(SAINTS.en); // the saint draw, consumed so the deanery draw lands on the same value parishOf sees
+  const deanery = pRng.pick(j.deaneries);
+  return { shared, deanery, diocese: dioceseOfDeanery(worldSeed, regionKey, deanery) };
 }
 
 export function parishOf(worldSeed: number, regionKey: string, villageIdx: number, locale: Locale): Jurisdiction {
@@ -47,8 +76,7 @@ export function parishOf(worldSeed: number, regionKey: string, villageIdx: numbe
   const pRng = makeRng(addrHash(worldSeed, [regionKey, "parish", block, parishSlot]));
   const saint = pRng.pick(SAINTS[locale]);
   const deanery = pRng.pick(j.deaneries);
-  const dRng = makeRng(addrHash(worldSeed, [regionKey, "deanery-diocese", deanery]));
-  const diocese = dRng.pick(j.dioceses);
+  const diocese = dioceseOfDeanery(worldSeed, regionKey, deanery);
   return locale === "ca"
     ? {
         parish: `la parròquia de ${saint}`,

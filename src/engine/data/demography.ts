@@ -44,8 +44,69 @@ export interface RegionDemography {
   birthSpacing: [number, number];
   /** Chance a widower / widow eligible for remarriage actually remarries. */
   remarry: { M: number; F: number };
+  /** § the marriage squeeze: who a remarrying widower actually looked for.
+   *
+   * The other half of the inverted-celibacy problem, and the more surprising
+   * one: the model created the Mediterranean marriage squeeze (a wide spousal
+   * age gap means each cohort of brides is drawn from a much larger, younger
+   * pool than its grooms) and then blocked the very thing that historically
+   * relieved it. A widower here preferred a widow, or a never-married woman
+   * already past the ordinary local marriage window — which is a fair enough
+   * description of NW Europe, and precisely backwards for the dowry regime.
+   *
+   * In Tuscany the two facts belong together: widows seldom remarried (the
+   * dowry went back with them — `remarry.F` above is already 0.16 there), and
+   * the widower took a girl of fifteen or sixteen. That asymmetry is what
+   * absorbed the surplus of young unmarried women the age gap itself created,
+   * and it is why the catasto finds near-universal female marriage alongside
+   * a great many permanently unmarried MEN. Both numbers below are read
+   * straight into matchWidowers' scorer in village.ts. */
+  widowerBride: {
+    /** The age gap he aims at — his own age less hers. */
+    gap: number;
+    /** The OLDEST bride he actually aims at, whatever `gap` would suggest.
+     *
+     * This is what makes the dowry regime a different market rather than the
+     * same one shifted a few years: a gap alone is relative to his own age, so
+     * a widower of fifty-five aims at forty-two and takes a widow — which is
+     * the NW-European answer and, run in the Mediterranean, is why raising
+     * `remarry.M` there bought almost nothing. He was not looking for a woman
+     * a fixed distance below himself; he was looking for a girl, at fifty-five
+     * as at thirty-five, and the age gap is the CONSEQUENCE of that rather
+     * than the rule behind it. Effectively unbounded in NW Europe (the gap
+     * governs there, as it did). */
+    cap: number;
+    /** Score adjustment for a never-married woman still inside the ordinary
+     * local marriage window: a PENALTY in NW Europe (he passes over the young
+     * single woman for a widow), a BONUS under the dowry regime (she is
+     * exactly who he wants). */
+    maiden: number;
+  };
   /** Chance an unmatched adult woman emigrates (normal year / famine-or-war year). */
   emigration: { base: number; pressured: number };
+  /** § the marriage squeeze: chance an unmatched adult woman who does NOT
+   * marry out instead leaves for service in a town.
+   *
+   * The second half of the European Marriage Pattern's female outlet, and the
+   * one this model had no representation of. Every departure used to be a
+   * marriage — so the only thing a surplus daughter could do was marry
+   * elsewhere or stay a lay spinster forever, and the Mediterranean regions
+   * (low emigration, strong land ties, a very wide spousal age gap) came out
+   * with HIGHER never-married shares than England and Scotland: the EMP's
+   * signature read backwards.
+   *
+   * The rate is HIGHEST in the Mediterranean, which is the opposite of
+   * `emigration.base` above and deliberately so. `emigration.base` encodes a
+   * HOUSEHOLD's attachment to its land, which really was stronger there; this
+   * encodes a DAUGHTER's route out of that household, which was the reverse.
+   * A girl of the Tuscan or Catalan contado sent to a city house to earn her
+   * dowry over eight or ten years is one of the best-documented movements in
+   * Mediterranean social history — the Florentine and Barcelona notarial
+   * service contracts are full of them — and it has no NW-European
+   * counterpart of the same kind, because there life-cycle service was
+   * already happening inside the village (see `service` above, which runs at
+   * roughly double the Mediterranean rate for exactly that reason). */
+  cityService: number;
   /** Chance a low-wealth child spends adolescent years in service/apprenticeship. */
   service: { M: number; F: number };
   /** Upward class mobility chances for a person coming of age (base / after 1349). */
@@ -102,7 +163,26 @@ export interface RegionDemography {
     heirBase: number;
     /** Elevated chance in a famine/war year. */
     pressured: number;
-    /** Chance, per matching round, that a local woman without a local match marries a real immigrant groom instead of waiting. */
+    /** Chance, per matching round, that a local woman without a local match
+     * marries a real immigrant groom instead of waiting.
+     *
+     * § the marriage squeeze: this is the single biggest determinant of
+     * female celibacy in the model, and it used to be set as if it were an
+     * afterthought of the OUT-migration rates above it. It is not. A village
+     * imports brides at a region-neutral rate (the men's loop leaks a fixed
+     * fifth of its matches outward, under a shared exogamy cap), so this
+     * number alone decides whether the parish is a net importer or a net
+     * exporter of marriage partners — and every net-exported one is a local
+     * daughter left over. Set below the NW figure, as the Mediterranean's
+     * were, it made those regions net EXPORTERS (Catalonia took in one
+     * husband for every 1.5 wives) while England took in more husbands than
+     * wives, and that one asymmetry was worth almost the whole of the
+     * inverted celibacy gap.
+     *
+     * The dowry regime's own logic runs the other way: a dowry is a marriage-
+     * market instrument for placing a daughter, and a region whose non-heirs
+     * stayed near home (`nonHeirBase` below is lowest in exactly these
+     * regions) had more unattached local men within reach, not fewer. */
     groomPullChance: number;
   };
   /** § the celibate estate: entry into religion — the third thing a life
@@ -182,7 +262,15 @@ const NW_DEFAULT: RegionDemography = {
   infantWealthMult: [1.08, 1.0, 0.92, 0.82],
   birthSpacing: [2, 4],
   remarry: { M: 0.55, F: 0.3 },
+  widowerBride: { gap: 8, cap: 99, maiden: 6 },
   emigration: { base: 0.5, pressured: 0.68 },
+  // Near zero in NW Europe on purpose: this is a Mediterranean institution.
+  // The NW-European outlet for the same surplus was life-cycle service INSIDE
+  // the village (`service` below, at roughly double the Mediterranean rate),
+  // which ended in a local marriage rather than in a departure — and what it
+  // did not absorb stayed in the parish as the permanent spinsterhood the
+  // European Marriage Pattern is named for.
+  cityService: 0.02,
   service: { M: 0.38, F: 0.42 },
   mobility: {
     serfToFree: { base: 0.03, postPlague: 0.12 },
@@ -211,6 +299,13 @@ const NW_DEFAULT: RegionDemography = {
  * went to the Church everywhere in Europe. */
 const DOWRY_REGIME_VOCATION = { M: 0.014, F: 0.015, nonHeirMult: 2.3, dowriedMult: 2.8, clergyMult: 3 };
 
+/** § the marriage squeeze, the dowry regime's own answer to it. A widower
+ * remarried a girl, not a widow — see the `widowerBride` doc above. The gap is
+ * markedly wider than the region's own FIRST-marriage gap, because he is
+ * remarrying at forty into the same pool of eighteen-year-olds he first
+ * married out of at twenty-five. */
+const DOWRY_REGIME_WIDOWER_BRIDE = { gap: 13, cap: 22, maiden: -4 };
+
 const DEMOGRAPHY_DATA = {
   england: { ...NW_DEFAULT },
   germany: {
@@ -235,8 +330,10 @@ const DEMOGRAPHY_DATA = {
     ...NW_DEFAULT,
     hazardMult: 1.02,
     birthSpacing: [2, 3], // earlier weaning, tighter spacing in the Mediterranean pattern
-    remarry: { M: 0.5, F: 0.18 }, // dowry-return regime discouraged widow remarriage
+    remarry: { M: 0.66, F: 0.18 }, // dowry-return regime: it discouraged the WIDOW and freed the WIDOWER — see DOWRY_REGIME_WIDOWER_BRIDE
+    widowerBride: DOWRY_REGIME_WIDOWER_BRIDE,
     emigration: { base: 0.45, pressured: 0.62 },
+    cityService: 0.52, // Barcelona's notarial service contracts: a contado girl placed in a city house for the years it took to earn her dowry
     service: { M: 0.2, F: 0.24 },
     mobility: {
       serfToFree: { base: 0.02, postPlague: 0.08 }, // remença servitude was sticky until 1486
@@ -253,7 +350,7 @@ const DEMOGRAPHY_DATA = {
       },
     },
     maternalMortalityPerBirth: 0.0052,
-    maleOutMigration: { nonHeirBase: 0.32, heirBase: 0.05, pressured: 0.5, groomPullChance: 0.22 }, // stronger land ties, less rural out-migration
+    maleOutMigration: { nonHeirBase: 0.32, heirBase: 0.05, pressured: 0.5, groomPullChance: 0.36 }, // stronger land ties, less rural out-migration
     vocation: DOWRY_REGIME_VOCATION,
     illegitimacyPerYear: 0.0045, // tighter dowry-regime household surveillance
     bridalPregnancy: 0.1,
@@ -264,8 +361,14 @@ const DEMOGRAPHY_DATA = {
     infantMult: 1.1, // wet-nursing raised recorded infant deaths
     childMult: 1.05,
     birthSpacing: [2, 3],
-    remarry: { M: 0.52, F: 0.16 },
+    remarry: { M: 0.7, F: 0.16 },
+    // The sharpest case in the model, and the one the whole mechanism was
+    // written for: a first-marriage gap of eleven years (regions.ts) against a
+    // widow-remarriage rate of 0.16. Herlihy and Klapisch-Zuber's catasto
+    // Tuscany is a marriage market of old widowers and very young girls.
+    widowerBride: { gap: 18, cap: 20, maiden: -6 },
     emigration: { base: 0.5, pressured: 0.66 },
+    cityService: 0.58, // Florentine domestic service: the standard destination for a contado daughter, and the standard way her dowry was found
     service: { M: 0.15, F: 0.18 },
     mobility: {
       serfToFree: { base: 0.04, postPlague: 0.1 },
@@ -284,7 +387,7 @@ const DEMOGRAPHY_DATA = {
       },
     },
     maternalMortalityPerBirth: 0.0068,
-    maleOutMigration: { nonHeirBase: 0.3, heirBase: 0.05, pressured: 0.48, groomPullChance: 0.2 }, // urban guild apprenticeship more local than rural flight
+    maleOutMigration: { nonHeirBase: 0.3, heirBase: 0.05, pressured: 0.48, groomPullChance: 0.38 }, // urban guild apprenticeship more local than rural flight
     // Tuscany is the sharpest case of the whole pattern: a marriage dowry
     // that ran ahead of what even patrician houses could find for every
     // daughter, against a convent gift a fraction of the size.
@@ -303,11 +406,13 @@ const DEMOGRAPHY_DATA = {
     ...NW_DEFAULT,
     hazardMult: 1.02,
     birthSpacing: [2, 3],
-    remarry: { M: 0.5, F: 0.22 },
+    remarry: { M: 0.68, F: 0.22 },
+    widowerBride: DOWRY_REGIME_WIDOWER_BRIDE,
     emigration: { base: 0.45, pressured: 0.65 }, // the Reconquista frontier pulled settlers south
+    cityService: 0.56,
     service: { M: 0.22, F: 0.26 },
     maternalMortalityPerBirth: 0.0065,
-    maleOutMigration: { nonHeirBase: 0.36, heirBase: 0.06, pressured: 0.58, groomPullChance: 0.26 }, // frontier repoblación an outlet for younger sons, alongside the standing war
+    maleOutMigration: { nonHeirBase: 0.36, heirBase: 0.06, pressured: 0.58, groomPullChance: 0.36 }, // frontier repoblación an outlet for younger sons, alongside the standing war
     vocation: DOWRY_REGIME_VOCATION,
     illegitimacyPerYear: 0.0065,
     bridalPregnancy: 0.1,
@@ -326,11 +431,13 @@ const DEMOGRAPHY_DATA = {
     ...NW_DEFAULT,
     hazardMult: 1.03,
     birthSpacing: [2, 3],
-    remarry: { M: 0.5, F: 0.2 }, // dowry-return regime, as in Castile/Catalonia
+    remarry: { M: 0.68, F: 0.2 }, // dowry-return regime, as in Castile/Catalonia
+    widowerBride: DOWRY_REGIME_WIDOWER_BRIDE,
     emigration: { base: 0.46, pressured: 0.64 }, // Ceuta, Madeira, and the Atlantic voyages opened new outlets as the fifteenth century wore on
+    cityService: 0.56, // Lisbon and Porto drew servant girls from the Minho and the Beira exactly as the Italian and Catalan cities did
     service: { M: 0.22, F: 0.26 },
     maternalMortalityPerBirth: 0.0065,
-    maleOutMigration: { nonHeirBase: 0.38, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.26 }, // North African garrisons and the African voyages drew off younger sons who once would simply have left for the towns
+    maleOutMigration: { nonHeirBase: 0.38, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.36 }, // North African garrisons and the African voyages drew off younger sons who once would simply have left for the towns
     vocation: DOWRY_REGIME_VOCATION,
     illegitimacyPerYear: 0.007,
     bridalPregnancy: 0.1,

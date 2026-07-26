@@ -95,6 +95,16 @@ export interface Person {
   serviceMaster?: number;
   inOrders?: boolean;
   marriedOut?: boolean;
+  /** § the marriage squeeze: she left for service in a town rather than to be
+   * married — the outlet this model had no representation of at all, and
+   * whose absence left every surplus Mediterranean daughter with nowhere to
+   * go but permanent lay spinsterhood. A separate flag from `marriedOut`
+   * precisely so the register doesn't claim a marriage it never saw: she may
+   * well marry at the far end (she is `emigrated` with a real `emigrateTo`,
+   * so a destination village can pull her as a bride like any other
+   * emigrant), and if she does, the biography reads that from the
+   * destination's own record instead of asserting it here. */
+  cityService?: boolean;
   emigrated?: boolean;
   emigrateTo?: Address;
   longDistance?: boolean;
@@ -393,6 +403,8 @@ export interface Bio {
   incomer: boolean;
   founder: boolean;
   marriedOut: boolean;
+  /** § the marriage squeeze: she left the parish for service in a town. */
+  cityService: boolean;
   originPlace: string | null;
   jurisdiction: Jurisdiction;
   fief: Fief;

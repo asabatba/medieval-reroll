@@ -430,7 +430,18 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   function applyTwinExcessMortality(twin: Person): void {
     if (twin.death.age === 0) return;
     const r = makeRng(personStream(vHash, 981000, twin.id));
-    if (r.chance(TWIN_EXCESS_INFANT_MORTALITY)) twin.death = { year: twin.birth, age: 0, cause: "infancy" };
+    if (!r.chance(TWIN_EXCESS_INFANT_MORTALITY)) return;
+    twin.death = { year: twin.birth, age: 0, cause: "infancy" };
+    // This is the one place in the model where a death already rolled is
+    // REPLACED, and makeChild has by now allocated a whole life on the
+    // strength of the roll it replaces. § the celibate estate is the part
+    // that doesn't clean up after itself: rollVocation refuses anyone who
+    // died before 14, but it was asked before this, and the answer stands
+    // unless it is withdrawn — which put a cowled infant in the register with
+    // a fourteen-year gap between his birth and his tonsure. (`service` needs
+    // no such handling: resolveServiceSpells clamps every spell to the
+    // servant's own death year and drops the ones that leave nothing.)
+    twin.inOrders = undefined;
   }
   function maybeTwin(c: Couple, H: Person, W: Person, y: number, firstborn: Person): void {
     if (c.children.length >= 11) return;
@@ -535,7 +546,13 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       eligible.sort((a, b) => a.birth - b.birth || a.id - b.id);
       const men = eligible.filter((p) => p.sex === "M");
       const women = persons
-        .filter((p) => p.sex === "F" && !p.founder && !p.inOrders && p.death.age >= 16 && p.spouse == null && !p.marriedOut)
+        // § the marriage squeeze: `emigrated` as well as `marriedOut`. The two
+        // used to be the same fact for a woman — every female departure was a
+        // marriage — but a daughter who left for service in a town is
+        // `emigrated` without being `marriedOut`, and the interleaved
+        // remarriage/matching loop further down would otherwise still marry
+        // her here after she had gone.
+        .filter((p) => p.sex === "F" && !p.founder && !p.inOrders && p.death.age >= 16 && p.spouse == null && !p.marriedOut && !p.emigrated)
         .sort((a, b) => a.birth - b.birth || a.id - b.id);
       const takenW = new Set<number>();
 
@@ -578,7 +595,15 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           if (W.father === M.father && M.father !== -1) continue; // no siblings (paternal)
           if (W.mother === M.mother && M.mother !== -1) continue; // no siblings (maternal — a widow's children by an earlier husband)
           const wAgeAt = wantYear - W.birth;
-          if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6) continue;
+          // § the marriage squeeze: the preventive check pushes HIS marriage
+          // age later (marriageAgeShift, above) while her acceptable age band
+          // stayed pinned to her own birth — so a crowded village kept
+          // deferring its men into a bride pool that had aged out from under
+          // them, and stranded the women it deferred past the window for good.
+          // If the check delays the marriage it delays the market, both sides
+          // of it. Worst in the Mediterranean, whose window is the narrowest
+          // and starts earliest, and whose villages are the most crowded.
+          if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6 + Math.max(0, marriageAgeShift(pressure))) continue;
           if (W.death.year <= wantYear || M.death.year <= wantYear) continue;
           // § consanguinity avoidance: a first cousin is a last resort, not
           // an equal candidate — the impediment and the cost of the
@@ -672,7 +697,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       // herself is marrying someone who actually left another village's own
       // register, not a fabrication on either side.
       for (const W of women) {
-        if (takenW.has(W.id) || W.spouse != null || W.marriedOut) continue;
+        if (takenW.has(W.id) || W.spouse != null || W.marriedOut || W.emigrated) continue;
         // § the preventive check: she waits (or doesn't) for the same reason
         // he does — the men's loop above already shifts her age wherever she
         // was matched there, and this keeps the immigrant-groom route from
@@ -696,7 +721,6 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         if (!rng.chance(demo.maleOutMigration.groomPullChance + (vacancy ? 0.1 : 0))) continue;
         if (!exogamyAllowed(pressure)) continue;
         const pulled = pullImmigrantGroom(wantYear, region.marriageM[0] - 3, region.marriageM[1] + 8);
-        if (!pulled && !vacancy) continue;
         let M: Person;
         if (pulled) {
           const { srcIdx, cand } = pulled;
@@ -715,9 +739,26 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           M.death = { ...cand.death }; // copy of the ORIGIN's canonical roll: the two records never disagree on when he died
           M.riskTrade = cand.riskTrade ?? "normal";
         } else {
-          // Nobody in the cluster to pull, but a holding going begging: an
-          // unaddressable incomer, exactly as the bride path above already
-          // falls back to when the cluster has no real emigrant to offer.
+          // § the marriage squeeze: nobody in the cluster to pull, so an
+          // unaddressable incomer — exactly as the bride path above falls back
+          // to, and now on exactly the same terms.
+          //
+          // This fallback used to require a VACANCY, and the bride path's
+          // never did, which quietly made the model a net importer of wives
+          // and a net exporter of husbands everywhere. That is not a fact
+          // about medieval marriage; it is an artefact of one path being
+          // allowed to invent a spouse the register can't address and the
+          // other not. It bit hardest where the local supply of real male
+          // emigrants was thinnest — the Mediterranean, whose non-heirs stayed
+          // near home (`nonHeirBase`) and so gave the cluster fewest grooms to
+          // pull — and it was worth most of the inverted celibacy gap:
+          // Catalonia took in one husband for every 1.5 wives while England
+          // took in more husbands than wives.
+          //
+          // Nothing is unguarded by removing it: this path still answers to
+          // the hard edge of the preventive check (a groom needs a holding,
+          // checked above), to the exogamy ceiling, and to groomPullChance —
+          // three gates the bride path does not all have.
           const mb = wantYear - rng.int(region.marriageM[0], region.marriageM[1]);
           M = addPerson({
             name: rng.pick(region.maleNames),
@@ -899,6 +940,22 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const offset = clusterOffset(villageIdx);
     if (offset < LOCAL_CLUSTER - 1 && rng.chance(0.8)) {
       p.emigrateTo = { regionKey, villageIdx: clusterBase(villageIdx) + rng.int(offset + 1, LOCAL_CLUSTER - 1) };
+      // § the marriage squeeze: someone leaving specifically FOR service in a
+      // town should land in one. settlementTypeOf is a plain hash of the
+      // address (settlement.ts), so this costs nothing and resolves no
+      // envelope — if a market town is within reach up the cluster, prefer
+      // it; if the cluster is all farmland, the ordinary draw above stands
+      // and she has simply gone into service at the biggest place near her,
+      // which is what most of them did.
+      if (p.cityService) {
+        for (let i = offset + 1; i < LOCAL_CLUSTER; i++) {
+          const idx = clusterBase(villageIdx) + i;
+          if (settlementTypeOf(worldSeed, regionKey, idx) === "urban") {
+            p.emigrateTo = { regionKey, villageIdx: idx };
+            break;
+          }
+        }
+      }
     } else {
       const higher = higherRankRegions(regionKey);
       if (higher.length && rng.chance(0.6)) {
@@ -933,10 +990,37 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // so it has to answer to it. A village with tenements standing empty
     // after the plague kept its daughters; one with none to give could not.
     const base = (pressured ? demo.emigration.pressured : demo.emigration.base) * emigrationMult(pressureAt(atYear));
-    if (!rng.chance(base)) continue;
-    W.emigrated = true;
-    W.marriedOut = true;
-    assignDestination(W);
+    // § the marriage squeeze: two draws, because a departure is not always a
+    // marriage. The first is the old one — she married out of the parish. The
+    // second is the outlet this model simply did not have: she went into
+    // service in a town. Both are drawn unconditionally, so which branch is
+    // taken never changes the shared stream's draw count (the same discipline
+    // genChildren's bridal-pregnancy roll follows).
+    //
+    // Without the second draw the only thing an unmatched daughter could do
+    // was marry elsewhere or stay a lay spinster to the end, and the
+    // Mediterranean — where households held to their land hardest, and where
+    // a spousal age gap of five to eleven years produced the largest surplus
+    // of unmarried young women in the model — came out with the HIGHEST
+    // permanent female celibacy in Europe. The reverse is the case: the
+    // European Marriage Pattern's whole signature is late, incomplete
+    // marriage in the north-west and early, near-universal marriage in the
+    // south. The daughters were leaving; they just weren't leaving to marry.
+    const marriesOut = rng.chance(base);
+    // § the preventive check: service in a town answers to crowding exactly as
+    // marrying out does, and it has to, or it is not an outlet at all — the
+    // village is held at its own ceiling (capacity.ts), so relieving the
+    // female surplus by any fixed amount simply grows the population until
+    // the surplus comes back. A rate that RISES with pressure is what makes
+    // this equilibrate: the fuller the parish, the harder it sent its
+    // daughters out to service, which is also the plain sense of it.
+    const toService = rng.chance(demo.cityService * emigrationMult(pressureAt(atYear)));
+    if (marriesOut || toService) {
+      W.emigrated = true;
+      if (marriesOut) W.marriedOut = true;
+      else W.cityService = true;
+      assignDestination(W);
+    }
   }
 
   // § male out-migration: the landless-younger-son safety valve, same
@@ -1018,17 +1102,31 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         if (W.mother === m.mother && m.mother !== -1) continue; // never a sister (maternal)
         if (W.death.year <= year) continue;
         const age = year - W.birth;
-        if (age < 18 || age > 45) continue;
+        // § the marriage squeeze: the floor is the region's own earliest
+        // marriage age, not a flat 18. In Tuscany that is fifteen, and a flat
+        // 18 excluded from the widower's market precisely the girls the
+        // catasto shows filling it.
+        if (age < Math.min(18, region.marriageF[0]) || age > 45) continue;
         const isWidow = wLost != null;
         // § remarriage vs. the emigration backlog: emigration (above) already
         // ran first and drained most of the surplus never-married women at a
         // normal age, so what's left here is mostly genuine widows plus
-        // whoever stayed by choice — a widower still prefers a widow (score
-        // bonus) or a never-married woman already past the normal local
-        // marriage window (an "old maid" he took on) over a young single
-        // woman who simply didn't happen to emigrate.
+        // whoever stayed by choice.
+        //
+        // § the marriage squeeze: who he takes from that pool is regional
+        // (demography.ts's `widowerBride`), and it used to be hard-coded to
+        // the NW-European answer — a widow, or a never-married woman already
+        // past the normal local marriage window (an "old maid" he took on),
+        // in preference to a young single woman. Under the dowry regime the
+        // preference runs the other way and the gap he marries across is far
+        // wider, which is exactly the mechanism that absorbed the surplus of
+        // young unmarried women that regime's own wide spousal age gap
+        // created. Blocking it was most of why the Mediterranean regions came
+        // out with more permanent lay spinsters than England.
         const stillYoung = !isWidow && age <= region.marriageF[1] + 4;
-        const score = Math.abs(year - m.birth - 8 - age) + (isWidow ? 0 : 2) + (stillYoung ? 6 : 0) + consanguinityPenalty(persons, m, W);
+        const bride = demo.widowerBride;
+        const wanted = Math.min(year - m.birth - bride.gap, bride.cap);
+        const score = Math.abs(age - wanted) + (isWidow ? 0 : 2) + (stillYoung ? bride.maiden : 0) + consanguinityPenalty(persons, m, W);
         if (score < bestScore) {
           bestScore = score;
           best = W;
