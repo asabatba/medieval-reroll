@@ -504,6 +504,21 @@ h1.name:focus-visible {
   margin-top: 3px;
   letter-spacing: 0.05em;
 }
+/* § the season: only baptisms, weddings and burials carry a day, so this
+   line is present on some entries and absent on others — which is the
+   register's own unevenness, not a layout accident. */
+.entry .yr .dm {
+  display: block;
+  font-size: 10px;
+  color: var(--gilt);
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+.dates .feast {
+  color: var(--gilt);
+  font-style: italic;
+  font-size: 0.85em;
+}
 .entry .tx {
   font-size: 15.5px;
   line-height: 1.62;
@@ -1088,8 +1103,14 @@ details.village {
 .pc-plague {
   fill: rgba(var(--rubric-rgb), 0.16);
 }
+/* The famine band is hatched as well as tinted, and that is not
+   decoration. Gilt and rubric are 0.3 ΔE apart under deuteranopia in the
+   light theme — indistinguishable — so a reader with the commonest form of
+   colour blindness saw one undifferentiated smear of crisis bands across
+   two centuries. Texture is the secondary encoding that makes the pair
+   separable without repainting a deliberately medieval palette. */
 .pc-famine {
-  fill: rgba(var(--gilt-rgb), 0.14);
+  fill: url(#hatch-famine);
 }
 .pc-area {
   fill: rgba(var(--verdigris-rgb), 0.2);
@@ -1125,6 +1146,148 @@ details.village {
 .poplegend .pc-low {
   color: var(--rubric);
 }
+/* Pattern definitions only — never drawn, but must stay in the layout
+   tree for the `url(#…)` references to resolve. */
+.chartdefs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ---- U2 § the lifeline: the population curve's idiom, on one life ---- */
+.lifeline {
+  margin: 0 0 26px;
+}
+.lifesvg {
+  display: block;
+  width: 100%;
+  height: 54px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.lf-plague {
+  fill: rgba(var(--rubric-rgb), 0.18);
+}
+.lf-famine {
+  fill: url(#hatch-famine);
+}
+/* Neutral, so the three context bands are told apart by hue, by texture
+   and by being un-tinted — not by hue alone. */
+.lf-war {
+  fill: var(--line);
+  fill-opacity: 0.55;
+}
+/* The subject of the figure, in the same hue the population curve gives
+   the living. One series, so no legend: the caption names it. */
+.lf-life {
+  fill: rgba(var(--verdigris-rgb), 0.5);
+}
+.lf-rule {
+  stroke: rgba(var(--line-rgb), 0.9);
+  stroke-width: 1;
+}
+.lf-tick rect:first-child {
+  fill: var(--gilt);
+}
+.lf-tick.k-death rect:first-child,
+.lf-tick.k-grief rect:first-child {
+  fill: var(--rubric);
+}
+/* Hit target wider than the 2px mark — the ring/target rule from the mark
+   specs: a 2px tick is unhoverable otherwise. */
+.lf-hit {
+  fill: transparent;
+  cursor: help;
+}
+.lifelegend {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim2);
+  padding: 6px 1px 0;
+}
+.lifelegend .lf-mid {
+  color: var(--bone-dim);
+}
+
+/* ---- § the season: months of the register ---- */
+.season-note {
+  padding: 12px 18px 0;
+  margin: 0;
+  color: var(--bone-dim);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 72ch;
+}
+.season-note.dim {
+  color: var(--dim2);
+  font-size: 12px;
+  font-family: "JetBrains Mono", monospace;
+}
+.seasongrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  padding: 14px 18px 18px;
+}
+.seasonfig {
+  margin: 0;
+}
+.sc-title {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+  margin-bottom: 6px;
+}
+.sc-title .sc-total {
+  color: var(--dim2);
+}
+.seasonsvg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.sc-wed rect {
+  fill: var(--gilt);
+}
+.sc-bur rect {
+  fill: var(--rubric);
+}
+/* The closed seasons, recessive and behind the data. */
+.sc-closed {
+  fill: rgba(var(--line-rgb), 1);
+}
+.sc-base {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.sc-hit {
+  fill: transparent;
+  cursor: help;
+}
+.sc-tick,
+.sc-peak {
+  font-family: "JetBrains Mono", monospace;
+  fill: var(--dim2);
+  font-size: 9px;
+  text-anchor: middle;
+}
+.sc-peak {
+  fill: var(--bone-dim);
+  font-size: 10px;
+}
+
 .village-controls {
   display: flex;
   align-items: center;

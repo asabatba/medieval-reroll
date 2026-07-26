@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { EventRef } from "../engine/index.js";
 import * as E from "../engine/index.js";
+import { UI } from "../i18n/ui.js";
 import {
   buildRecordHTML,
   buildViewHTML,
@@ -117,6 +118,42 @@ describe("buildRecordHTML", () => {
     const overlapping = E.papalSeriesOf("england").filter((t) => t.from <= bio.death.year && t.to >= bio.birth).length;
     expect(rows).toBe(overlapping);
     expect(rows).toBeGreaterThan(0);
+  });
+
+  // § the season / U2 § the lifeline.
+  it("dates the card and the register entries a parish register really dated", () => {
+    const bio = E.decodePerson(env, person.id, "en")!;
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    // The card's own two dates, spelled out rather than left as bare years.
+    expect(html).toContain(`${bio.birthDate!.day} `);
+    expect(html).toContain(UI.en.fullDate(bio.deathDate.day, bio.deathDate.month, bio.death.year));
+    // One `.dm` day-line per dated entry, and none for the undated ones.
+    const dayLines = (html.match(/class="dm"/g) ?? []).length;
+    expect(dayLines).toBe(bio.events.filter((e) => e.date).length);
+    expect(dayLines).toBeGreaterThan(0);
+    expect(dayLines).toBeLessThan(bio.events.length);
+  });
+
+  it("renders the same day in Catalan, with the language's own preposition", () => {
+    const bio = E.decodePerson(env, person.id, "ca")!;
+    const html = buildRecordHTML(E, 1444, stack, "ca");
+    expect(html).toContain(UI.ca.fullDate(bio.deathDate.day, bio.deathDate.month, bio.death.year));
+    // Catalan elides `de` before a vowel: "d'abril", never "de abril".
+    expect(html).not.toMatch(/ de (abril|agost|octubre) /);
+    // Locale never changes WHICH day it was — only how it is written.
+    expect(bio.deathDate).toEqual(E.decodePerson(env, person.id, "en")!.deathDate);
+  });
+
+  it("U2: draws the lifeline with one tick per dated entry and the crises behind it", () => {
+    const bio = E.decodePerson(env, person.id, "en")!;
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    expect(html).toContain('class="lifesvg"');
+    expect(html).toContain("lf-life");
+    expect((html.match(/class="lf-tick/g) ?? []).length).toBe(bio.events.filter((e) => e.date).length);
+    // Only the crises that actually overlapped this life are drawn.
+    const bands = (html.match(/class="lf-plague"/g) ?? []).length;
+    const overlapping = E.PLAGUES.filter((pl) => pl[1] >= bio.birth && pl[0] <= bio.death.year).length;
+    expect(bands).toBe(overlapping);
   });
 
   it("U1: the register carries a filter box and a searchable key on every row", () => {
@@ -469,6 +506,35 @@ describe("the population curve", () => {
       // and where it is the lord, he is a link to his own page.
       if (!line.appropriated) expect(rector).toContain('data-goto="lord:england:0:');
     }
+  });
+
+  // § the season: the village's own seasonal signature, as two facets —
+  // never one plot with two scales.
+  it("draws the months figure as two single-series charts, with the closed seasons behind the weddings", () => {
+    const html = buildViewHTML(E, 1444, [{ kind: "village", regionKey: "england", villageIdx: 0 }], "en");
+    expect(html).toContain("The year in the register");
+    expect((html.match(/class="seasonfig"/g) ?? []).length).toBe(2);
+    expect(html).toContain("sc-wed");
+    expect(html).toContain("sc-bur");
+    // Twelve hit targets per facet — one per month, whether or not it has a bar.
+    expect((html.match(/class="sc-hit"/g) ?? []).length).toBe(24);
+    // The closed-season underlay belongs to the weddings only.
+    const wed = html.slice(html.indexOf("sc-wed") - 900);
+    expect(wed).toContain("closed to weddings");
+    // March is wholly shut, so it must have a full-opacity shade and no bar.
+    expect(html).toContain("March — 100% closed to weddings");
+    // Every bar is capped rather than filling its slot.
+    for (const m of html.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="[\d.]+" rx="4"\/>/g)) {
+      expect(Number(m[1])).toBeLessThanOrEqual(24);
+    }
+  });
+
+  it("defines the famine hatch exactly once for the whole document", () => {
+    // Two figures reference url(#hatch-famine); an SVG id may be defined once.
+    const someone = env.persons.find((p) => !p.founder) ?? env.persons[0];
+    const html = buildViewHTML(E, 1444, [{ regionKey: "england", villageIdx: 0, personId: someone.id }], "en");
+    expect((html.match(/id="hatch-famine"/g) ?? []).length).toBe(1);
+    expect(buildViewHTML(E, 1444, [{ kind: "king", regionKey: "england", reignIdx: 999 }], "en")).toBe("");
   });
 
   it("a pontiff page for a term with no pope still renders, and says what it was", () => {

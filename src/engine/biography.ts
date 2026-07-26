@@ -50,6 +50,7 @@ import { parentsOf } from "./lineage.js";
 import { famineAt, registerBlackoutAt, warAt } from "./mortality.js";
 import { lordOfManorAt, manorLineOf, royalWorldEvents, sovereignAt, tenureIndexAt } from "./nobility.js";
 import { papalWorldEvents, popeIndexAt, popeTermAt } from "./papacy.js";
+import { coupleMarriageDate, personBirthDate, personDeathDate } from "./season.js";
 import { childrenOf, heirOf, inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
@@ -60,6 +61,7 @@ import type {
   DocumentKind,
   Envelope,
   EventRef,
+  MedievalDate,
   Person,
   PersonAddress,
   Sex,
@@ -275,10 +277,27 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // rather than leaving the gap unexplained (see the texture() loop and
   // the summary note pushed after it).
   const blackoutYears = new Set<number>();
-  const ev = (year: number, text: string, kind: BioEventKind, src?: string, refs?: EventRef[]) => {
+  const ev = (year: number, text: string, kind: BioEventKind, src?: string, refs?: EventRef[], date?: MedievalDate) => {
     if (year <= p.death.year)
-      events.push({ year, age: year - p.birth, text: gender(text, p.sex), kind, src: src || cite("reg"), refs: refs?.length ? refs : undefined });
+      events.push({ year, age: year - p.birth, text: gender(text, p.sex), kind, src: src || cite("reg"), refs: refs?.length ? refs : undefined, date });
   };
+
+  // § the season: the three kinds of entry a parish register actually
+  // dated to the day — a baptism, a wedding, a burial. Everything else
+  // (world news, texture, a court roll's business) keeps the bare year,
+  // which is honest: those are not register entries and were not dated
+  // like them.
+  //
+  // Every one of these comes off its own side stream, so none of them
+  // moved a single draw in the decode above. The marriage date is keyed
+  // on the COUPLE index rather than on either spouse, which is what makes
+  // husband and wife necessarily agree on their wedding day.
+  const birthDate = personBirthDate(env.vHash, p);
+  const deathDate = personDeathDate(env.vHash, p);
+  const marriageDate = (coupleIdx: number, year: number, e = env): MedievalDate => coupleMarriageDate(e.vHash, coupleIdx, year);
+  /** Another person's baptism day — a child's, read from their own address
+   * exactly as their own record would compute it. */
+  const birthDateOfPerson = (person: Person, e = env): MedievalDate | undefined => personBirthDate(e.vHash, person) ?? undefined;
 
   // Birth
   const bornPlague = plagueAt(p.birth);
@@ -334,6 +353,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       "birth",
       cite("court"),
       [nameRef(mother!, selfAddr), nameRef(father!, selfAddr, false)],
+      birthDate ?? undefined,
     );
     // § legitimation: her parents married each other after all (village.ts's
     // rollIllegitimateBirths) — canon law and most secular custom treated
@@ -377,6 +397,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       twin
         ? [nameRef(father!, selfAddr), nameRef(mother!, selfAddr, false), nameRef(twin, selfAddr, false)]
         : [nameRef(father!, selfAddr), nameRef(mother!, selfAddr, false)],
+      birthDate ?? undefined,
     );
   }
 
@@ -745,6 +766,9 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   unionCouples.forEach((c, i) => {
     const s = spouseOf(c);
     const sName = s.name + " " + s.surname;
+    // § the season: keyed on the couple, so this is the same day her own
+    // record and his own record both name.
+    const wedDate = marriageDate(p.unions![i], c.year);
     if (i === 0) {
       let extra = "";
       // Merchet was HER FATHER'S payment for licence to marry her off — so
@@ -840,6 +864,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         "marriage",
         undefined,
         mRefs,
+        wedDate,
       );
     } else {
       // § remarriage
@@ -868,6 +893,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         "marriage",
         undefined,
         [nameRef(s, selfAddr)],
+        wedDate,
       );
     }
   });
@@ -1012,6 +1038,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         "grief",
         undefined,
         [nameRef(c, selfAddr, false)],
+        birthDateOfPerson(c),
       );
     } else {
       ev(
@@ -1022,6 +1049,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         "child",
         undefined,
         [nameRef(c, selfAddr, false)],
+        birthDateOfPerson(c),
       );
       if (c.death.age < 16) {
         const cause =
@@ -1347,6 +1375,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       "elsewhere",
       cite("reg"),
       [nameRef(destPerson, destRecord)],
+      deathDate,
     );
   } else if (departureYear != null) {
     // § departure, no destination record: a genuine dead end. Her death
@@ -1361,6 +1390,8 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
         : `${p.name} ${dd}. Where {{he/she}} was laid to rest, this register does not say.`,
       "elsewhere",
       cite("reg"),
+      undefined,
+      deathDate,
     );
   } else {
     let burialTxt: string;
@@ -1388,7 +1419,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     // entries were really accidents" this used to need.
     const coronersBusiness = p.death.cause === "accident" || p.death.cause === "violence";
     const dSrc = coronersBusiness ? cite("coroner") : cite("reg");
-    ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
+    ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc, undefined, deathDate);
   }
 
   // § record scarcity: sometimes texture, world events, and marriage all
@@ -1558,6 +1589,9 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     sex: p.sex,
     birth: p.birth,
     death: p.death,
+    // § the season
+    birthDate,
+    deathDate,
     causeLabel: CAUSE_LABEL[locale][p.death.cause],
     cls: p.cls,
     clsLabel: CLASS_INFO[p.cls].label[locale],

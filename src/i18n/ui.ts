@@ -178,6 +178,27 @@ interface UiStrings {
   // ---- U4: the locator is the record; make it takeable ----
   copyLocator: string;
   copyLocatorDone: string;
+  // ---- § the season: dating the register to the day ----
+  /** Full month names, January first. */
+  months: string[];
+  /** Short forms, for the chronicle's narrow date column. */
+  monthsShort: string[];
+  /** "3 February 1361" / "3 de febrer de 1361". */
+  fullDate: (day: number, month: number, year: number) => string;
+  /** "3 Feb" — the chronicle column, where the year is already alongside. */
+  shortDate: (day: number, month: number) => string;
+  /** The feast the day fell on, as people would actually have named it. */
+  onFeast: (feast: string) => string;
+  seasonHeader: string;
+  seasonNote: string;
+  marriagesByMonth: string;
+  burialsByMonth: string;
+  closedSeasonLabel: string;
+  monthCount: (month: string, n: number) => string;
+  easterOf: (year: number, day: number, month: string) => string;
+  // ---- U2: the lifeline ----
+  lifelineCaption: (age: number, plagues: number) => string;
+  lifelineAria: (name: string, birth: number, death: number, age: number, plagues: number) => string;
   // ---- family tree (§ one-step tree: parents / self+siblings+spouses / children) ----
   familyTree: string;
   self: (sex: "M" | "F") => string;
@@ -373,6 +394,22 @@ export const UI: Record<Locale, UiStrings> = {
     registerFilterCount: (shown, total) => `${shown} of ${total}`,
     copyLocator: "Copy link",
     copyLocatorDone: "Link copied",
+    months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    monthsShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    fullDate: (day, month, year) => `${day} ${UI.en.months[month - 1]} ${year}`,
+    shortDate: (day, month) => `${day} ${UI.en.monthsShort[month - 1]}`,
+    onFeast: (feast) => `the feast of ${feast}`,
+    seasonHeader: "The year in the register",
+    seasonNote:
+      "Canon law closed three seasons of the year to weddings — Advent to the octave of Epiphany, Septuagesima to the octave of Easter, and Rogationtide to the octave of Pentecost — and two of the three move with Easter. What is left is the shape below: a rush before Lent, a short spring window, and the great autumn peak after harvest. The burials answer to something else entirely.",
+    marriagesByMonth: "Weddings",
+    burialsByMonth: "Burials",
+    closedSeasonLabel: "closed to weddings",
+    monthCount: (month, n) => `${month}: ${n}`,
+    easterOf: (year, day, month) => `Easter ${year} fell on ${day} ${month}`,
+    lifelineCaption: (age, plagues) => `${age} years · ${plagues === 1 ? "one pestilence" : `${plagues} pestilences`} lived through`,
+    lifelineAria: (name, birth, death, age, plagues) =>
+      `The life of ${name}, ${birth} to ${death}, ${age} years, against the plagues, famines and wars of the region: ${plagues} pestilences lived through.`,
     familyTree: "Family tree",
     self: (sex) => (sex === "F" ? "Herself" : "Himself"),
     outOfWedlock: "Born out of wedlock",
@@ -557,6 +594,23 @@ export const UI: Record<Locale, UiStrings> = {
     registerFilterCount: (shown, total) => `${shown} de ${total}`,
     copyLocator: "Copia l'enllaç",
     copyLocatorDone: "Enllaç copiat",
+    months: ["gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre", "octubre", "novembre", "desembre"],
+    monthsShort: ["gen.", "febr.", "març", "abr.", "maig", "juny", "jul.", "ag.", "set.", "oct.", "nov.", "des."],
+    // Catalan elides `de` before a vowel — "d'abril", "d'agost", "d'octubre".
+    fullDate: (day, month, year) => `${day} ${deCa(UI.ca.months[month - 1])} de ${year}`,
+    shortDate: (day, month) => `${day} ${UI.ca.monthsShort[month - 1]}`,
+    onFeast: (feast) => `${feast}`,
+    seasonHeader: "L'any dins del registre",
+    seasonNote:
+      "El dret canònic tancava tres temporades de l'any als casaments — de l'Advent a l'octava de l'Epifania, de la Septuagèsima a l'octava de Pasqua, i de les Rogacions a l'octava de Pentecosta — i dues de les tres es mouen amb la Pasqua. El que en queda és la forma de sota: una pressa abans de Quaresma, una finestra curta de primavera, i el gran pic de tardor després de la collita. Els enterraments responen a una altra cosa ben diferent.",
+    marriagesByMonth: "Casaments",
+    burialsByMonth: "Enterraments",
+    closedSeasonLabel: "tancat als casaments",
+    monthCount: (month, n) => `${month}: ${n}`,
+    easterOf: (year, day, month) => `La Pasqua de ${year} va caure el ${day} ${deCa(month)}`,
+    lifelineCaption: (age, plagues) => `${age} anys · ${plagues === 1 ? "una pestilència" : `${plagues} pestilències`} viscudes`,
+    lifelineAria: (name, birth, death, age, plagues) =>
+      `La vida de ${name}, de ${birth} a ${death}, ${age} anys, contra les pestes, fams i guerres de la regió: ${plagues} pestilències viscudes.`,
     familyTree: "Arbre genealògic",
     self: (sex) => (sex === "F" ? "Ella mateixa" : "Ell mateix"),
     outOfWedlock: "Nascuts fora del matrimoni",

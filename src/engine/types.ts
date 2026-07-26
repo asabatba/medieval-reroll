@@ -28,6 +28,17 @@ export type DeathCause = "plague" | "famine" | "war" | "infancy" | "childhood" |
  * Tier 2 so the occupation narrative it decodes stays consistent with the mechanic. */
 export type RiskTrade = "normal" | "hazardous" | "maritime" | "military";
 
+/** § the season: a day inside a year, on the Julian calendar the register
+ * era actually kept. Structured rather than written into prose, so the
+ * engine goes on emitting plain text and the UI does the formatting
+ * (season.ts explains why that mattered). */
+export interface MedievalDate {
+  /** 1–12. */
+  month: number;
+  /** 1–31, valid for its month and year. */
+  day: number;
+}
+
 export interface Death {
   year: number;
   age: number;
@@ -360,6 +371,11 @@ export interface BioEvent {
   src: string;
   /** Every other person named in `text`, if any (§ name links). */
   refs?: EventRef[];
+  /** § the season: the day within the year, where the register would
+   * actually have carried one — a baptism, a wedding, a burial. Absent for
+   * everything a parish register dated only loosely (world news, texture,
+   * a founder's birth before the register opens). */
+  date?: MedievalDate;
 }
 
 export interface RelativeRef {
@@ -396,6 +412,11 @@ export interface Bio {
   sex: Sex;
   birth: number;
   death: Death;
+  /** § the season: the day of the baptism and the day of the burial.
+   * `birthDate` is null for a founder, whose birth predates the register
+   * and which the register therefore never dated. */
+  birthDate: MedievalDate | null;
+  deathDate: MedievalDate;
   causeLabel: string;
   cls: SocialClass;
   clsLabel: string;

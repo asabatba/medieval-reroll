@@ -1,5 +1,5 @@
 import type * as Engine from "../engine/index.js";
-import type { Address, Bio, Death, Envelope, EventRef, HouseholdState, PersonAddress } from "../engine/index.js";
+import type { Address, Bio, Death, Envelope, EventRef, HouseholdState, MedievalDate, PersonAddress } from "../engine/index.js";
 import { GENERATION_LAST_YEAR } from "../engine/index.js";
 import type { Locale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
@@ -109,6 +109,21 @@ export function locator(worldSeed: number, node: StackNode | PersonAddress): str
     return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.kind}:${node.headIdx}`;
   const p = node as PersonAddress;
   return worldSeed + ":" + p.regionKey + ":" + p.villageIdx + ":" + p.personId;
+}
+
+// § the season: the engine hands back structured dates (MedievalDate) and
+// never writes one into prose, so every date the UI shows is formatted
+// here — which is also what lets Catalan elide its preposition and both
+// locales name the feast the day fell on.
+function fullDate(t: (typeof UI)[Locale], date: MedievalDate | null | undefined, year: number): string {
+  return date ? t.fullDate(date.day, date.month, year) : String(year);
+}
+
+/** The feast the day was actually known by, where it fell on one. */
+function feastLabel(E: typeof Engine, t: (typeof UI)[Locale], date: MedievalDate | null | undefined, year: number, locale: Locale): string {
+  if (!date) return "";
+  const feast = E.feastOf(year, date.month, date.day);
+  return feast ? t.onFeast(feast[locale]) : "";
 }
 
 export function fateStr(d: Death, birth: number): string {
@@ -465,6 +480,171 @@ function renderPopulationChart(E: typeof Engine, env: Envelope, year: number, lo
   </figure>`;
 }
 
+// ---- U2 § the lifeline ----
+//
+// The population curve is the best thing on the village page and it is
+// used exactly once. This is the same idiom turned on a single life: the
+// span from baptism to burial, drawn against the crises that ran across
+// it, so "lived through four plagues" stops being a number in the ledger
+// and becomes a picture of a man who was eleven in 1349.
+//
+// Emphasis, not categorical: ONE subject (the life, in the same verdigris
+// the population curve uses for the living) against recessive context in
+// the two colours the crisis badges and the curve's own bands already
+// use. Nothing here asks the reader to tell two data series apart.
+const LIFE_W = 840;
+const LIFE_H = 54;
+const LIFE_BAR_Y = 20;
+const LIFE_BAR_H = 12;
+
+function renderLifeline(E: typeof Engine, bio: Bio, locale: Locale): string {
+  const t = UI[locale];
+  const from = bio.birth;
+  const to = Math.max(bio.death.year, bio.birth + 1);
+  const span = to - from;
+  const x = (year: number) => ((Math.max(from, Math.min(to, year)) - from) / span) * LIFE_W;
+
+  // Context bands first, under everything — plague waves and war years the
+  // life actually overlapped, plus the region's famine window.
+  const bands: string[] = [];
+  const band = (a: number, b: number, cls: string, label: string) => {
+    if (b < from || a > to) return;
+    const x1 = x(a);
+    const w = Math.max(2, x(b) - x1);
+    bands.push(`<rect class="${cls}" x="${x1.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${LIFE_H}"><title>${esc(label)}</title></rect>`);
+  };
+  for (const pl of E.PLAGUES) band(pl[0], pl[1], "lf-plague", `${pl[3][locale]} · ${pl[0]}${pl[1] > pl[0] ? `–${pl[1]}` : ""}`);
+  const region = bio.env.region;
+  band(region.famine[0], region.famine[1], "lf-famine", `${region.famineName[locale]} · ${region.famine[0]}–${region.famine[1]}`);
+  for (const [a, b] of region.warYears) band(a, b, "lf-war", `${region.warNames[a]?.[locale] ?? ""} · ${a}–${b}`);
+
+  // The life itself: one mark, 4px rounded at both ends since both ends
+  // are real data (a baptism and a burial), not a baseline.
+  const life = `<rect class="lf-life" x="0" y="${LIFE_BAR_Y}" width="${LIFE_W}" height="${LIFE_BAR_H}" rx="4"/>`;
+
+  // Dated register entries as ticks on the bar. Selective labelling: no
+  // numbers on the ticks at all — the chronicle right below is the table
+  // view, and each tick carries its own entry in a tooltip.
+  const ticks = bio.events
+    .filter((e) => e.date)
+    .map((e) => {
+      const tx = x(e.year);
+      const title = `${t.fullDate(e.date!.day, e.date!.month, e.year)} · aet. ${e.age} — ${e.text.slice(0, 90)}${e.text.length > 90 ? "…" : ""}`;
+      return `<g class="lf-tick k-${e.kind}"><rect x="${(tx - 1).toFixed(1)}" y="${LIFE_BAR_Y - 4}" width="2" height="${LIFE_BAR_H + 8}"/><rect class="lf-hit" x="${(tx - 7).toFixed(1)}" y="0" width="14" height="${LIFE_H}"><title>${esc(title)}</title></rect></g>`;
+    })
+    .join("");
+
+  // Decade rules, recessive, so the span reads as time and not as a bar.
+  let rules = "";
+  for (let d = Math.ceil(from / 10) * 10; d <= to; d += 10) {
+    rules += `<line class="lf-rule" x1="${x(d).toFixed(1)}" x2="${x(d).toFixed(1)}" y1="${LIFE_BAR_Y}" y2="${LIFE_BAR_Y + LIFE_BAR_H}"/>`;
+  }
+
+  return `<figure class="lifeline reveal">
+    <svg class="lifesvg" viewBox="0 0 ${LIFE_W} ${LIFE_H}" preserveAspectRatio="none" role="img"
+         aria-label="${esc(t.lifelineAria(bio.name, bio.birth, bio.death.year, bio.death.age, bio.plaguesLived))}">
+      ${bands.join("")}${life}${rules}${ticks}
+    </svg>
+    <figcaption class="lifelegend">
+      <span>${bio.birth}</span>
+      <span class="lf-mid">${esc(t.lifelineCaption(bio.death.age, bio.plaguesLived))}</span>
+      <span>${bio.death.year}</span>
+    </figcaption>
+  </figure>`;
+}
+
+// ---- § the season: the year inside the year ----
+//
+// Two column charts, deliberately NOT one. Weddings and burials are
+// different measures on different scales, and putting them in one plot
+// would mean either a second y-axis (never) or a shared one that flattens
+// whichever is smaller. Small multiples: one series each, its own scale,
+// its own title — which also means neither chart asks the reader to tell
+// gilt from rubric inside a single figure, a discrimination this palette
+// does not survive under deuteranopia in light mode.
+//
+// The recessive hatched underlay is the share of each month's days that
+// canon law closed to weddings, averaged across the whole register era
+// (two of the three closed seasons move with Easter, so no single year's
+// mask would be honest behind a two-century summary). It is what explains
+// the two empty columns rather than leaving them looking like a bug.
+const SEASON_W = 420;
+const SEASON_H = 104;
+const SEASON_PAD_B = 16;
+const SEASON_PAD_T = 12;
+/** Cap the mark rather than filling the slot — the leftover is the air. */
+const SEASON_BAR_MAX = 24;
+
+function renderMonthChart(t: (typeof UI)[Locale], title: string, counts: number[], closedShare: number[], cls: string): string {
+  const max = Math.max(1, ...counts);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const slot = SEASON_W / 12;
+  // 2px of surface between neighbours — the gap does the separating, never a stroke.
+  const barW = Math.min(SEASON_BAR_MAX, slot - 2);
+  const plotH = SEASON_H - SEASON_PAD_B - SEASON_PAD_T;
+  const peak = counts.indexOf(max);
+
+  let marks = "";
+  counts.forEach((n, i) => {
+    const x = i * slot + (slot - barW) / 2;
+    // Closed-season underlay, behind the data, one step off the surface.
+    const shade = closedShare[i];
+    if (shade > 0.02) {
+      marks += `<rect class="sc-closed" x="${x.toFixed(1)}" y="${SEASON_PAD_T}" width="${barW.toFixed(1)}" height="${plotH}" opacity="${(shade * 0.85).toFixed(2)}"><title>${esc(`${t.months[i]} — ${Math.round(shade * 100)}% ${t.closedSeasonLabel}`)}</title></rect>`;
+    }
+    const h = (n / max) * plotH;
+    const y = SEASON_PAD_T + plotH - h;
+    // 4px rounded data-end, square at the baseline: draw the round rect and
+    // square the foot back off with a small overlay of the same fill.
+    if (h > 0) {
+      marks += `<g class="${cls}"><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="4"/><rect x="${x.toFixed(1)}" y="${(y + Math.min(h, 4)).toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h - Math.min(h, 4)).toFixed(1)}"/></g>`;
+    }
+    // Hit target spans the whole slot, not just the mark — a two-count
+    // month is otherwise unhoverable.
+    marks += `<rect class="sc-hit" x="${(i * slot).toFixed(1)}" y="0" width="${slot.toFixed(1)}" height="${SEASON_H}"><title>${esc(`${t.monthCount(t.months[i], n)}${total ? ` · ${((n / total) * 100).toFixed(1)}%` : ""}`)}</title></rect>`;
+  });
+
+  // Label selectively: the peak alone. The axis carries the rest.
+  const labelX = peak * slot + slot / 2;
+  const labelY = SEASON_PAD_T + plotH - (counts[peak] / max) * plotH - 3;
+  const ticks = counts
+    .map((_, i) => `<text class="sc-tick" x="${(i * slot + slot / 2).toFixed(1)}" y="${SEASON_H - 4}">${esc(t.monthsShort[i][0])}</text>`)
+    .join("");
+
+  return `<figure class="seasonfig">
+    <figcaption class="sc-title">${esc(title)} <span class="sc-total">${total}</span></figcaption>
+    <svg class="seasonsvg" viewBox="0 0 ${SEASON_W} ${SEASON_H}" role="img"
+         aria-label="${esc(`${title}: ${counts.map((n, i) => t.monthCount(t.months[i], n)).join(", ")}`)}">
+      ${marks}
+      <line class="sc-base" x1="0" y1="${SEASON_PAD_T + plotH}" x2="${SEASON_W}" y2="${SEASON_PAD_T + plotH}"/>
+      <text class="sc-peak" x="${labelX.toFixed(1)}" y="${Math.max(9, labelY).toFixed(1)}">${counts[peak]}</text>
+      ${ticks}
+    </svg>
+  </figure>`;
+}
+
+function renderSeasonSection(E: typeof Engine, env: Envelope, locale: Locale): string {
+  const t = UI[locale];
+  const s = E.seasonalCounts(env, VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX);
+  // A worked example of the movable feast, so the note is not an assertion.
+  const easter = E.julianEaster(1400);
+  const easter2 = E.julianEaster(1401);
+  return `<details class="register season reveal"><summary>${esc(t.seasonHeader)}</summary>
+    <p class="season-note">${esc(t.seasonNote)}</p>
+    <p class="season-note dim">${esc(`${t.easterOf(1400, easter.day, t.months[easter.month - 1])}; ${t.easterOf(1401, easter2.day, t.months[easter2.month - 1])}.`)}</p>
+    <div class="seasongrid">
+      ${renderMonthChart(t, t.marriagesByMonth, s.marriages, s.closedShare, "sc-wed")}
+      ${renderMonthChart(
+        t,
+        t.burialsByMonth,
+        s.burials,
+        s.closedShare.map(() => 0),
+        "sc-bur",
+      )}
+    </div>
+  </details>`;
+}
+
 // The full roster of a village, as clickable rows. Shared by the person
 // record (where it is one section among many) and the village's own page
 // (§ the village route), which is the register and little else.
@@ -583,7 +763,25 @@ function renderLineageBar(stack: StackNode[], t: (typeof UI)[Locale]): string {
 
 // Dispatches the current top of the navigation stack to its view builder —
 // person record, royal line, or noble house (§ nobility routes).
+// One definition of the famine hatch for the whole document — both the
+// population curve and the lifeline reference it, and an SVG id may only
+// be defined once. Prepended to every view so the pattern exists whichever
+// page is up.
+const CHART_DEFS = `<svg class="chartdefs" aria-hidden="true" focusable="false"><defs>
+  <pattern id="hatch-famine" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="rgba(var(--gilt-rgb), 0.10)"/>
+    <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(var(--gilt-rgb), 0.55)" stroke-width="2"/>
+  </pattern>
+</defs></svg>`;
+
 export function buildViewHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], locale: Locale): string {
+  const body = buildViewBody(E, worldSeed, stack, locale);
+  // An unresolvable node still renders as nothing at all, defs included:
+  // pattern definitions for a page with no marks on it are just noise.
+  return body ? CHART_DEFS + body : "";
+}
+
+function buildViewBody(E: typeof Engine, worldSeed: number, stack: StackNode[], locale: Locale): string {
   const node = stack[stack.length - 1];
   if (node.kind === "village") return buildVillageHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "parish" || node.kind === "deanery" || node.kind === "diocese") return buildParishHTML(E, worldSeed, stack, node, locale);
@@ -609,6 +807,11 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   node.crumb = bio.name + " " + bio.surname;
 
   const sibsDead = bio.siblings.filter((s) => s.death.age < 16).length;
+  // § the season: a date that landed on a feast is named by it, because
+  // that is how the day was actually known — beside the number, not
+  // instead of it.
+  const birthFeast = feastLabel(E, t, bio.birthDate, bio.birth, locale);
+  const deathFeast = feastLabel(E, t, bio.deathDate, bio.death.year, locale);
   const vitals: [string, string, string][] = [
     [t.born, bio.birth + "", ""],
     [t.died, bio.death.year + " · " + (locale === "ca" ? "als " + bio.death.age + " anys" : "aged " + bio.death.age), "red"],
@@ -636,7 +839,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   <article class="card reveal">
     <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
     <h1 class="name"><span class="init">${esc(bio.name[0])}</span>${esc(bio.name.slice(1))} ${esc(bio.surname)}</h1>
-    <div class="dates">natus <b>${bio.birth}</b> · <span class="obiit">obiit ${bio.death.year}</span> · <button class="namelink" data-goto="${villageGoto(node)}">${esc(bio.place)}</button>, ${esc(bio.region)}</div>
+    <div class="dates">natus <b>${esc(fullDate(t, bio.birthDate, bio.birth))}</b>${birthFeast ? ` <i class="feast">${esc(birthFeast)}</i>` : ""} · <span class="obiit">obiit ${esc(fullDate(t, bio.deathDate, bio.death.year))}</span>${deathFeast ? ` <i class="feast">${esc(deathFeast)}</i>` : ""} · <button class="namelink" data-goto="${villageGoto(node)}">${esc(bio.place)}</button>, ${esc(bio.region)}</div>
     <div class="vitals">${vitals.map((v) => `<div class="vital"><div class="k">${v[0]}</div><div class="v ${v[2]}">${esc(v[1])}</div></div>`).join("")}</div>
   </article>`;
 
@@ -664,6 +867,11 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
         : esc(t.noPontiff)
     }</div></div>
   </div>`;
+
+  // U2 § the lifeline: directly under the card, because it is a picture of
+  // the two dates the card just gave and everything that happened between
+  // them — it belongs with them, not filed under a heading further down.
+  html += renderLifeline(E, bio, locale);
 
   // Royal line — collapsed under the jurisdictions it crowns.
   html += renderRoyalLineSection(E, node.regionKey, bio, locale);
@@ -716,8 +924,15 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   html += `<div class="sect reveal"><h2>${esc(t.chronicle)}</h2></div><div class="chronicle${trailsOff ? " chronicle-fade" : ""}">`;
   bio.events.forEach((e, i) => {
     const label = KIND_LABEL[locale][e.kind] || "";
+    // § the season: only the entries a parish register really dated to the
+    // day carry one (baptism, wedding, burial). The rest keep the bare
+    // year, which is the honest rendering of a chronicle note or a court
+    // roll's business — so the column is deliberately uneven.
+    const day = e.date
+      ? `<span class="dm" title="${esc(feastLabel(E, t, e.date, e.year, locale) || fullDate(t, e.date, e.year))}">${esc(t.shortDate(e.date.day, e.date.month))}</span>`
+      : "";
     html += `<div class="entry k-${e.kind} reveal" style="animation-delay:${Math.min(i * 55, 850)}ms">
-      <div class="yr">${e.year}<span class="age">aet. ${e.age}</span></div>
+      <div class="yr">${day}${e.year}<span class="age">aet. ${e.age}</span></div>
       <div class="tx">${linkifyEventText(e.text, e.refs)}${label ? `<span class="tag">${label}</span>` : ""}<span class="src">${esc(e.src)}</span></div>
     </div>`;
   });
@@ -1206,6 +1421,9 @@ function buildVillageHTML(E: typeof Engine, worldSeed: number, stack: StackNode[
   // extent, not defaultVillageYear's birth-plus-thirty — that is a PERSON's
   // prime, and a place has no such thing.
   html += renderVillageSection(E, env, VILLAGE_YEAR_MIN + peak, locale, -1, true);
+  // § the season: the register's own shape across the twelve months —
+  // which is a fact about the place, so it lives on the place's page.
+  html += renderSeasonSection(E, env, locale);
   html += renderParishRegister(E, env, locale, -1);
   return html;
 }

@@ -34,6 +34,8 @@ export type { Epidemic } from "./data/epidemics.js";
 export { EPIDEMICS, epidemicAt, epidemicNews } from "./data/epidemics.js";
 // § the appropriated living: the clergy line stores a saint INDEX, not a
 // name, so the priory holding the tithes can be named in either locale.
+// § the season: the feast a date fell on — how the day was actually named.
+export { feastOf } from "./data/feasts.js";
 export { SAINTS } from "./data/jurisdictions.js";
 export { CAUSE_LABEL } from "./data/narrative.js";
 export { placeOf, placeShortOf } from "./data/placeNames.js";
@@ -93,6 +95,29 @@ export {
   popeTermAt,
 } from "./papacy.js";
 export { randomCitizen, roster } from "./roster.js";
+// § the season: the year inside the year — the Julian Easter, the three
+// Sarum closed seasons it moves, and the seasonal profile of a birth, a
+// marriage and a burial by cause.
+export type { SeasonalCounts } from "./season.js";
+export {
+  adventSundayDoy,
+  birthDateOf,
+  coupleMarriageDate,
+  dayOfYear,
+  daysInMonth,
+  daysInYear,
+  deathDateOf,
+  fromDayOfYear,
+  isClosedSeason,
+  isLeapYear,
+  julianEaster,
+  julianEasterDoy,
+  marriageClosedMask,
+  marriageDateOf,
+  personBirthDate,
+  personDeathDate,
+  seasonalCounts,
+} from "./season.js";
 // § settlement: deterministic rural/urban axis over village addresses.
 export { settlementTypeOf } from "./settlement.js";
 export type { HouseholdState, MaritalStatus, PersonState, VillageState } from "./snapshot.js";
@@ -112,6 +137,7 @@ export type {
   Fief,
   Jurisdiction,
   LordTenure,
+  MedievalDate,
   NobleLine,
   Person,
   PersonAddress,
