@@ -11,6 +11,7 @@ import {
   type LordNode,
   locator,
   type PersonNode,
+  type PontiffNode,
   renderVillageBody,
   type StackNode,
 } from "./render.js";
@@ -53,12 +54,24 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
     if (!Number.isSafeInteger(reignIdx) || reignIdx < 0) return null;
     return { worldSeed, node: { kind: "king", regionKey: parts[1], reignIdx } };
   }
+  // § the Schism: the papal route sits where the royal one does — on the
+  // REGION, not on a village — because which popes there were is shared
+  // data but which of them this region obeyed is not.
+  if (parts[2] === "papacy") {
+    if (parts.length === 3) return { worldSeed, node: { kind: "papacy", regionKey: parts[1] } };
+    if (parts.length !== 4) return null;
+    const termIdx = Number(parts[3]);
+    if (!Number.isSafeInteger(termIdx) || termIdx < 0) return null;
+    return { worldSeed, node: { kind: "pontiff", regionKey: parts[1], termIdx } };
+  }
   const villageIdx = Number(parts[2]);
   if (!Number.isSafeInteger(villageIdx) || villageIdx < 0) return null;
   // § the village route: three segments and no more is the place itself.
   if (parts.length === 3) return { worldSeed, node: { kind: "village", regionKey: parts[1], villageIdx } };
   if (parts.length === 5) {
-    if (parts[3] !== "lord" && parts[3] !== "baron") return null;
+    // § the church's own line joins the two feudal lines on this form: an
+    // address, a kind of succession, and an index into it.
+    if (parts[3] !== "lord" && parts[3] !== "baron" && parts[3] !== "rector") return null;
     const headIdx = Number(parts[4]);
     if (!Number.isSafeInteger(headIdx) || headIdx < 0) return null;
     return { worldSeed, node: { kind: parts[3], regionKey: parts[1], villageIdx, headIdx } };
@@ -79,6 +92,7 @@ export function initApp(): void {
   const locatorError = document.getElementById("locator-error") as HTMLElement;
   const status = document.getElementById("status") as HTMLElement;
   const replayBtn = document.getElementById("replay") as HTMLButtonElement;
+  const copyBtn = document.getElementById("copylink") as HTMLButtonElement | null;
   const rollBtn = document.getElementById("roll") as HTMLButtonElement;
   const newWorldBtn = document.getElementById("new-world") as HTMLButtonElement;
   const langsw = document.getElementById("langsw") as HTMLElement;
@@ -98,6 +112,10 @@ export function initApp(): void {
     seedbox.title = t.seedboxTitle;
     replayBtn.textContent = t.openRecord;
     replayBtn.title = t.openRecordTitle;
+    if (copyBtn) {
+      copyBtn.textContent = t.copyLocator;
+      copyBtn.title = t.copyLocator;
+    }
     rollBtn.textContent = t.rollALife;
     rollBtn.title = t.rollALife;
     newWorldBtn.textContent = t.newWorld;
@@ -124,9 +142,12 @@ export function initApp(): void {
     if (kind !== (b.kind ?? "person") || a.regionKey !== b.regionKey) return false;
     switch (kind) {
       case "royal":
+      case "papacy":
         return true;
       case "king":
         return (a as KingNode).reignIdx === (b as KingNode).reignIdx;
+      case "pontiff":
+        return (a as PontiffNode).termIdx === (b as PontiffNode).termIdx;
       case "village":
       case "parish":
       case "deanery":
@@ -134,7 +155,8 @@ export function initApp(): void {
       case "house":
         return (a as HouseNode).villageIdx === (b as HouseNode).villageIdx;
       case "lord":
-      case "baron": {
+      case "baron":
+      case "rector": {
         const la = a as LordNode;
         const lb = b as LordNode;
         return la.villageIdx === lb.villageIdx && la.headIdx === lb.headIdx;
@@ -149,12 +171,17 @@ export function initApp(): void {
 
   // data-goto forms: "region:village:person" (a record), "royal:region"
   // (the royal line), "king:region:reign" (a sovereign's page),
-  // "house:region:village" (a manor's noble house), and
-  // "lord|baron:region:village:head" (a lord's page).
+  // "papacy:region" (the popes this region obeyed), "pontiff:region:term"
+  // (one of them), "house:region:village" (a manor's noble house),
+  // "lord|baron:region:village:head" (a lord's page), and
+  // "rector:region:village:head" (a parish incumbent's).
   function gotoNode(goto: string): StackNode {
     const parts = goto.split(":");
     if (parts[0] === "royal") return { kind: "royal", regionKey: parts[1] };
     if (parts[0] === "king") return { kind: "king", regionKey: parts[1], reignIdx: +parts[2] };
+    if (parts[0] === "papacy") return { kind: "papacy", regionKey: parts[1] };
+    if (parts[0] === "pontiff") return { kind: "pontiff", regionKey: parts[1], termIdx: +parts[2] };
+    if (parts[0] === "rector") return { kind: "rector", regionKey: parts[1], villageIdx: +parts[2], headIdx: +parts[3] };
     if (parts[0] === "village") return { kind: "village", regionKey: parts[1], villageIdx: +parts[2] };
     if (isParishLevel(parts[0])) return { kind: parts[0], regionKey: parts[1], villageIdx: +parts[2] };
     if (parts[0] === "house") return { kind: "house", regionKey: parts[1], villageIdx: +parts[2] };
@@ -180,6 +207,34 @@ export function initApp(): void {
     });
   }
 
+  // U1 § finding a person. The register rows already carry everything the
+  // query has to match (`data-q`), so this hides and shows rows rather than
+  // rebuilding the list — no engine call, no re-render, and the current
+  // record keeps its highlight. A bare year works as well as a name, which
+  // is the other way people actually look: "who was here in 1349".
+  function bindRegisterFilter(root: ParentNode): void {
+    const box = root.querySelector<HTMLInputElement>("#regq");
+    const list = root.querySelector<HTMLElement>("#reglist");
+    const count = root.querySelector<HTMLElement>("#regcount");
+    const empty = root.querySelector<HTMLElement>("#regempty");
+    if (!box || !list || !count || !empty) return;
+    const rows = [...list.querySelectorAll<HTMLButtonElement>(".regrow")];
+    const total = rows.length;
+    const apply = (): void => {
+      const q = box.value.trim().toLowerCase();
+      let shown = 0;
+      for (const row of rows) {
+        const hit = !q || (row.dataset.q ?? "").includes(q);
+        row.hidden = !hit;
+        if (hit) shown++;
+      }
+      count.textContent = q ? UI[locale].registerFilterCount(shown, total) : "";
+      empty.hidden = !q || shown > 0;
+    };
+    box.addEventListener("input", apply);
+    apply();
+  }
+
   function render(pushUrl = true, announce = true): void {
     const node = stack[stack.length - 1];
     const html = buildViewHTML(E, worldSeed, stack, locale);
@@ -202,7 +257,21 @@ export function initApp(): void {
     if (announce) status.textContent = UI[locale].recordOpened(node.crumb || "");
     window.scrollTo(0, 0);
 
+    // U3 § keeping the keyboard's place. Replacing the whole of `out` drops
+    // whatever had focus back to <body>, so a keyboard or screen-reader user
+    // who followed a link landed at the top of the document and had to tab
+    // through the entire chrome again to reach the record they had just
+    // opened — every single time. The status announcement said the name; it
+    // could not say where you now were. Moving focus to the new record's own
+    // heading puts the caret where the eye already is.
+    const heading = out.querySelector<HTMLElement>("h1.name");
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+
     bindGoto(out);
+    bindRegisterFilter(out);
     out.querySelectorAll<HTMLButtonElement>(".crumb[data-jump]").forEach((b) => {
       b.addEventListener("click", () => {
         stack = stack.slice(0, +b.dataset.jump! + 1);
@@ -289,6 +358,10 @@ export function initApp(): void {
       if (!env.persons[parsed.node.personId]) return invalid();
     } else if (parsed.node.kind === "king") {
       if (!E.royalLineOf(parsed.node.regionKey)?.reigns[parsed.node.reignIdx]) return invalid();
+    } else if (parsed.node.kind === "pontiff") {
+      if (!E.papalSeriesOf(parsed.node.regionKey)[parsed.node.termIdx]) return invalid();
+    } else if (parsed.node.kind === "rector") {
+      if (!E.parishClergyOf(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx).heads[parsed.node.headIdx]) return invalid();
     } else if (parsed.node.kind === "lord" || parsed.node.kind === "baron") {
       const line =
         parsed.node.kind === "lord"
@@ -338,8 +411,50 @@ export function initApp(): void {
     });
   });
 
-  rollBtn.addEventListener("click", () => roll());
-  newWorldBtn.addEventListener("click", newWorld);
+  // U4 § the locator is the record. The box has always held the permanent
+  // URL of whatever you are looking at, and there was no way to take it
+  // except selecting the text by hand — which is a poor showing for an app
+  // whose central promise is that the address IS the life.
+  copyBtn?.addEventListener("click", () => {
+    const url = `${location.origin}${location.pathname}#${seedbox.value}`;
+    void navigator.clipboard?.writeText(url).then(
+      () => {
+        copyBtn.textContent = UI[locale].copyLocatorDone;
+        status.textContent = UI[locale].copyLocatorDone;
+        setTimeout(() => {
+          copyBtn.textContent = UI[locale].copyLocator;
+        }, 1600);
+      },
+      () => {
+        // No clipboard permission (or no clipboard at all): fall back to
+        // selecting the locator so it can still be copied by hand.
+        seedbox.focus();
+        seedbox.select();
+      },
+    );
+  });
+
+  // U5 § the roll can block. randomCitizen may solve up to twenty villages
+  // before it finds a native-born person, and a cold solve is ~30ms — so a
+  // roll is usually instant and occasionally takes half a second of blocked
+  // main thread with nothing on screen to say so. Disabling the button for
+  // the duration is honest and costs nothing; the yield before the work lets
+  // the disabled state actually paint first.
+  function rollWithFeedback(fn: () => void): void {
+    rollBtn.disabled = true;
+    newWorldBtn.disabled = true;
+    requestAnimationFrame(() => {
+      try {
+        fn();
+      } finally {
+        rollBtn.disabled = false;
+        newWorldBtn.disabled = false;
+      }
+    });
+  }
+
+  rollBtn.addEventListener("click", () => rollWithFeedback(() => roll()));
+  newWorldBtn.addEventListener("click", () => rollWithFeedback(newWorld));
   replayBtn.addEventListener("click", () => {
     openLocator(seedbox.value);
   });

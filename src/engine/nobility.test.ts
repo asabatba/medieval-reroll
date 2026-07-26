@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodePerson } from "./biography.js";
+import { parishClergyOf } from "./clergy.js";
 import { REGIONS } from "./data/regions.js";
 import { manorOf } from "./hierarchy.js";
 import {
@@ -15,6 +16,7 @@ import {
   sovereignAt,
   tenureIndexAt,
 } from "./nobility.js";
+import { papalSeriesOf } from "./papacy.js";
 import { resolveVillage } from "./village.js";
 
 const REGION_KEYS = Object.keys(REGIONS);
@@ -254,6 +256,15 @@ describe("§ nobility: biography integration", () => {
                 const answers = f.style.en.includes(r.name) || f.name.en.includes(r.name) || (f.aka ?? []).some((a) => a.en === r.name);
                 if (answers) expect(r.routeIdx, `${rk} ${e.year}: "${r.name}"`).toBe(inForce);
               }
+            } else if (r.route === "pope") {
+              // § the Schism: the index is into the REGION's own papal
+              // series, not into the shared pontificate data — a pope this
+              // region never obeyed has no term to point at.
+              expect(papalSeriesOf(r.addr.regionKey)[r.routeIdx!], `${rk}: "${r.name}" -> ${r.routeIdx}`).toBeDefined();
+            } else if (r.route === "rector") {
+              // § the church's own line: indexed into the PARISH's clergy
+              // line, which a shared block reads from its mother church.
+              expect(parishClergyOf(1444, r.addr.regionKey, r.addr.villageIdx).heads[r.routeIdx!], `${rk}: "${r.name}"`).toBeDefined();
             } else {
               expect(manorLineOf(1444, r.addr.regionKey, r.addr.villageIdx).heads[r.routeIdx!]).toBeDefined();
             }

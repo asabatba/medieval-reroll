@@ -137,7 +137,7 @@ export function tenureIndexAt(heads: LordTenure[], year: number): number {
 /** The baronial house holding the honour this village's manor belongs to. */
 export function honourLineOf(worldSeed: number, regionKey: string, villageIdx: number): NobleLine {
   const key = `honour|${worldSeed}|${regionKey}|${villageIdx}`;
-  const cached = nobleLineCacheGet(key);
+  const cached = nobleLineCacheGet<NobleLine>(key);
   if (cached) return cached;
   const region = REGIONS[regionKey];
   const { surname, block } = honourFamilyOf(worldSeed, regionKey, villageIdx);
@@ -153,7 +153,7 @@ export function honourLineOf(worldSeed: number, regionKey: string, villageIdx: n
  * knightly family of their own — the same split manorOf always drew. */
 export function manorLineOf(worldSeed: number, regionKey: string, villageIdx: number): NobleLine {
   const key = `manor|${worldSeed}|${regionKey}|${villageIdx}`;
-  const cached = nobleLineCacheGet(key);
+  const cached = nobleLineCacheGet<NobleLine>(key);
   if (cached) return cached;
   const region = REGIONS[regionKey];
   const { surname: honourSurname } = honourFamilyOf(worldSeed, regionKey, villageIdx);

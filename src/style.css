@@ -249,6 +249,13 @@ button.roll:focus-visible,
   color: var(--bone);
   border-color: var(--bone-dim);
 }
+/* U5 § the roll can block: while a roll is solving, say so rather than
+   looking merely unresponsive. */
+.roll:disabled,
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
 
 .intro {
   display: none;
@@ -301,6 +308,17 @@ h1.name {
 }
 h1.name .init {
   color: var(--rubric);
+}
+/* U3 § keeping the keyboard's place: the heading takes focus on every
+   navigation (app.ts), so it must not draw a ring for a mouse click — only
+   when the keyboard is actually the thing that got here. */
+h1.name:focus {
+  outline: none;
+}
+h1.name:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 6px;
+  border-radius: 2px;
 }
 .dates {
   font-family: "JetBrains Mono", monospace;
@@ -884,6 +902,40 @@ details.register summary::before {
 .regrow .rr-name i {
   color: var(--bone-dim);
   font-size: 12px;
+}
+/* ---- U1 § finding a person: a way into the register other than luck ---- */
+.regfilter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 0;
+}
+.regq {
+  flex: 1;
+  min-width: 0;
+  background: rgba(var(--gilt-rgb), 0.04);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 6px 10px;
+  color: var(--bone);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+}
+.regq:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: -2px;
+}
+.regcount {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--bone-dim);
+  white-space: nowrap;
+}
+.regempty {
+  padding: 12px 18px 0;
+  margin: 0;
+  color: var(--bone-dim);
+  font-size: 14px;
 }
 /* ---- Royal line & noble houses (§ nobility) ---- */
 details.royal {

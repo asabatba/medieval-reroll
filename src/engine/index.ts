@@ -21,8 +21,20 @@
 export { decodePerson } from "./biography.js";
 // § the village route: the land itself, which the UI now has a page for.
 export { holdingsAt, holdingsOf } from "./capacity.js";
+// § the church's own line: the succession of parish priests, built like the
+// noble lines but keyed to the PARISH seat, so a shared mother church has
+// one incumbent and not one per village.
+export type { ClergyLine, IncumbencyEnd, Incumbent } from "./clergy.js";
+export { CLERGY_FROM, CLERGY_TO, incumbencyIndexAt, institutionsBetween, parishClergyOf, parishSeatOf, plagueVacancyAt, rectorAt } from "./clergy.js";
 export { CLASS_INFO } from "./data/classes.js";
 export { DEFAULT_DEMOGRAPHY, DEMOGRAPHY, demographyOf } from "./data/demography.js";
+// § named epidemics: the dated outbreaks and the endemic background that
+// name a `disease` death instead of leaving it in the grey bucket.
+export type { Epidemic } from "./data/epidemics.js";
+export { EPIDEMICS, epidemicAt, epidemicNews } from "./data/epidemics.js";
+// § the appropriated living: the clergy line stores a saint INDEX, not a
+// name, so the priory holding the tithes can be named in either locale.
+export { SAINTS } from "./data/jurisdictions.js";
 export { CAUSE_LABEL } from "./data/narrative.js";
 export { placeOf, placeShortOf } from "./data/placeNames.js";
 export { PLAGUES, plagueAt } from "./data/plagues.js";
@@ -64,6 +76,22 @@ export {
   sovereignAt,
   tenureIndexAt,
 } from "./nobility.js";
+// § the Schism: the papacy as data, read through each region's own
+// obedience — the one lookup in the engine whose ANSWER depends on the
+// region while its data is shared.
+export type { PapalLine, PapalSeat, PapalTerm, Pontificate } from "./papacy.js";
+export {
+  JUBILEES,
+  jubileeAt,
+  obedienceAt,
+  PAPACY_FROM,
+  PAPACY_TO,
+  papalSeriesOf,
+  papalWorldEvents,
+  popeAt,
+  popeIndexAt,
+  popeTermAt,
+} from "./papacy.js";
 export { randomCitizen, roster } from "./roster.js";
 // § settlement: deterministic rural/urban axis over village addresses.
 export { settlementTypeOf } from "./settlement.js";

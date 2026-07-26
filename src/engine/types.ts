@@ -320,9 +320,15 @@ export interface EventRef {
   addr: Address;
   /** Link target kind: absent = the person `id` at `addr`; "royal" = the
    * sovereign page for reign `routeIdx` of `addr`'s region's royal line;
-   * "lord" = the lord page for head `routeIdx` of `addr`'s manor's line. */
-  route?: "royal" | "lord";
-  /** Reign index (route "royal") or manor-line head index (route "lord"). */
+   * "lord" = the lord page for head `routeIdx` of `addr`'s manor's line;
+   * "pope" = the pontiff page for term `routeIdx` of `addr`'s region's own
+   * papal series (§ the Schism — the series is region-specific, so the
+   * index means nothing without the region); "rector" = the incumbent page
+   * for incumbency `routeIdx` of `addr`'s parish clergy line. */
+  route?: "royal" | "lord" | "pope" | "rector";
+  /** Reign index (route "royal"), manor-line head index (route "lord"),
+   * papal-series term index (route "pope"), or incumbency index (route
+   * "rector"). */
   routeIdx?: number;
 }
 
@@ -398,6 +404,19 @@ export interface Bio {
   region: string;
   /** Style of the sovereign reigning in the birth year (§ nobility) — "King Edward III", or Florence's regime. */
   sovereign: string;
+  /** § the Schism: style of the pope THIS REGION obeyed in the birth year —
+   * empty in a vacancy, and in the years a realm recognised no pope at all,
+   * which is a fact worth showing rather than papering over. */
+  pontiff: string;
+  /** Index into papalSeriesOf(region) for `pontiff` — the pontiff's own page. -1 when there is none. */
+  pontiffIdx: number;
+  /** § the church's own line: the parish incumbent at the person's birth,
+   * his index in the parish clergy line (his own page), and whether the
+   * living is appropriated — which is what decides he is a salaried vicar
+   * rather than a rector holding the tithes himself. */
+  rector: string;
+  rectorIdx: number;
+  rectorTitle: "rector" | "vicar";
   literate: boolean;
   inOrders: boolean;
   incomer: boolean;

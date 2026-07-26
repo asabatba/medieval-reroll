@@ -141,6 +141,43 @@ interface UiStrings {
   /** How many parishes of a deanery the same visitation window turned up. */
   parishesFound: (n: number) => string;
   soulsOnRegister: (n: number) => string;
+  // ---- § the Schism: the papal series a region actually obeyed ----
+  pontiff: string;
+  /** The honest answer where the region obeyed nobody, or the see stood empty. */
+  noPontiff: string;
+  papalSeriesHeader: (region: string) => string;
+  pontificatesHeader: string;
+  obedienceLabel: string;
+  seatLabel: string;
+  seatName: Record<"rome" | "avignon" | "pisa", string>;
+  lineName: Record<"roman" | "avignon" | "pisan", string>;
+  sedeVacante: string;
+  noObedienceTerm: string;
+  pontificateEnd: Record<"died" | "resigned" | "deposed", string>;
+  heldSeeLabel: string;
+  jubileeTag: string;
+  jubileesInPontificate: string;
+  obeyedHere: string;
+  schismNote: string;
+  // ---- § the church's own line: the parish incumbents ----
+  incumbentTitle: Record<"rector" | "vicar", string>;
+  incumbentsHeader: string;
+  institutedLabel: string;
+  incumbencyLabel: string;
+  incumbencyEnd: Record<"died" | "plague" | "resigned" | "exchanged", string>;
+  appropriatedNote: (saint: string) => string;
+  rectoryNote: string;
+  presentedByLabel: string;
+  servingInYear: string;
+  clergyPlagueNote: (year: number, n: number) => string;
+  // ---- U1: finding a person in the register ----
+  registerFilterLabel: string;
+  registerFilterPlaceholder: string;
+  registerFilterEmpty: string;
+  registerFilterCount: (shown: number, total: number) => string;
+  // ---- U4: the locator is the record; make it takeable ----
+  copyLocator: string;
+  copyLocatorDone: string;
   // ---- family tree (§ one-step tree: parents / self+siblings+spouses / children) ----
   familyTree: string;
   self: (sex: "M" | "F") => string;
@@ -296,6 +333,46 @@ export const UI: Record<Locale, UiStrings> = {
       `As found on visitation of the first ${villages} villages of the region. A deanery reaches further than any one visitation did.`,
     parishesFound: (n) => (n === 1 ? "1 parish found" : `${n} parishes found`),
     soulsOnRegister: (n) => `${n} souls on the register`,
+    pontiff: "Pontiff",
+    noPontiff: "None obeyed here",
+    papalSeriesHeader: (region) => `The popes obeyed in ${region}`,
+    pontificatesHeader: "Pontificates",
+    obedienceLabel: "Obedience",
+    seatLabel: "Seat",
+    seatName: { rome: "Rome", avignon: "Avignon", pisa: "Pisa" },
+    lineName: { roman: "the Roman line", avignon: "the Avignon obedience", pisan: "the Pisan line" },
+    sedeVacante: "The see stood vacant",
+    noObedienceTerm: "No pope obeyed in this realm",
+    pontificateEnd: { died: "Died in office.", resigned: "Resigned the office.", deposed: "Deposed by a council." },
+    heldSeeLabel: "Held the see",
+    jubileeTag: "year of jubilee",
+    jubileesInPontificate: "Jubilees proclaimed",
+    obeyedHere: "Obeyed in this region during this life",
+    schismNote:
+      "Between 1378 and 1417 there was no single Church. This is the succession <b>this region</b> recognised — a neighbouring realm's list runs differently through those years, and each was told the other's pope was no pope at all.",
+    incumbentTitle: { rector: "Rector", vicar: "Vicar" },
+    incumbentsHeader: "Incumbents of this church",
+    institutedLabel: "Instituted",
+    incumbencyLabel: "Incumbency",
+    incumbencyEnd: {
+      died: "died in the living",
+      plague: "died of the pestilence",
+      resigned: "resigned the living",
+      exchanged: "exchanged the benefice",
+    },
+    appropriatedNote: (saint) =>
+      `The living is appropriated: the great tithes belong to the priory of ${saint}, which presents a salaried vicar to do the work of the parish.`,
+    rectoryNote: "The living is a rectory: the parson holds the tithes of the parish himself, and the lord of the manor presents him.",
+    presentedByLabel: "Presented by",
+    servingInYear: "Serving this year",
+    clergyPlagueNote: (year, n) =>
+      `${n === 1 ? "One institution" : `${n} institutions`} to this church in ${year} alone — which is how the bishops' registers came to be the best record of the mortality that survives.`,
+    registerFilterLabel: "Find in the register",
+    registerFilterPlaceholder: "name, surname or year…",
+    registerFilterEmpty: "Nobody of that name on this register.",
+    registerFilterCount: (shown, total) => `${shown} of ${total}`,
+    copyLocator: "Copy link",
+    copyLocatorDone: "Link copied",
     familyTree: "Family tree",
     self: (sex) => (sex === "F" ? "Herself" : "Himself"),
     outOfWedlock: "Born out of wedlock",
@@ -440,6 +517,46 @@ export const UI: Record<Locale, UiStrings> = {
       `Tal com es va trobar en la visita als primers ${villages} pobles de la regió. Un deganat s'estén més enllà del que cap visita va arribar.`,
     parishesFound: (n) => (n === 1 ? "1 parròquia trobada" : `${n} parròquies trobades`),
     soulsOnRegister: (n) => `${n} ànimes al registre`,
+    pontiff: "Pontífex",
+    noPontiff: "Cap d'obeït aquí",
+    papalSeriesHeader: (region) => `Els papes obeïts a ${region}`,
+    pontificatesHeader: "Pontificats",
+    obedienceLabel: "Obediència",
+    seatLabel: "Seu",
+    seatName: { rome: "Roma", avignon: "Avinyó", pisa: "Pisa" },
+    lineName: { roman: "la línia romana", avignon: "l'obediència d'Avinyó", pisan: "la línia de Pisa" },
+    sedeVacante: "La seu va restar vacant",
+    noObedienceTerm: "Cap papa obeït en aquest reialme",
+    pontificateEnd: { died: "Morí en el càrrec.", resigned: "Renuncià al càrrec.", deposed: "Deposat per un concili." },
+    heldSeeLabel: "Va tenir la seu",
+    jubileeTag: "any de jubileu",
+    jubileesInPontificate: "Jubileus proclamats",
+    obeyedHere: "Obeït en aquesta regió durant aquesta vida",
+    schismNote:
+      "Entre 1378 i 1417 no hi hagué una sola Església. Aquesta és la successió que <b>aquesta regió</b> va reconèixer — la llista d'un reialme veí corre diferent per aquells anys, i a cadascun li deien que el papa de l'altre no era papa.",
+    incumbentTitle: { rector: "Rector", vicar: "Vicari" },
+    incumbentsHeader: "Rectors d'aquesta església",
+    institutedLabel: "Instituït",
+    incumbencyLabel: "Regiment",
+    incumbencyEnd: {
+      died: "morí servint el benefici",
+      plague: "morí de la pestilència",
+      resigned: "renuncià al benefici",
+      exchanged: "bescanvià el benefici",
+    },
+    appropriatedNote: (saint) =>
+      `El benefici és apropiat: les dècimes majors són del priorat de ${saint}, que presenta un vicari assalariat perquè faci la feina de la parròquia.`,
+    rectoryNote: "El benefici és una rectoria: el rector té les dècimes de la parròquia ell mateix, i el senyor de la senyoria el presenta.",
+    presentedByLabel: "Presentat per",
+    servingInYear: "Servint aquest any",
+    clergyPlagueNote: (year, n) =>
+      `${n === 1 ? "Una institució" : `${n} institucions`} a aquesta església només l'any ${year} — i és així com els registres dels bisbes esdevingueren el millor testimoni de la mortaldat que ens ha arribat.`,
+    registerFilterLabel: "Cerca al registre",
+    registerFilterPlaceholder: "nom, cognom o any…",
+    registerFilterEmpty: "Ningú amb aquest nom en aquest registre.",
+    registerFilterCount: (shown, total) => `${shown} de ${total}`,
+    copyLocator: "Copia l'enllaç",
+    copyLocatorDone: "Enllaç copiat",
     familyTree: "Arbre genealògic",
     self: (sex) => (sex === "F" ? "Ella mateixa" : "Ell mateix"),
     outOfWedlock: "Nascuts fora del matrimoni",

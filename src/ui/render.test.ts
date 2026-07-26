@@ -96,6 +96,37 @@ describe("buildRecordHTML", () => {
     expect(html).toContain(person.name);
   });
 
+  // § the Schism / § the church's own line: the two heads a villager
+  // actually answered to, on the same footing as the lord and the king.
+  it("names the pope this region obeyed and the priest who would have baptised them, both as links", () => {
+    const bio = E.decodePerson(env, person.id, "en")!;
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    expect(html).toContain(bio.rector);
+    expect(html).toContain(`data-goto="rector:england:0:${bio.rectorIdx}"`);
+    expect(html).toContain(`data-goto="pontiff:england:${bio.pontiffIdx}"`);
+    // The pope of the birth year, not of some fixed anchor.
+    expect(bio.pontiffIdx).toBe(E.popeIndexAt("england", bio.birth));
+    expect(bio.pontiff).toBe(E.popeTermAt("england", bio.birth)?.pope?.style.en ?? "");
+  });
+
+  it("renders the papal series section with only the terms this life overlapped", () => {
+    const bio = E.decodePerson(env, person.id, "en")!;
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    const section = html.slice(html.indexOf("The popes obeyed in"));
+    const rows = (section.slice(0, section.indexOf("</details>")).match(/data-goto="pontiff:england:(\d+)"/g) ?? []).length;
+    const overlapping = E.papalSeriesOf("england").filter((t) => t.from <= bio.death.year && t.to >= bio.birth).length;
+    expect(rows).toBe(overlapping);
+    expect(rows).toBeGreaterThan(0);
+  });
+
+  it("U1: the register carries a filter box and a searchable key on every row", () => {
+    const html = buildRecordHTML(E, 1444, stack, "en");
+    expect(html).toContain('id="regq"');
+    expect(html).toContain('id="reglist"');
+    const rows = (html.match(/class="regrow[^"]*" data-goto="[^"]+" data-q="/g) ?? []).length;
+    expect(rows).toBe(env.persons.length);
+  });
+
   it("renders a Catalan record with the same structural sections as English", () => {
     const html = buildRecordHTML(E, 1444, stack, "ca");
     expect(html).toContain('class="vital"');
@@ -111,7 +142,12 @@ describe("buildRecordHTML", () => {
     expect(html).toContain("Royal line — Kings of England");
     const line = E.royalLineOf("england")!;
     for (const r of line.reigns) expect(html).toContain(r.style.en);
-    const livedRows = (html.match(/class="ryrow lived/g) ?? []).length;
+    // § the Schism added a SECOND collapsed line section to this page, built
+    // from the same register-row markup — so counting `.ryrow.lived` across
+    // the whole document now counts popes as well as kings. Scope the count
+    // to the royal section itself.
+    const royalSection = html.slice(html.indexOf("Royal line — Kings of England"));
+    const livedRows = (royalSection.slice(0, royalSection.indexOf("</details>")).match(/class="ryrow lived/g) ?? []).length;
     expect(livedRows).toBe(line.reigns.filter((r) => r.from <= bio.death.year && r.to >= bio.birth).length);
     expect(livedRows).toBeGreaterThan(0);
   });
@@ -406,6 +442,43 @@ describe("the population curve", () => {
     expect(chartYearAt(0.5)).toBe(Math.round((VILLAGE_YEAR_MIN + VILLAGE_YEAR_MAX) / 2));
     expect(chartYearAt(-3)).toBe(VILLAGE_YEAR_MIN);
     expect(chartYearAt(3)).toBe(VILLAGE_YEAR_MAX);
+  });
+
+  // § the Schism / § the church's own line: the three new views.
+  it("builds the papal-series, pontiff and incumbent views in both locales", () => {
+    for (const locale of ["en", "ca"] as const) {
+      const series = buildViewHTML(E, 1444, [{ kind: "papacy", regionKey: "england" }], locale);
+      expect(series).toContain('data-goto="pontiff:england:0"');
+      expect(series).toContain("1378");
+
+      const idx = E.popeIndexAt("england", 1400);
+      const one = buildViewHTML(E, 1444, [{ kind: "pontiff", regionKey: "england", termIdx: idx }], locale);
+      expect(one).toContain(E.papalSeriesOf("england")[idx].pope!.name[locale]);
+      expect(one).toContain('data-goto="papacy:england"');
+
+      const line = E.parishClergyOf(1444, "england", 0);
+      const rector = buildViewHTML(E, 1444, [{ kind: "rector", regionKey: "england", villageIdx: 0, headIdx: 4 }], locale);
+      // The card title carries a drop-cap span, so the initial is split off:
+      // match the rest of the name, and the neighbours, which are printed whole.
+      expect(rector).toContain(line.heads[4].name.slice(1));
+      expect(rector).toContain(line.heads[3].name);
+      expect(rector).toContain(line.heads[5].name);
+      expect(rector).toContain('data-goto="rector:england:0:3"');
+      expect(rector).toContain('data-goto="parish:england:0"');
+      // Presented by the appropriating house, or by the lord of the manor —
+      // and where it is the lord, he is a link to his own page.
+      if (!line.appropriated) expect(rector).toContain('data-goto="lord:england:0:');
+    }
+  });
+
+  it("a pontiff page for a term with no pope still renders, and says what it was", () => {
+    // France recognised nobody between 1398 and 1402 — a real term, with a
+    // real page, and no name to put on it.
+    const idx = E.popeIndexAt("france", 1400);
+    expect(E.papalSeriesOf("france")[idx].pope).toBeNull();
+    const html = buildViewHTML(E, 1444, [{ kind: "pontiff", regionKey: "france", termIdx: idx }], "en");
+    expect(html).toContain("No pope obeyed in this realm");
+    expect(html).toContain("1398");
   });
 
   it("the curve agrees with the household view it sits above, year for year", () => {

@@ -62,7 +62,35 @@ export interface ParishNode {
   villageIdx: number;
   crumb?: string;
 }
-export type StackNode = PersonNode | RoyalNode | KingNode | HouseNode | LordNode | VillageNode | ParishNode;
+/** § the Schism: a region's papal series — every pope IT obeyed, which is
+ * not the same list as its neighbour's. Shaped exactly like the royal
+ * route (a line view plus a page per holder) because it is exactly the
+ * same kind of thing: a succession the villagers had no part in choosing
+ * and heard about second-hand. */
+export interface PapacyNode {
+  kind: "papacy";
+  regionKey: string;
+  crumb?: string;
+}
+/** One pontificate — or one vacancy, or one stretch of obeying nobody —
+ * as term `termIdx` of the region's series. */
+export interface PontiffNode {
+  kind: "pontiff";
+  regionKey: string;
+  termIdx: number;
+  crumb?: string;
+}
+/** § the church's own line: one incumbent of a parish, indexed into its
+ * clergy line. Addressed by a village of the parish, like the parish route
+ * itself — the line belongs to the mother church, not to the village. */
+export interface RectorNode {
+  kind: "rector";
+  regionKey: string;
+  villageIdx: number;
+  headIdx: number;
+  crumb?: string;
+}
+export type StackNode = PersonNode | RoyalNode | KingNode | HouseNode | LordNode | VillageNode | ParishNode | PapacyNode | PontiffNode | RectorNode;
 
 export function isPersonNode(node: StackNode): node is PersonNode {
   return node.kind == null || node.kind === "person";
@@ -74,8 +102,10 @@ export function locator(worldSeed: number, node: StackNode | PersonAddress): str
     return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.kind}`;
   if ("kind" in node && node.kind === "royal") return `${worldSeed}:${node.regionKey}:royal`;
   if ("kind" in node && node.kind === "king") return `${worldSeed}:${node.regionKey}:royal:${node.reignIdx}`;
+  if ("kind" in node && node.kind === "papacy") return `${worldSeed}:${node.regionKey}:papacy`;
+  if ("kind" in node && node.kind === "pontiff") return `${worldSeed}:${node.regionKey}:papacy:${node.termIdx}`;
   if ("kind" in node && node.kind === "house") return `${worldSeed}:${node.regionKey}:${node.villageIdx}:house`;
-  if ("kind" in node && (node.kind === "lord" || node.kind === "baron"))
+  if ("kind" in node && (node.kind === "lord" || node.kind === "baron" || node.kind === "rector"))
     return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.kind}:${node.headIdx}`;
   const p = node as PersonAddress;
   return worldSeed + ":" + p.regionKey + ":" + p.villageIdx + ":" + p.personId;
@@ -107,14 +137,23 @@ export function villageGoto(addr: Address): string {
 function parishGoto(kind: "parish" | "deanery" | "diocese", addr: Address): string {
   return `${kind}:${addr.regionKey}:${addr.villageIdx}`;
 }
-function lordGoto(kind: "lord" | "baron", addr: Address, headIdx: number): string {
+function lordGoto(kind: "lord" | "baron" | "rector", addr: Address, headIdx: number): string {
   return `${kind}:${addr.regionKey}:${addr.villageIdx}:${headIdx}`;
+}
+function papacyGoto(regionKey: string): string {
+  return `papacy:${regionKey}`;
+}
+function pontiffGoto(regionKey: string, termIdx: number): string {
+  return `pontiff:${regionKey}:${termIdx}`;
 }
 
 function gotoOf(ref: EventRef): string {
-  // A route ref names a specific sovereign or lord — link their own page.
+  // A route ref names a specific sovereign, lord, pope or parson — link
+  // their own page rather than a person record they do not have.
   if (ref.route === "royal") return ref.routeIdx != null && ref.routeIdx >= 0 ? kingGoto(ref.addr.regionKey, ref.routeIdx) : royalGoto(ref.addr.regionKey);
   if (ref.route === "lord") return ref.routeIdx != null && ref.routeIdx >= 0 ? lordGoto("lord", ref.addr, ref.routeIdx) : houseGoto(ref.addr);
+  if (ref.route === "pope") return ref.routeIdx != null && ref.routeIdx >= 0 ? pontiffGoto(ref.addr.regionKey, ref.routeIdx) : papacyGoto(ref.addr.regionKey);
+  if (ref.route === "rector") return ref.routeIdx != null && ref.routeIdx >= 0 ? lordGoto("rector", ref.addr, ref.routeIdx) : parishGoto("parish", ref.addr);
   return addrStr(ref.addr, ref.id);
 }
 
@@ -434,11 +473,27 @@ function renderParishRegister(E: typeof Engine, env: Envelope, locale: Locale, c
   const reg = E.roster(env)
     .slice()
     .sort((a, b) => a.birth - b.birth);
+  // U1 § finding a person: a village runs to several hundred souls and the
+  // only ways into one were a random roll and a locator you already had.
+  // The haystack was always right here; it just had no way in. Filtering is
+  // done in the DOM (app.ts) rather than by re-rendering, so it stays
+  // instant on a register this long and needs no engine call at all — every
+  // row already carries the text it would be matched on.
+  const searchOf = (r: Engine.RosterRow) => `${r.name} ${r.surname} ${r.birth} ${r.death.year}`.toLowerCase();
   return (
-    `<details class="register reveal"${open ? " open" : ""}><summary>${esc(t.parishRegisterHeader(reg.length, env.place[locale]))}</summary><div class="register-list">` +
+    `<details class="register reveal"${open ? " open" : ""}><summary>${esc(t.parishRegisterHeader(reg.length, env.place[locale]))}</summary>` +
+    `<div class="regfilter">
+      <label class="sr-only" for="regq">${esc(t.registerFilterLabel)}</label>
+      <input type="search" id="regq" class="regq" placeholder="${esc(t.registerFilterPlaceholder)}" autocomplete="off" data-total="${reg.length}">
+      <span class="regcount" id="regcount"></span>
+    </div>` +
+    `<p class="regempty" id="regempty" hidden>${esc(t.registerFilterEmpty)}</p>` +
+    `<div class="register-list" id="reglist">` +
     reg
       .map(
-        (r) => `<button class="regrow${r.id === currentId ? " current" : ""}" data-goto="${env.regionKey}:${env.villageIdx}:${r.id}">
+        (
+          r,
+        ) => `<button class="regrow${r.id === currentId ? " current" : ""}" data-goto="${env.regionKey}:${env.villageIdx}:${r.id}" data-q="${esc(searchOf(r))}">
       <span class="rr-name">${esc(r.name)} ${esc(r.surname)}${r.founder ? ` <i>${t.founderTag}</i>` : r.incomer ? ` <i>${t.incomerTag}</i>` : r.emigrated ? ` <i>${t.emigratedTag}</i>` : ""}</span>
       <span class="rr-dates">${r.birth}–${r.death.year}</span>
       <span class="rr-cause${r.death.cause === "plague" ? " plague" : ""}">${esc(E.CAUSE_LABEL[locale][r.death.cause])}</span>
@@ -487,6 +542,33 @@ function renderRoyalLineSection(E: typeof Engine, regionKey: string, bio: Bio, l
   return `<details class="register royal reveal"><summary>${esc(t.royalLineHeader(line.title[locale]))}</summary><div class="register-list royal-list">${rows}</div></details>`;
 }
 
+// § the Schism: the region's papal series as a collapsed register-style
+// block, mirroring renderRoyalLineSection. Only the terms overlapping this
+// life are worth walking, so the section shows those and links on to the
+// whole series — a list of forty-odd popes is a page, not a sidebar.
+function renderPapalSection(E: typeof Engine, regionKey: string, bio: Bio, locale: Locale): string {
+  const t = UI[locale];
+  const series = E.papalSeriesOf(regionKey);
+  const lived = series.map((term, i) => ({ term, i })).filter(({ term }) => term.from <= bio.death.year && term.to >= bio.birth);
+  if (!lived.length) return "";
+  const rows = lived
+    .map(
+      ({
+        term,
+        i,
+      }) => `<button class="ryrow lived${term.kind !== "pope" ? " interregnum" : ""}" data-goto="${pontiffGoto(regionKey, i)}" title="${esc(t.obeyedHere)}">
+      <span class="ry-years">${termYears(term)}</span>
+      <span class="ry-style">${esc(termLabel(t, term, locale))}</span>
+      <span class="ry-house">${esc(term.pope ? t.seatName[term.pope.seat] : "—")}</span>
+    </button>`,
+    )
+    .join("");
+  return `<details class="register royal reveal"><summary>${esc(t.papalSeriesHeader(bio.region))}</summary>
+    <div class="register-list royal-list">${rows}</div>
+    <div class="royal-link"><button class="namelink" data-goto="${papacyGoto(regionKey)}">${esc(t.pontificatesHeader)}</button></div>
+  </details>`;
+}
+
 function renderLineageBar(stack: StackNode[], t: (typeof UI)[Locale]): string {
   if (stack.length <= 1) return "";
   let h = `<nav class="lineage reveal" aria-label="${esc(t.trail)}">`;
@@ -507,6 +589,9 @@ export function buildViewHTML(E: typeof Engine, worldSeed: number, stack: StackN
   if (node.kind === "parish" || node.kind === "deanery" || node.kind === "diocese") return buildParishHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "royal") return buildRoyalLineHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "king") return buildKingHTML(E, worldSeed, stack, node, locale);
+  if (node.kind === "papacy") return buildPapacyHTML(E, worldSeed, stack, node, locale);
+  if (node.kind === "pontiff") return buildPontiffHTML(E, worldSeed, stack, node, locale);
+  if (node.kind === "rector") return buildRectorHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "house") return buildNobleHouseHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "lord" || node.kind === "baron") return buildLordHTML(E, worldSeed, stack, node, locale);
   return buildRecordHTML(E, worldSeed, stack, locale);
@@ -572,10 +657,21 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     <div class="vital"><div class="k">${t.honour}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(bio.fief.honour)}</button></div></div>
     <div class="vital"><div class="k">${t.lord}</div><div class="v"><button class="namelink" data-goto="${lordVitalGoto}">${esc(bio.fief.lord)}</button></div></div>
     <div class="vital"><div class="k">${t.sovereign}</div><div class="v"><button class="namelink" data-goto="${sovereignVitalGoto}">${esc(bio.sovereign)}</button></div></div>
+    <div class="vital"><div class="k">${t.incumbentTitle[bio.rectorTitle]}</div><div class="v"><button class="namelink" data-goto="${lordGoto("rector", node, bio.rectorIdx)}">${esc(bio.rector)}</button></div></div>
+    <div class="vital"><div class="k">${t.pontiff}</div><div class="v">${
+      bio.pontiffIdx >= 0
+        ? `<button class="namelink" data-goto="${pontiffGoto(node.regionKey, bio.pontiffIdx)}">${esc(bio.pontiff || t.noPontiff)}</button>`
+        : esc(t.noPontiff)
+    }</div></div>
   </div>`;
 
   // Royal line — collapsed under the jurisdictions it crowns.
   html += renderRoyalLineSection(E, node.regionKey, bio, locale);
+  // § the Schism: and the other head, on the same footing. Collapsed, with
+  // the terms this person actually lived under highlighted — which for
+  // anyone alive between 1378 and 1417 is where their region's list stops
+  // agreeing with everyone else's.
+  html += renderPapalSection(E, node.regionKey, bio, locale);
 
   // Parentage
   html += `<div class="sect reveal"><h2>${esc(t.parentage)}</h2></div><div class="parents reveal">`;
@@ -851,6 +947,204 @@ function buildLordHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], 
   return html;
 }
 
+// ---- § the Schism: the two papal views ----
+
+/** A term's label and years, shared by the series list and the term page —
+ * a vacancy and a withdrawal of obedience are terms too, and saying so is
+ * the point of showing the series rather than only the popes in it. */
+function termLabel(t: (typeof UI)[Locale], term: Engine.PapalTerm, locale: Locale): string {
+  if (term.kind === "pope") return term.pope!.style[locale];
+  return term.kind === "vacant" ? t.sedeVacante : t.noObedienceTerm;
+}
+
+function termYears(term: Engine.PapalTerm): string {
+  return term.from === term.to ? `${term.from}` : `${term.from}–${term.to}`;
+}
+
+// The popes of one region — which is a different list from the popes of
+// the region next door, and the only page in the app where that is true.
+function buildPapacyHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: PapacyNode, locale: Locale): string {
+  const t = UI[locale];
+  const region = E.REGIONS[node.regionKey];
+  const series = E.papalSeriesOf(node.regionKey);
+  const title = t.papalSeriesHeader(region.name[locale]);
+  node.crumb = title;
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(region.name[locale])}</div>
+  </article>`;
+  html += `<div class="honour-note reveal">${t.schismNote}</div>`;
+
+  html += `<div class="sect reveal"><h2>${esc(t.pontificatesHeader)}</h2></div><div class="reigns reveal">`;
+  series.forEach((term, i) => {
+    // A vacancy or a withdrawal is styled like an interregnum for the same
+    // reason: it is one.
+    const gap = term.kind !== "pope";
+    const seat = term.pope ? t.seatName[term.pope.seat] : "—";
+    html += `<button class="ryrow${gap ? " interregnum" : ""}" data-goto="${pontiffGoto(node.regionKey, i)}">
+      <span class="ry-years">${termYears(term)}</span>
+      <span class="ry-style">${esc(termLabel(t, term, locale))}</span>
+      <span class="ry-house">${esc(seat)}</span>
+    </button>`;
+  });
+  html += `</div>`;
+  return html;
+}
+
+// One pontificate as this region lived it: the years IT obeyed him (not
+// necessarily the years he reigned), his seat, his obedience, and the
+// jubilees that fell inside.
+function buildPontiffHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: PontiffNode, locale: Locale): string {
+  const t = UI[locale];
+  const series = E.papalSeriesOf(node.regionKey);
+  const term = series[node.termIdx];
+  if (!term) return "";
+  const region = E.REGIONS[node.regionKey];
+  const title = term.kind === "pope" ? term.pope!.name[locale] : termLabel(t, term, locale);
+  node.crumb = title;
+
+  const neighbour = (i: number, label: string): string => {
+    const other = series[i];
+    if (!other) return "";
+    return `<div class="vital"><div class="k">${esc(label)}</div><div class="v"><button class="namelink" data-goto="${pontiffGoto(node.regionKey, i)}">${esc(other.kind === "pope" ? other.pope!.name[locale] : termLabel(t, other, locale))}</button></div></div>`;
+  };
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(term.kind === "pope" ? term.pope!.style[locale] : title)} · ${esc(region.name[locale])}</div>
+  </article>`;
+
+  html += `<div class="vitals reveal">
+    <div class="vital"><div class="k">${t.heldSeeLabel}</div><div class="v">${esc(termYears(term))}</div></div>
+    ${term.pope ? `<div class="vital"><div class="k">${t.seatLabel}</div><div class="v">${esc(t.seatName[term.pope.seat])}</div></div>` : ""}
+    ${term.pope ? `<div class="vital"><div class="k">${t.obedienceLabel}</div><div class="v">${esc(t.lineName[term.pope.line])}</div></div>` : ""}
+    ${term.pope?.end ? `<div class="vital"><div class="k">${t.causeOfDeath}</div><div class="v red">${esc(t.pontificateEnd[term.pope.end])}</div></div>` : ""}
+    ${neighbour(node.termIdx - 1, t.predecessor)}
+    ${neighbour(node.termIdx + 1, t.successor)}
+  </div>`;
+
+  if (term.pope?.note) html += `<div class="honour-note reveal">${esc(term.pope.note[locale])}</div>`;
+
+  const jubilees = E.JUBILEES.filter((y) => y >= term.from && y <= term.to);
+  if (jubilees.length) {
+    html += `<div class="sect reveal"><h2>${esc(t.jubileesInPontificate)}</h2></div><div class="reigns reveal">${jubilees
+      .map((y) => `<div class="ryrow tenure"><span class="ry-years">${y}</span><span class="ry-style">${esc(t.jubileeTag)}</span></div>`)
+      .join("")}</div>`;
+  }
+
+  html += `<div class="royal-link reveal"><button class="namelink" data-goto="${papacyGoto(node.regionKey)}">${esc(t.papalSeriesHeader(region.name[locale]))}</button></div>`;
+  return html;
+}
+
+// ---- § the church's own line: one incumbent's page ----
+// The parish priest gets what the lord of the manor already had: a record
+// of his own, his predecessor and successor a click away, and — where the
+// living fell vacant by pestilence — the year said plainly.
+function buildRectorHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: RectorNode, locale: Locale): string {
+  const t = UI[locale];
+  const line = E.parishClergyOf(worldSeed, node.regionKey, node.villageIdx);
+  const h = line.heads[node.headIdx];
+  if (!h) return "";
+  node.crumb = h.name;
+  const jur = E.parishOf(worldSeed, node.regionKey, node.villageIdx, locale);
+  const saint = saintName(E, locale, line.patronSaintIdx);
+  const titleWord = t.incumbentTitle[line.title];
+
+  const neighbour = (i: number, label: string): string => {
+    const other = line.heads[i];
+    if (!other) return "";
+    return `<div class="vital"><div class="k">${esc(label)}</div><div class="v"><button class="namelink" data-goto="${lordGoto("rector", node, i)}">${esc(other.name)}</button></div></div>`;
+  };
+
+  // Who put him in: the appropriating house, or the lord holding the manor
+  // in the year he was instituted (§ nobility — and a link to that lord).
+  const lordIdx = E.tenureIndexAt(E.manorLineOf(worldSeed, node.regionKey, node.villageIdx).heads, h.instituted);
+  const lordName = E.manorLineOf(worldSeed, node.regionKey, node.villageIdx).heads[lordIdx].name;
+  const presenter = line.appropriated ? esc(saint) : `<button class="namelink" data-goto="${lordGoto("lord", node, lordIdx)}">${esc(lordName)}</button>`;
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(h.name[0])}</span>${esc(h.name.slice(1))}</h1>
+    <div class="dates">natus <b>${h.born}</b> · ${esc(titleWord)} · <button class="namelink" data-goto="${parishGoto("parish", node)}">${esc(jur.parish)}</button></div>
+  </article>`;
+
+  html += `<div class="vitals reveal">
+    <div class="vital"><div class="k">${t.institutedLabel}</div><div class="v">${h.instituted}</div></div>
+    <div class="vital"><div class="k">${t.incumbencyLabel}</div><div class="v">${h.instituted}–${h.vacated}</div></div>
+    <div class="vital"><div class="k">${t.causeOfDeath}</div><div class="v${h.end === "plague" || h.end === "died" ? " red" : ""}">${esc(t.incumbencyEnd[h.end])}</div></div>
+    <div class="vital"><div class="k">${t.presentedByLabel}</div><div class="v">${presenter}</div></div>
+    ${neighbour(node.headIdx - 1, t.predecessor)}
+    ${neighbour(node.headIdx + 1, t.successor)}
+  </div>`;
+
+  html += `<div class="honour-note reveal">${esc(line.appropriated ? t.appropriatedNote(saint) : t.rectoryNote)}</div>`;
+  html += `<div class="royal-link reveal"><button class="namelink" data-goto="${parishGoto("parish", node)}">${esc(t.incumbentsHeader)}</button></div>`;
+  return html;
+}
+
+/** The saint an appropriated living's priory is named for. Kept in one
+ * place because the parish page, the incumbent page and the biography all
+ * have to name the same house — the index is stored on the clergy line
+ * precisely so the name can be localized rather than frozen at generation. */
+function saintName(E: typeof Engine, locale: Locale, idx: number): string {
+  const saints = E.SAINTS[locale];
+  return saints[idx % saints.length];
+}
+
+/** The register of incumbents — the section that makes a plague year
+ * visible by simple arithmetic. Rendered on the parish page, where the
+ * line actually belongs. */
+function renderIncumbents(E: typeof Engine, worldSeed: number, node: ParishNode, locale: Locale): string {
+  const t = UI[locale];
+  const line = E.parishClergyOf(worldSeed, node.regionKey, node.villageIdx);
+  const saint = saintName(E, locale, line.patronSaintIdx);
+  // Only the incumbents inside the browsable register era — the line runs
+  // wider than that so every year a biography can name has a priest, but
+  // the page is a register, not the whole simulation.
+  const rows = line.heads
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => h.vacated >= VILLAGE_YEAR_MIN && h.instituted <= VILLAGE_YEAR_MAX)
+    .map(
+      ({ h, i }) => `<button class="ryrow${h.end === "plague" ? " interregnum" : ""}" data-goto="${lordGoto("rector", node, i)}">
+      <span class="ry-years">${h.instituted}–${h.vacated}</span>
+      <span class="ry-style">${esc(h.name)}</span>
+      <span class="ry-house">${esc(t.incumbencyEnd[h.end])}</span>
+    </button>`,
+    )
+    .join("");
+
+  // Count the institutions of the worst plague year this parish saw — the
+  // whole argument for generating this line rather than naming one priest.
+  let worstYear = 0;
+  let worstCount = 0;
+  const byYear = new Map<number, number>();
+  for (const h of line.heads) {
+    if (!E.plagueAt(h.instituted)) continue;
+    const n = (byYear.get(h.instituted) ?? 0) + 1;
+    byYear.set(h.instituted, n);
+    if (n > worstCount) {
+      worstCount = n;
+      worstYear = h.instituted;
+    }
+  }
+
+  return (
+    `<div class="sect reveal"><h2>${esc(t.incumbentsHeader)}</h2></div>` +
+    `<div class="honour-note reveal">${esc(line.appropriated ? t.appropriatedNote(saint) : t.rectoryNote)}</div>` +
+    (worstCount >= 2 ? `<div class="honour-note reveal">${esc(t.clergyPlagueNote(worstYear, worstCount))}</div>` : "") +
+    `<div class="reigns reveal">${rows}</div>`
+  );
+}
+
 // ---- § the village route ----
 // The village as a record in its own right. Everything here already existed
 // and was reachable only sideways: the year slider, the population curve and
@@ -964,7 +1258,11 @@ function buildParishHTML(E: typeof Engine, worldSeed: number, stack: StackNode[]
     body =
       `<div class="sect reveal"><h2>${esc(t.villagesInParish)}</h2></div><div class="reigns reveal">` +
       siblings.map((i) => placeRow(i, jur.shared ? (i === mother ? t.motherChurchTag : t.chapelryTag) : t.motherChurchTag)).join("") +
-      `</div>`;
+      `</div>` +
+      // § the church's own line: the men who actually served this church.
+      // Only the parish rung gets it — a deanery's or a diocese's clergy is
+      // every incumbent under it, which is not a list this page can hold.
+      renderIncumbents(E, worldSeed, node, locale);
   } else if (node.kind === "deanery") {
     title = t.deaneryOfHeader(jur.deanery);
     subtitle = `${jur.diocese} · ${jur.province}`;

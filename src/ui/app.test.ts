@@ -277,4 +277,108 @@ describe("app navigation", () => {
     // or silently collapsing into some other inconsistent state
     expect(document.querySelectorAll(".crumb[data-jump]")).toHaveLength(0);
   });
+
+  // ---- § the Schism: the papal route ----
+
+  it("clicking the pontiff vital opens that pope's own page at its own URL", async () => {
+    await start();
+    const btn = document.querySelector<HTMLButtonElement>('[data-goto^="pontiff:"]');
+    expect(btn).not.toBeNull();
+    btn!.click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:papacy:\d+$/);
+    expect(document.querySelectorAll(".crumb[data-jump]").length).toBe(2);
+  });
+
+  it("opens the region's whole papal series from a pontiff's page, and back down again", async () => {
+    await start("#1444:england:papacy");
+    expect(document.getElementById("locator-error")?.textContent).toBe("");
+    const rows = document.querySelectorAll<HTMLButtonElement>('.reigns [data-goto^="pontiff:"]');
+    expect(rows.length).toBeGreaterThan(20);
+    rows[0].click();
+    expect(location.hash).toBe("#1444:england:papacy:0");
+  });
+
+  it("rejects a pontiff index past the end of the region's own series", async () => {
+    await start("#1444:england:papacy:9999");
+    expect(document.getElementById("locator-error")?.textContent).not.toBe("");
+    expect(location.hash).not.toBe("#1444:england:papacy:9999");
+  });
+
+  // ---- § the church's own line: the parish incumbent route ----
+
+  it("clicking the parson vital opens that incumbent's own page at its own URL", async () => {
+    await start();
+    const btn = document.querySelector<HTMLButtonElement>('[data-goto^="rector:"]');
+    expect(btn).not.toBeNull();
+    btn!.click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:\d+:rector:\d+$/);
+  });
+
+  it("lists the incumbents on the parish page, each opening his own record", async () => {
+    await start("#1444:england:0:parish");
+    const rows = document.querySelectorAll<HTMLButtonElement>('.reigns [data-goto^="rector:"]');
+    expect(rows.length).toBeGreaterThan(3);
+    rows[1].click();
+    expect(location.hash).toMatch(/^#1444:england:\d+:rector:\d+$/);
+  });
+
+  it("rejects an incumbent index past the end of the parish's line", async () => {
+    await start("#1444:england:0:rector:9999");
+    expect(document.getElementById("locator-error")?.textContent).not.toBe("");
+  });
+
+  // ---- U1 § finding a person ----
+
+  it("filters the parish register by name, and says when nothing matches", async () => {
+    await start();
+    const box = document.getElementById("regq") as HTMLInputElement;
+    const rows = [...document.querySelectorAll<HTMLButtonElement>(".regrow")];
+    expect(box).not.toBeNull();
+    expect(rows.length).toBeGreaterThan(10);
+
+    const target = rows[3].querySelector(".rr-name")!.textContent!.trim().split(" ")[0];
+    box.value = target;
+    box.dispatchEvent(new Event("input"));
+    const visible = rows.filter((r) => !r.hidden);
+    expect(visible.length).toBeGreaterThan(0);
+    expect(visible.length).toBeLessThan(rows.length);
+    for (const r of visible) expect(r.dataset.q).toContain(target.toLowerCase());
+    expect(document.getElementById("regempty")?.hidden).toBe(true);
+    expect(document.getElementById("regcount")?.textContent).toContain(String(visible.length));
+
+    box.value = "zzzznobody";
+    box.dispatchEvent(new Event("input"));
+    expect(rows.every((r) => r.hidden)).toBe(true);
+    expect(document.getElementById("regempty")?.hidden).toBe(false);
+
+    // Clearing the box restores every row and drops the count.
+    box.value = "";
+    box.dispatchEvent(new Event("input"));
+    expect(rows.every((r) => !r.hidden)).toBe(true);
+    expect(document.getElementById("regcount")?.textContent).toBe("");
+  });
+
+  it("filters by year as well as by name — 'who was on this register in 1400'", async () => {
+    await start();
+    const box = document.getElementById("regq") as HTMLInputElement;
+    const rows = [...document.querySelectorAll<HTMLButtonElement>(".regrow")];
+    box.value = "13";
+    box.dispatchEvent(new Event("input"));
+    const visible = rows.filter((r) => !r.hidden);
+    expect(visible.length).toBeGreaterThan(0);
+    for (const r of visible) expect(r.dataset.q).toContain("13");
+  });
+
+  // ---- U3 § keeping the keyboard's place ----
+
+  it("moves focus to the heading of each newly opened record, instead of dropping it to <body>", async () => {
+    await start();
+    const first = document.querySelector("h1.name");
+    expect(document.activeElement).toBe(first);
+    document.querySelector<HTMLButtonElement>(".regrow:not(.current)")!.click();
+    const next = document.querySelector("h1.name");
+    expect(next).not.toBe(first);
+    expect(document.activeElement).toBe(next);
+    expect((next as HTMLElement).tabIndex).toBe(-1);
+  });
 });

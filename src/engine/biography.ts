@@ -18,8 +18,12 @@
 // =====================================================================
 import type { Locale } from "../i18n/locale.js";
 import { decodeOccupation } from "./biographyOccupation.js";
+import { addPapalRefs } from "./biographyPapalRefs.js";
 import { addRoyalRefs } from "./biographyRoyalRefs.js";
+import { incumbencyIndexAt, institutionsBetween, parishClergyOf } from "./clergy.js";
 import { CLASS_INFO } from "./data/classes.js";
+import { epidemicAt, epidemicNews } from "./data/epidemics.js";
+import { SAINTS } from "./data/jurisdictions.js";
 import {
   ADULT_EVENTS,
   CAUSE_LABEL,
@@ -45,6 +49,7 @@ import { findResidenceRecord } from "./identity.js";
 import { parentsOf } from "./lineage.js";
 import { famineAt, registerBlackoutAt, warAt } from "./mortality.js";
 import { lordOfManorAt, manorLineOf, royalWorldEvents, sovereignAt, tenureIndexAt } from "./nobility.js";
+import { papalWorldEvents, popeIndexAt, popeTermAt } from "./papacy.js";
 import { childrenOf, heirOf, inheritedFromFather, isFirstBornSon } from "./succession.js";
 import type {
   Address,
@@ -1313,7 +1318,20 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       : null;
   const childAccident = p.death.cause === "accident" && p.death.age <= 9 ? CHILD_ACCIDENT_DETAIL[locale] : null;
   const deathPool = riskPool ?? childAccident ?? DEATH_DETAIL[locale][p.death.cause];
-  const dd = rng.pick(deathPool);
+  // § named epidemics: the `disease` bucket is the last undifferentiated one
+  // left, and it is the biggest. A death inside a dated outbreak's window —
+  // or inside the endemic background of the region the person actually lived
+  // in — is named instead of drawing another anonymous fever.
+  //
+  // Both the roll and the pick come off a side stream (hash.ts's
+  // personStream), and `rng.pick(deathPool)` is still consumed exactly as
+  // before whether or not an epidemic claims the death. That is deliberate:
+  // it means adding this moved no draw in the main decode stream, so every
+  // OTHER line of every existing biography is unchanged.
+  const epiRng = makeRng(personStream(env.vHash, 41000, id));
+  const epidemic = p.death.cause === "disease" ? epidemicAt(p.death.year, env.regionKey, p.death.age, epiRng) : null;
+  const drawnDetail = rng.pick(deathPool);
+  const dd = epidemic ? epiRng.pick(epidemic.detail[locale]) : drawnDetail;
   if (departureYear != null && destPerson && destUnion && destSpouse && destRecord) {
     // § departure: her real death IS recorded — in HER OWN destination
     // record (destPerson), a full independent life there (verified: as
@@ -1398,7 +1416,122 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  events.sort((a, b) => a.year - b.year || (a.kind === "birth" ? -1 : a.kind === "death" || a.kind === "elsewhere" ? 1 : 0));
+  // ---- appended passes (§ the Schism, § named epidemics, § the church's
+  // own line) ----
+  //
+  // Deliberately placed HERE, after the last existing rng draw and after
+  // the record-scarcity check, rather than anywhere more natural. Every
+  // block above consumes `rng` in a fixed order, and the scarcity note
+  // fires off `events.length`; inserting these earlier would have shifted
+  // both, rewriting the texture of every biography in every world for the
+  // sake of adding to it. Appended, they add entries and change nothing —
+  // and events.sort() below puts them in their right year regardless of
+  // the order they were pushed in.
+
+  // § the Schism: papal news, gated exactly like the royal accessions —
+  // and region-specific, because between 1378 and 1417 it genuinely was.
+  for (const w of papalWorldEvents(locale)) {
+    if (w[1] < p.birth + w[3] || w[0] > (departureYear ?? p.death.year)) continue;
+    if (w[2] && !w[2].includes(env.regionKey)) continue;
+    if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
+  }
+
+  // § named epidemics: the dated outbreaks, as chronicle news for anyone
+  // who lived through one — whether or not it was what killed them.
+  for (const e of epidemicNews(locale)) {
+    if (e.regions && !e.regions.includes(env.regionKey)) continue;
+    const year = Math.max(e.from, p.birth + 6);
+    if (year > Math.min(e.to, departureYear ?? p.death.year)) continue;
+    if (rng.chance(0.4)) ev(year, e.text, "hardship", cite("chron"));
+  }
+
+  // § the church's own line: the parish had a priest, and who he was
+  // changed — a new man instituted to the living was news of the same kind
+  // as a new lord entering the manor, and the bishop's clerk wrote it down,
+  // which is why we can know it at all.
+  {
+    const clergy = parishClergyOf(env.worldSeed, env.regionKey, env.villageIdx);
+    const lastYear = departureYear ?? p.death.year;
+    const vicar = clergy.title === "vicar";
+    const saint = SAINTS[locale][clergy.patronSaintIdx % SAINTS[locale].length];
+
+    // § the mortality of 1349, made legible. A living that fell vacant by
+    // pestilence is the single most telling entry an institution register
+    // holds, so it gets first refusal on this person's one clergy entry.
+    const plagueVacancies = clergy.heads
+      .map((h, idx) => ({ h, idx }))
+      .filter(({ h }) => h.end === "plague" && h.vacated >= Math.max(p.birth + 6, 1292) && h.vacated <= lastYear);
+    const institutions = institutionsBetween(clergy, Math.max(p.birth + 6, 1292), lastYear);
+
+    if (plagueVacancies.length && rng.chance(0.55)) {
+      const { h, idx } = rng.pick(plagueVacancies);
+      const next = clergy.heads[idx + 1];
+      // Where the successor was instituted in the same year and died in it
+      // too, the register says so by simple arithmetic — no need to assert
+      // the drama, only to count.
+      const sameYear = clergy.heads.filter((o) => o.instituted === h.vacated).length;
+      const run =
+        sameYear >= 2
+          ? ca
+            ? ` Abans no s'acabà l'any n'hi hagué ${sameYear === 2 ? "dos més" : `${sameYear} més`} instituïts a la mateixa església.`
+            : ` Before the year was out there were ${sameYear === 2 ? "two more" : `${sameYear} more`} instituted to the same church.`
+          : "";
+      ev(
+        h.vacated,
+        ca
+          ? `${vicar ? "El vicari" : "El rector"} ${h.name} morí de la pestilència, havent enterrat mig poble abans que li arribés el torn.${next ? ` ${next.name} fou instituït al seu lloc.` : ""}${run}`
+          : `${vicar ? "The vicar" : "The parson"}, ${h.name}, died of the pestilence, having buried half the village before his own turn came.${next ? ` ${next.name} was instituted in his place.` : ""}${run}`,
+        "plague",
+        cite("reg"),
+        next ? [{ id: -1, name: next.name, addr: selfAddr, route: "rector", routeIdx: idx + 1 }] : undefined,
+      );
+    } else if (institutions.length && rng.chance(0.3)) {
+      const { incumbent, idx } = rng.pick(institutions);
+      const prev = clergy.heads[idx - 1];
+      // § the appropriated living: who presents the man is the whole
+      // difference between a rector and a vicar, so the entry names the
+      // presenter rather than leaving the title unexplained.
+      const patron = vicar
+        ? ca
+          ? `el priorat de ${saint}, que té les dècimes majors d'aquesta església`
+          : `the priory of ${saint}, which holds the great tithes of this church`
+        : lordOfManorAt(env.worldSeed, env.regionKey, env.villageIdx, incumbent.instituted).name;
+      const gone = prev
+        ? prev.end === "exchanged"
+          ? ca
+            ? ", que havia bescanviat el benefici per un altre més a prop de casa seva"
+            : ", who had exchanged the benefice for another nearer his own home"
+          : prev.end === "resigned"
+            ? ca
+              ? ", que hi havia renunciat"
+              : ", who had resigned it"
+            : ca
+              ? ", mort"
+              : ", dead"
+        : "";
+      ev(
+        incumbent.instituted,
+        ca
+          ? `${incumbent.name} fou instituït ${vicar ? "vicari" : "rector"} d'aquesta església a presentació de ${patron}, al lloc de ${prev ? prev.name + gone : "l'anterior"}.`
+          : `${incumbent.name} was instituted ${vicar ? "vicar" : "parson"} of this church at the presentation of ${patron}, in the place of ${prev ? prev.name + gone : "the last"}.`,
+        "life",
+        cite("reg"),
+        [{ id: -1, name: incumbent.name, addr: selfAddr, route: "rector", routeIdx: idx }],
+      );
+    }
+  }
+
+  // Within a year: birth first, the closing entry last, everything else in
+  // the order it was pushed. Expressed as a RANK rather than as a chain of
+  // ternaries, which is what it used to be — and which was not a valid
+  // comparator: compare("plague", "death") returned 0 while
+  // compare("death", "plague") returned 1, so whether the closing entry
+  // actually ended up last depended on insertion order and on the sort's
+  // internals. It never showed while nothing was pushed after the death
+  // entry; the appended passes above push plenty, and a parson dying of the
+  // pestilence in the same year as the subject could land after the burial.
+  const rank = (e: BioEvent): number => (e.kind === "birth" ? 0 : e.kind === "death" || e.kind === "elsewhere" ? 2 : 1);
+  events.sort((a, b) => a.year - b.year || rank(a) - rank(b));
 
   // § nobility links: every sovereign named ANYWHERE in the chronicle —
   // accession news, war names, whatever prose mentions a king — links to
@@ -1408,6 +1541,14 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // linkify keeps a person ref ("Lorenzo di Nardo") beating a shorter
   // royal candidate at the same position.
   addRoyalRefs(events, env.regionKey, locale, selfAddr);
+  // § the Schism, links: same treatment for popes, resolved against THIS
+  // region's own obedience so a mention in 1400 opens the pope this parish
+  // was actually obeying and not the other one.
+  addPapalRefs(events, env.regionKey, locale, selfAddr);
+
+  const clergyLine = parishClergyOf(env.worldSeed, env.regionKey, env.villageIdx);
+  const rectorIdx = incumbencyIndexAt(clergyLine.heads, p.birth);
+  const birthTerm = popeTermAt(env.regionKey, p.birth);
 
   return {
     id,
@@ -1424,6 +1565,15 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     place: env.place[locale],
     region: region.name[locale],
     sovereign: sovereignAt(env.regionKey, p.birth)?.style[locale] ?? "",
+    // § the Schism: empty where the region obeyed nobody, or the see stood
+    // vacant, in the year this person was born — which is a real answer and
+    // the page says so rather than hiding it.
+    pontiff: birthTerm?.pope?.style[locale] ?? "",
+    pontiffIdx: popeIndexAt(env.regionKey, p.birth),
+    // § the church's own line: the man who would have baptised them.
+    rector: clergyLine.heads[rectorIdx]?.name ?? "",
+    rectorIdx,
+    rectorTitle: clergyLine.title,
     literate,
     inOrders: !!p.inOrders,
     incomer: !!p.incomer,
