@@ -14,7 +14,15 @@ export type SocialClass = "serf" | "freePeasant" | "artisan" | "merchant" | "cle
 /** § settlement: the rural/urban axis a village address resolves to (settlement.ts) — deterministic, independent of any one village's own solve. */
 export type SettlementType = "rural" | "urban";
 
-export type DeathCause = "plague" | "famine" | "war" | "infancy" | "childhood" | "childbirth" | "disease" | "oldage";
+/** § accident and violence: the two causes that used to have nowhere to go.
+ * Everything that was not pestilence, famine, war, childbed or age fell into
+ * `disease`, which took 39–42% of ALL deaths — a grey bucket that swallowed
+ * the drownings, the cart and mill and quarry deaths, and the killings, none
+ * of which are diseases and all of which the medieval record is unusually
+ * good on, because a coroner had to sit on every one of them. The engine even
+ * cited a coroner's roll for some of them (documents.ts's `coroner`) while
+ * calling the cause disease. */
+export type DeathCause = "plague" | "famine" | "war" | "infancy" | "childhood" | "childbirth" | "accident" | "violence" | "disease" | "oldage";
 
 /** Occupational hazard category, rolled at Tier 1 alongside death and read back by
  * Tier 2 so the occupation narrative it decodes stays consistent with the mechanic. */

@@ -279,6 +279,82 @@ describe("aggregate demographic statistics stay within historical bands", () => 
     expect(propertiedRate).toBeGreaterThan(plainRate);
   });
 
+  it("§ illegitimacy and § bridal pregnancy land where the parish evidence puts them", () => {
+    // Illegitimate births run 1–4% of all births in the reconstitution
+    // literature; this engine used to produce 0.06–0.37%, because the roll
+    // asked one question of each never-married woman rather than one of each
+    // YEAR she spent unmarried and of age. Bridal pregnancy — a first child
+    // inside the wedding year — is the far commoner irregularity, and lower
+    // under the Mediterranean dowry regime, where a daughter's marriage was a
+    // negotiated property settlement under closer watch.
+    const rates: Record<string, { illeg: number; bridal: number }> = {};
+    for (const rk of Object.keys(REGIONS)) {
+      let births = 0;
+      let illeg = 0;
+      let firstMarriages = 0;
+      let bridal = 0;
+      for (let v = 0; v < VILLAGES_PER_REGION; v++) {
+        const env = resolveVillage(SEED, rk, v);
+        for (const p of env.persons) {
+          if (p.founder || p.incomer) continue;
+          births++;
+          if (p.illegitimate) illeg++;
+        }
+        env.couples.forEach((c, ci) => {
+          const W = env.persons[c.wife];
+          if (W.unions?.[0] !== ci || !c.children.length) return;
+          firstMarriages++;
+          const first = env.persons[c.children[0]];
+          if (first.birth === c.year && !first.illegitimate) bridal++;
+        });
+      }
+      rates[rk] = { illeg: illeg / births, bridal: bridal / firstMarriages };
+      expect(rates[rk].illeg, `${rk} illegitimacy`).toBeGreaterThan(0.008);
+      expect(rates[rk].illeg, `${rk} illegitimacy`).toBeLessThan(0.045);
+      expect(rates[rk].bridal, `${rk} bridal pregnancy`).toBeGreaterThan(0.05);
+      expect(rates[rk].bridal, `${rk} bridal pregnancy`).toBeLessThan(0.32);
+    }
+    const nw = (rates.england.bridal + rates.scotland.bridal + rates.germany.bridal) / 3;
+    const med = (rates.catalonia.bridal + rates.italy.bridal + rates.portugal.bridal) / 3;
+    expect(nw).toBeGreaterThan(med * 1.4);
+  });
+
+  it("§ accident and § violence: the coroner's own two verdicts, out of the disease bucket at last", () => {
+    // Everything that was not pestilence, famine, war, childbed or age used to
+    // land in `disease` — 39–42% of ALL deaths, a bucket that swallowed the
+    // drownings, the cart and mill and quarry deaths, and the killings. The
+    // coroners' rolls are the one medieval source that systematically records
+    // how people died, and they are full of both.
+    for (const rk of Object.keys(REGIONS)) {
+      let n = 0;
+      let accident = 0;
+      let violence = 0;
+      let childAccident = 0;
+      for (let v = 0; v < VILLAGES_PER_REGION; v++) {
+        for (const p of resolveVillage(SEED, rk, v).persons) {
+          n++;
+          if (p.death.cause === "accident") {
+            accident++;
+            if (p.death.age <= 9) childAccident++;
+          }
+          if (p.death.cause === "violence") violence++;
+          // an infant's death is never a coroner's business
+          if (p.death.age === 0) expect(p.death.cause).not.toBe("accident");
+        }
+      }
+      // Hanawalt's coroners'-roll samples put accidental death at a few per
+      // cent of all deaths; medieval English homicide ran around 20 per
+      // 100,000 a year, which against a crude death rate of ~35 per 1,000 is
+      // roughly half a per cent of deaths.
+      expect(accident / n, `${rk} accident`).toBeGreaterThan(0.015);
+      expect(accident / n, `${rk} accident`).toBeLessThan(0.055);
+      expect(violence / n, `${rk} violence`).toBeGreaterThan(0.001);
+      expect(violence / n, `${rk} violence`).toBeLessThan(0.012);
+      // the rolls' most-repeated verdict of all: small children and water
+      expect(childAccident, `${rk} child accidents`).toBeGreaterThan(0);
+    }
+  });
+
   it("upward class mobility rises after the Black Death (aggregated across regions)", () => {
     let pre = 0;
     let post = 0;

@@ -28,15 +28,28 @@ function meanPopulation(rk: string, year: number): number {
 describe("§ the preventive check — villages stay near their land", () => {
   // 1345 is the last pre-plague year the register era offers with a mature
   // age structure; 1360 is past the Black Death everywhere; 1490 is the end.
-  it.each(REGION_KEYS)("%s: the Black Death visibly empties the village, and it never fully refills", (rk) => {
+  it.each(REGION_KEYS)("%s: the Black Death visibly empties the village, and the fifteenth century is a plateau, not a recovery", (rk) => {
     const prePlague = meanPopulation(rk, 1345);
     const postPlague = meanPopulation(rk, 1360);
     const end = meanPopulation(rk, 1490);
     expect(postPlague).toBeLessThan(prePlague * 0.9);
     expect(postPlague).toBeGreaterThan(prePlague * 0.6);
-    // The fifteenth century recovers, but onto land the retreat from the
-    // margin (capacity.ts's CULTIVATION) has taken partly out of use.
-    expect(end).toBeGreaterThan(postPlague);
+    // This used to assert `end > postPlague` — that the fifteenth century
+    // recovered. It did not, and the engine's own numbers were the giveaway:
+    // England came back from 38 souls in 1350 to 55 by 1460, Catalonia from
+    // 46 to 77 by 1430, both inside two generations. The late-medieval trough
+    // was nothing like that short. English population went on FALLING to
+    // around 1450 and did not clearly turn until near 1500, and Catalonia's
+    // was held down by wave after wave of plague and then the remença wars.
+    //
+    // So what the century should show is a PLATEAU — the village neither
+    // climbing back nor dwindling away, held at roughly where the plague left
+    // it by a ceiling the retreat from the margin keeps low (capacity.ts's
+    // CULTIVATION). Both bounds matter: without the lower one, a ceiling cut
+    // too deep stops binding at all and the village simply goes
+    // sub-replacement, which is a broken parameter and not a long trough.
+    expect(end).toBeGreaterThan(postPlague * 0.8);
+    expect(end).toBeLessThan(postPlague * 1.25);
     expect(end).toBeLessThan(prePlague);
   });
 

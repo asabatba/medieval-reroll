@@ -23,8 +23,8 @@ import { CLASS_INFO } from "./data/classes.js";
 import {
   ADULT_EVENTS,
   CAUSE_LABEL,
+  CHILD_ACCIDENT_DETAIL,
   CHILD_EVENTS,
-  CORONER_DEATHS,
   COURT_CAUSES,
   DEATH_DETAIL,
   FEMALE_EVENTS,
@@ -758,6 +758,19 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
             : ` She came from the next parish, with a dowry of linen and a cow.`;
       }
       const older = p.sex === "F" && s.birth < p.birth - 3;
+      // § bridal pregnancy (village.ts's genChildren): a first child baptised
+      // inside the wedding year is the register's own signature of a
+      // conception that preceded the wedding — and the commonest irregularity
+      // it records, several times commoner than illegitimacy proper. Read off
+      // the dates rather than stored as a flag: the couple's own first child
+      // and the couple's own year are already there to compare (§ pure
+      // decode). Not narrated as scandal, because it largely wasn't one where
+      // a promise of marriage was itself binding.
+      const firstBorn = c.children.length ? env.persons[c.children[0]] : null;
+      if (firstBorn && firstBorn.birth === c.year && !firstBorn.illegitimate)
+        extra += ca
+          ? ` El primer fill va ser batejat abans no s'acabés l'any del casament, com passava sovint quan la promesa precedia l'església.`
+          : ` Their first child was baptised before the year of the wedding was out, as often happened where the promise came before the church.`;
       // § consanguinity: flagged by village.ts's marry(), not blocked — a
       // first-cousin match required a bishop's dispensation after Lateran IV
       // (1215), which is worth its own sentence rather than passing silently.
@@ -1073,10 +1086,18 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       if (flag === "englandM" && !(env.regionKey === "england" && p.sex === "M")) continue;
       // § texture marital gate: an entry that presupposes children of her
       // own (e.g. "raised them with {pos} own") must only ever be eligible
-      // for someone who actually has any — otherwise it can fire for a
-      // childless adult or even a celibate priest (§ occupation above
-      // already excludes inOrders from having any union/children at all).
-      if (flag === "hasChildren" && earliestChildBirth == null) continue;
+      // for someone who actually has any — otherwise it fires for a
+      // childless adult.
+      //
+      // § the celibate estate: `inOrders` is now checked here in its own
+      // right, rather than relied on second-hand. It used to be enough that
+      // someone in orders could have no union and therefore no children; that
+      // stopped being true when § illegitimacy began letting a man in orders
+      // FATHER a natural child (village.ts — a priest's children are among
+      // the best-attested illegitimacies there are). He has children now, but
+      // he has no household to have raised them in, which is what these
+      // entries describe.
+      if (flag === "hasChildren" && (earliestChildBirth == null || p.inOrders)) continue;
       // § named wills: when a real heir is on record, the dedicated
       // named-heir event (below, after the OLD_EVENTS pass) replaces this
       // generic pool line rather than firing alongside it.
@@ -1228,17 +1249,26 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     );
   }
 
-  // Death — real cause from envelope, decoded detail. A hazardous/maritime/
-  // military trade occasionally pulls its detail from the matching
-  // occupational-accident pool instead of the generic one, same "disease"
-  // cause bucket the register would file it under either way, but the
-  // coroner's roll (not the parish register) is what actually recorded such
-  // a death.
+  // Death — real cause from envelope, decoded detail.
+  //
+  // § accident: a hazardous/maritime/military trade pulls its detail from the
+  // matching occupational-accident pool. Keyed off the "accident" cause now
+  // rather than "disease": rollDeath adds those trades' hazard to the
+  // ACCIDENT risk (mortality.ts), so the cause it produces is the one that
+  // names them, and a man killed in the quarry is no longer filed as having
+  // died of an illness. The military pool is deliberately an old wound or a
+  // training mishap, never a battle death — an actual war-year kill reaches
+  // the "war" cause on its own.
+  //
+  // § accident, children: a small child's fatal accidents were not an
+  // adult's, and the coroners' rolls are emphatic about the difference — so
+  // an accident under ten draws from its own pool.
   const riskPool =
-    p.death.cause === "disease" && (p.riskTrade === "hazardous" || p.riskTrade === "maritime" || p.riskTrade === "military") && rng.chance(0.55)
+    p.death.cause === "accident" && (p.riskTrade === "hazardous" || p.riskTrade === "maritime" || p.riskTrade === "military") && rng.chance(0.55)
       ? RISK_DEATH_DETAIL[locale][p.riskTrade]
       : null;
-  const deathPool = riskPool ?? DEATH_DETAIL[locale][p.death.cause];
+  const childAccident = p.death.cause === "accident" && p.death.age <= 9 ? CHILD_ACCIDENT_DETAIL[locale] : null;
+  const deathPool = riskPool ?? childAccident ?? DEATH_DETAIL[locale][p.death.cause];
   const dd = rng.pick(deathPool);
   if (departureYear != null && destPerson && destUnion && destSpouse && destRecord) {
     // § departure: her real death IS recorded — in HER OWN destination
@@ -1290,7 +1320,12 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
       burialTxt += ca
         ? ` Portat a ${motherVillage}, a la parròquia mare que serveix aquests pobles.`
         : ` Carried to ${motherVillage}, to the mother parish that serves these villages.`;
-    const dSrc = riskPool || (p.death.cause === "disease" && CORONER_DEATHS[locale].has(dd)) ? cite("coroner") : cite("reg");
+    // § accident / § violence: a coroner had to view every sudden death, and
+    // his roll — not the parish register — is what recorded it. The cause
+    // itself now says so, replacing the string-matched set of "which disease
+    // entries were really accidents" this used to need.
+    const coronersBusiness = p.death.cause === "accident" || p.death.cause === "violence";
+    const dSrc = coronersBusiness ? cite("coroner") : cite("reg");
     ev(p.death.year, `${p.name} ${dd}. ${burialTxt}`, "death", dSrc);
   }
 

@@ -21,15 +21,28 @@ export const SRC: Record<Locale, Record<DocumentKind, string>> = {
   },
 };
 
-// Which `disease`-cause DEATH_DETAIL entries describe an accidental (not
-// merely morbid) death — the kind an actual coroner's inquest, not the
-// parish register, would have recorded. Matched by exact string identity
-// against the entry actually drawn (not its array position), so reordering
-// or inserting a DEATH_DETAIL.disease entry can never silently desync which
-// death gets cited to the coroner's roll.
-export const CORONER_DEATHS: Record<Locale, Set<string>> = {
-  en: new Set(["drowned crossing the river at the ford", "died of a fall from a cart"]),
-  ca: new Set(["es va negar travessant el riu pel gual", "va morir d'una caiguda del carro"]),
+// § accident: a coroner sat on every sudden death, and a small child's
+// accident was not an adult's. The rolls are emphatic about which: toddlers
+// drowned, in ditches, wells, millponds and the vessels standing about the
+// house, far more often than they died any other accidental way. Kept as its
+// own pool rather than more DEATH_DETAIL.accident entries because the cause
+// alone can't tell a four-year-old from a forty-year-old, and a child drawing
+// "was crushed when a cart overturned on the road to market" reads wrong.
+export const CHILD_ACCIDENT_DETAIL: Record<Locale, string[]> = {
+  en: [
+    "drowned in the millpond, as the coroner's roll recorded of so many children",
+    "drowned in a ditch at the edge of the fields, out of sight of the house",
+    "fell into the well drawing water, and was not found until evening",
+    "was scalded by a pot pulled from the hearth, and died of it within the week",
+    "was struck by a cart in the lane and died the same day",
+  ],
+  ca: [
+    "es va negar a la bassa del molí, tal com el rotlle del forense va anotar de tants altres infants",
+    "es va negar en una séquia a la vora dels camps, fora de la vista de casa",
+    "va caure al pou mentre treia aigua, i no {{el/la}} van trobar fins al vespre",
+    "es va escaldar amb una olla estirada de la llar de foc, i en va morir al cap d'una setmana",
+    "va ser {{atropellat/atropellada}} per un carro al camí i va morir el mateix dia",
+  ],
 };
 
 export const DEATH_DETAIL: Record<Locale, Record<DeathCause, string[]>> = {
@@ -63,8 +76,21 @@ export const DEATH_DETAIL: Record<Locale, Record<DeathCause, string[]>> = {
       "died of a consumption of the lungs, wasting through a winter",
       "died of a wound gone bad — a cut that festered",
       "died suddenly, of what the record calls an apoplexy",
+    ],
+    accident: [
       "drowned crossing the river at the ford",
       "died of a fall from a cart",
+      "drowned watering a horse at the river, the bank giving way underfoot",
+      "was killed by a falling tree while cutting wood in the lord's park",
+      "was crushed when a cart overturned on the road to market",
+      "fell from a ladder at the harvest and broke his back, dying three days after",
+      "was caught in the mill's gear and killed outright, the miller answering for it at the inquest",
+    ],
+    violence: [
+      "was killed in a quarrel at the alehouse, stabbed with the knife every man carried",
+      "was struck down in a dispute over a boundary, and the killer fled to sanctuary",
+      "was set upon on the road by men unknown, robbed and left for dead",
+      "was killed in an affray at the fair, the jury naming the culprit and he already gone",
     ],
     oldage: [
       "died full of years, of age and infirmity, having received the last rites",
@@ -101,8 +127,21 @@ export const DEATH_DETAIL: Record<Locale, Record<DeathCause, string[]>> = {
       "va morir d'una consumpció dels pulmons, consumint-se al llarg d'un hivern",
       "va morir d'una ferida que es va gangrenar — un tall que li va acabar podrint",
       "va morir de sobte, del que el registre anomena una apoplexia",
+    ],
+    accident: [
       "es va negar travessant el riu pel gual",
       "va morir d'una caiguda del carro",
+      "es va negar abeurant un cavall al riu, quan el marge va cedir sota els peus",
+      "va morir per la caiguda d'un arbre mentre tallava llenya al parc del senyor",
+      "va morir esclafat{{/da}} quan un carro va bolcar al camí del mercat",
+      "va caure d'una escala durant la collita i es va trencar l'esquena; va morir tres dies després",
+      "va quedar {{atrapat/atrapada}} a l'engranatge del molí i va morir a l'acte; el moliner en va haver de respondre a la enquesta",
+    ],
+    violence: [
+      "va morir en una baralla a la taverna, {{apunyalat/apunyalada}} amb el ganivet que tothom duia a sobre",
+      "va caure en una disputa de termes, i el matador es va acollir a sagrat",
+      "va ser {{assaltat/assaltada}} al camí per homes desconeguts, {{robat/robada}} i {{deixat/deixada}} per {{mort/morta}}",
+      "va morir en un aldarull a la fira; el jurat va donar nom al culpable, que ja havia fugit",
     ],
     oldage: [
       "va morir ple d'anys, de vellesa i d'infermetat, després de rebre els darrers sagraments",
@@ -167,6 +206,8 @@ export const CAUSE_LABEL: Record<Locale, Record<DeathCause, string>> = {
     infancy: "Infancy",
     childhood: "Childhood disease",
     childbirth: "Childbirth",
+    accident: "Misadventure",
+    violence: "Slain",
     disease: "Disease",
     oldage: "Old age",
   },
@@ -177,6 +218,8 @@ export const CAUSE_LABEL: Record<Locale, Record<DeathCause, string>> = {
     infancy: "Infantesa",
     childhood: "Malaltia infantil",
     childbirth: "Part",
+    accident: "Accident",
+    violence: "Mort violenta",
     disease: "Malaltia",
     oldage: "Vellesa",
   },

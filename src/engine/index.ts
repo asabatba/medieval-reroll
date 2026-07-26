@@ -94,4 +94,12 @@ export type {
   SpouseRef,
   UnionRef,
 } from "./types.js";
-export { clearEnvelopeCache, ENVELOPE_CACHE_LIMIT, envelopeCacheSize, MATCH_ROUND_LIMIT, resolveVillage } from "./village.js";
+export {
+  clearEnvelopeCache,
+  ENVELOPE_CACHE_LIMIT,
+  envelopeCacheSize,
+  GENERATION_LAST_YEAR,
+  MATCH_ROUND_LIMIT,
+  PARTIBLE_SUBDIVISION,
+  resolveVillage,
+} from "./village.js";

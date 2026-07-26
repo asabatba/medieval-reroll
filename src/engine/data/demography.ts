@@ -138,13 +138,33 @@ export interface RegionDemography {
     /** Multiplier for a child of a clerical household, who had the Latin. */
     clergyMult: number;
   };
-  /** § illegitimacy: chance an adult woman who ends her days never formally
-   * married (village.ts's own final outcome, not a mid-solve guess) bore one
-   * child out of wedlock at some point regardless — the commonest documented
-   * form (a service woman's child by a named or unnamed man), not an attempt
-   * at a precise historical rate, which varied enormously by parish and is
-   * poorly attested for most of these regions. */
-  illegitimacyRate: number;
+  /** § illegitimacy: chance PER YEAR that a woman spends unmarried and of an
+   * age to bear bears a child out of wedlock.
+   *
+   * Per exposed year, not once per never-married woman, which is what this
+   * used to be — and the difference is not bookkeeping. The old shape asked
+   * one question of one narrow group (women who reached the end of the solve
+   * still unmarried) and so produced illegitimate births at 0.06–0.37% of all
+   * births against a configured intent of 2–3.5% and a literature range of
+   * 1–4%: an order of magnitude short. It also put the risk in the wrong
+   * place. Bastardy was a hazard of the YEARS a woman spent unmarried and
+   * adult, which is why the late-marrying NW-European regions record more of
+   * it, and why plenty of illegitimate children were borne by women who went
+   * on to marry someone else entirely — a group the old roll could not
+   * represent at all. */
+  illegitimacyPerYear: number;
+  /** § bridal pregnancy: the share of first marriages whose first child
+   * arrives inside the wedding year — conceived before the wedding, born
+   * after it.
+   *
+   * Far commoner than illegitimacy proper (10–30% of first marriages against
+   * 1–4% of births) and, in a society where betrothal was itself binding and
+   * a promise of marriage licensed a good deal, not the same transgression.
+   * It is what most of the "bastardy-prone" cases in the record actually
+   * were: a couple who married, slightly late. Lower under the Mediterranean
+   * dowry regime, where a daughter's marriage was a negotiated property
+   * settlement conducted under considerably closer watch. */
+  bridalPregnancy: number;
 }
 
 const SHARED_PERIODS: PeriodMult[] = [
@@ -179,7 +199,8 @@ const NW_DEFAULT: RegionDemography = {
   maternalMortalityPerBirth: 0.012,
   maleOutMigration: { nonHeirBase: 0.42, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.3 },
   vocation: { M: 0.016, F: 0.007, nonHeirMult: 2.3, dowriedMult: 1.7, clergyMult: 3 },
-  illegitimacyRate: 0.03,
+  illegitimacyPerYear: 0.007,
+  bridalPregnancy: 0.2,
 };
 
 /** § the celibate estate, the dowry regime. Where a daughter's marriage
@@ -208,7 +229,7 @@ const DEMOGRAPHY_DATA = {
     service: { M: 0.3, F: 0.34 },
     maternalMortalityPerBirth: 0.0075,
     maleOutMigration: { nonHeirBase: 0.4, heirBase: 0.08, pressured: 0.65, groomPullChance: 0.28 }, // war retinues an ever-present outlet, but disrupt heirs too
-    illegitimacyRate: 0.035, // war-displaced households, garrison towns
+    illegitimacyPerYear: 0.008, // war-displaced households, garrison towns
   },
   catalonia: {
     ...NW_DEFAULT,
@@ -234,7 +255,8 @@ const DEMOGRAPHY_DATA = {
     maternalMortalityPerBirth: 0.0052,
     maleOutMigration: { nonHeirBase: 0.32, heirBase: 0.05, pressured: 0.5, groomPullChance: 0.22 }, // stronger land ties, less rural out-migration
     vocation: DOWRY_REGIME_VOCATION,
-    illegitimacyRate: 0.02, // tighter dowry-regime household surveillance
+    illegitimacyPerYear: 0.0045, // tighter dowry-regime household surveillance
+    bridalPregnancy: 0.1,
   },
   italy: {
     ...NW_DEFAULT,
@@ -266,8 +288,16 @@ const DEMOGRAPHY_DATA = {
     // Tuscany is the sharpest case of the whole pattern: a marriage dowry
     // that ran ahead of what even patrician houses could find for every
     // daughter, against a convent gift a fraction of the size.
-    vocation: { ...DOWRY_REGIME_VOCATION, F: 0.018, dowriedMult: 3.3 },
-    illegitimacyRate: 0.035, // urban Tuscany's documented foundling/illegitimacy registers (Florence's Innocenti, founded 1445) ran higher than the rural NW-European norm
+    // The Tuscan convent figures everyone quotes are FLORENCE's — a patrician
+    // city solving a patrician dowry problem — not the contado's. So the
+    // dowried skew stays the sharpest in the model while the baseline every
+    // peasant daughter faces sits at the ordinary dowry-regime level: raising
+    // that baseline instead drained fertile women out of villages that, with
+    // Tuscany's very wide spousal age gap, had none to spare, and turned the
+    // fifteenth century there from a plateau into a slow emptying.
+    vocation: { ...DOWRY_REGIME_VOCATION, dowriedMult: 3.3 },
+    illegitimacyPerYear: 0.008, // urban Tuscany's documented foundling/illegitimacy registers (Florence's Innocenti, founded 1445) ran higher than the rural NW-European norm
+    bridalPregnancy: 0.1,
   },
   castile: {
     ...NW_DEFAULT,
@@ -279,7 +309,8 @@ const DEMOGRAPHY_DATA = {
     maternalMortalityPerBirth: 0.0065,
     maleOutMigration: { nonHeirBase: 0.36, heirBase: 0.06, pressured: 0.58, groomPullChance: 0.26 }, // frontier repoblación an outlet for younger sons, alongside the standing war
     vocation: DOWRY_REGIME_VOCATION,
-    illegitimacyRate: 0.028,
+    illegitimacyPerYear: 0.0065,
+    bridalPregnancy: 0.1,
   },
   scotland: {
     ...NW_DEFAULT,
@@ -289,7 +320,7 @@ const DEMOGRAPHY_DATA = {
     service: { M: 0.36, F: 0.4 },
     maternalMortalityPerBirth: 0.013,
     maleOutMigration: { nonHeirBase: 0.44, heirBase: 0.07, pressured: 0.64, groomPullChance: 0.3 }, // border unrest and the Auld Alliance's standing demand for soldiers abroad
-    illegitimacyRate: 0.035, // Lowland kirk-session evidence runs above the NW-European norm
+    illegitimacyPerYear: 0.008, // Lowland kirk-session evidence runs above the NW-European norm
   },
   portugal: {
     ...NW_DEFAULT,
@@ -301,7 +332,8 @@ const DEMOGRAPHY_DATA = {
     maternalMortalityPerBirth: 0.0065,
     maleOutMigration: { nonHeirBase: 0.38, heirBase: 0.06, pressured: 0.6, groomPullChance: 0.26 }, // North African garrisons and the African voyages drew off younger sons who once would simply have left for the towns
     vocation: DOWRY_REGIME_VOCATION,
-    illegitimacyRate: 0.03,
+    illegitimacyPerYear: 0.007,
+    bridalPregnancy: 0.1,
   },
 } satisfies Record<RegionKey, RegionDemography>;
 

@@ -174,10 +174,41 @@ export function rollDeath(
       if (region.routiers && wealth <= 2) warRisk += 0.004;
       h += warRisk;
     }
+    // § accident: the commonest verdicts in the one medieval source that
+    // systematically records how people died. A coroner had to view every
+    // sudden death, and what the rolls are full of is drowning — in ditches,
+    // wells, millponds and fords, at every age but above all among small
+    // children left near water — then carts, falls, horses, mills and trees.
+    // None of it is disease, and all of it used to be filed as such.
+    //
+    // Toddlers carry the highest rate here for the reason the rolls
+    // themselves give: they were mobile, unwatched, and the water was where
+    // the work was. Infants under one are excluded — a newborn's death is not
+    // a coroner's business — as are the very old, whose falls the register
+    // records as age.
+    let accidentRisk = age === 0 ? 0 : age <= 6 ? 0.003 : age <= 13 ? 0.0016 : age <= 60 ? 0.0018 : 0.0013;
+    if (sex === "F") accidentRisk *= 0.55; // the rolls are lopsided: the fatal accidents were where the men worked
+    // § occupational mortality: the trade hazard rolled at Tier 1 finally
+    // lands in a cause that names it, instead of being added here and then
+    // labelled "disease" at the bottom of this same function.
     if (sex === "M" && age >= 14 && age <= 65) {
-      if (riskTrade === "hazardous") h += 0.006;
-      else if (riskTrade === "maritime") h += 0.008;
+      if (riskTrade === "hazardous") accidentRisk += 0.006;
+      else if (riskTrade === "maritime") accidentRisk += 0.008;
     }
+    h += accidentRisk;
+
+    // § violence: homicide, which in medieval England ran at something like
+    // twenty per hundred thousand a year — an order of magnitude above any
+    // modern western European figure, and concentrated exactly where the
+    // eyre rolls put it: on young men, in and around the alehouse, with a
+    // knife that everyone was carrying anyway. Distinct from `war`, which is
+    // soldiery and routiers in an actual war year.
+    let violenceRisk = 0;
+    if (age >= 14) {
+      violenceRisk = sex === "M" ? (age <= 35 ? 0.0009 : 0.00045) : 0.0002;
+      if (region.routiers && wealth <= 2) violenceRisk *= 1.4; // lawless country, and no lord's protection worth the name
+    }
+    h += violenceRisk;
     // § maternal mortality: a real per-year excess hazard, not a post-hoc
     // relabel of a coincidentally-timed death. Per-birth risk (demography.ts)
     // is spread over the region's own birth spacing to get a per-year rate,
@@ -197,7 +228,14 @@ export function rollDeath(
       else if (famine && rng() < 0.7) cause = "famine";
       else if (warName && rng() < warRisk / Math.max(h, 0.001)) cause = "war";
       else if (maternalRisk > 0 && rng() < maternalRisk / Math.max(h, 0.001)) cause = "childbirth";
+      // Infancy first: a death in the first year is the register's own
+      // category and a coroner never sat on one.
       else if (age === 0) cause = "infancy";
+      // § accident / § violence: checked BEFORE the childhood and disease
+      // defaults, so a drowned five-year-old reads as drowned rather than as
+      // an unnamed childhood illness.
+      else if (rng() < accidentRisk / Math.max(h, 0.001)) cause = "accident";
+      else if (rng() < violenceRisk / Math.max(h, 0.001)) cause = "violence";
       else if (age <= 9) cause = "childhood";
       else cause = age >= 60 && rng() < 0.6 ? "oldage" : "disease";
       return { year, age, cause };

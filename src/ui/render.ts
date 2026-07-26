@@ -1,5 +1,6 @@
 import type * as Engine from "../engine/index.js";
 import type { Address, Bio, Death, Envelope, EventRef, HouseholdState, PersonAddress } from "../engine/index.js";
+import { GENERATION_LAST_YEAR } from "../engine/index.js";
 import type { Locale } from "../i18n/locale.js";
 import { UI } from "../i18n/ui.js";
 import { esc, KIND_LABEL } from "./dom.js";
@@ -221,7 +222,11 @@ function renderFamilyTree(t: (typeof UI)[Locale], bio: Bio): string {
 
 // ---- village-in-year view (§ year layer) ----
 export const VILLAGE_YEAR_MIN = 1290;
-export const VILLAGE_YEAR_MAX = 1500;
+// § the register's own edge: pinned to the last year Tier 1 generates births
+// for, not to a round 1500. Past that year births stop and burials do not, so
+// the village appeared to fall off a cliff in its final five years — a fact
+// about where generation stops, presented as a fact about the village.
+export const VILLAGE_YEAR_MAX = GENERATION_LAST_YEAR;
 
 /** Default snapshot year for a record: the subject's adult prime. */
 export function defaultVillageYear(birth: number): number {

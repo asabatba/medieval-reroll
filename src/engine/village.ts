@@ -76,6 +76,17 @@ import {
 // counterweight to the class ratchet at all.
 export const PARTIBLE_SUBDIVISION = 0.75;
 
+// § the register's own edge. The last year the Tier-1 solve generates births
+// for — every couple's childbearing stops here, while deaths of course go on.
+// That makes the years after it a fact about where generation stops rather
+// than about the village, and the browsable window (ui/render.ts's
+// VILLAGE_YEAR_MAX) is pinned to it for exactly that reason: it used to run
+// to 1500 against a cap of 1495, and the population curve fell off a cliff
+// over those last five years — births zero, burials as usual — which read as
+// a village dying out when it was only the register closing. Exported so the
+// two can never drift apart again.
+export const GENERATION_LAST_YEAR = 1495;
+
 export { ENVELOPE_CACHE_LIMIT } from "./villageCache.js";
 export { isHeir } from "./villageRules.js";
 
@@ -437,6 +448,18 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       W = persons[c.wife];
     const endYear = Math.min(H.death.year, W.death.year, W.birth + 42);
     let y = c.year + rng.int(1, 2);
+    // § bridal pregnancy: a first child inside the wedding year — conceived
+    // before it, born after. Far commoner than illegitimacy proper (10–30% of
+    // first marriages against 1–4% of births) and, where betrothal was itself
+    // binding, not the same transgression at all: it is most of what the
+    // "bastardy-prone" cases in the record actually were, a couple who
+    // married slightly late. Only her FIRST marriage — a widow's remarriage
+    // in the same year as a birth would read as her late husband's child.
+    // The draw happens either way, so which branch is taken never changes the
+    // shared stream's draw count.
+    const brideFirstUnion = W.unions?.[0];
+    const bridal = rng.chance(demo.bridalPregnancy);
+    if (bridal && brideFirstUnion != null && couples[brideFirstUnion] === c) y = c.year;
     while (y < endYear && y <= capYear && c.children.length < 11) {
       const child = makeChild(c, H, W, y);
       maybeTwin(c, H, W, y, child);
@@ -488,7 +511,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // Generate children for every couple (in couple-creation order — this is a
   // work queue, so children of later marriages get processed too).
   for (let ci = 0; ci < couples.length; ci++) {
-    genChildren(couples[ci], 1490);
+    genChildren(couples[ci], GENERATION_LAST_YEAR);
   }
 
   // Marriage matching (spec §4): resolved at the envelope tier, in rounds —
@@ -584,7 +607,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         if (best && rng.chance(localChance)) {
           takenW.add(best.id);
           const c = marry(M, best, wantYear);
-          if (c) genChildren(c, 1495);
+          if (c) genChildren(c, GENERATION_LAST_YEAR);
         } else {
           // exogamy: prefer a REAL emigrant already recorded in a lower-rank
           // cluster-mate's own envelope (a genuine cross-village pointer, never
@@ -636,7 +659,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           const c = marry(M, W, wantYear);
           if (c) {
             exogamous++;
-            genChildren(c, 1495);
+            genChildren(c, GENERATION_LAST_YEAR);
           }
         }
       }
@@ -718,25 +741,31 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         const c = marry(M, W, wantYear);
         if (c) {
           exogamous++;
-          genChildren(c, 1495);
+          genChildren(c, GENERATION_LAST_YEAR);
         }
       }
     }
   }
   runMatchingRounds();
 
-  // § illegitimacy: a modest share of women who reach adulthood still
-  // unmarried after the primary matching rounds bore one child out of
-  // wedlock at some point regardless — the commonest documented pattern (a
-  // service woman's child by a named local man). Placed AFTER primary
-  // matching (so "found no local/immigrant match" is already known) but
-  // BEFORE the emigration/remarriage passes below: a natural child doesn't
-  // stop her from later marrying elsewhere, emigrating, or remaining
-  // unmarried for good — all of those still run normally afterward. The
-  // child itself becomes eligible for the ordinary marriage market too, via
-  // the interleaved runMatchingRounds() calls in the remarriage loop further
-  // down (a single call to runMatchingRounds() already exhausts every
-  // cascading generation, so no extra call is needed here).
+  // § illegitimacy: a child born to a woman who was not married to its
+  // father. Rolled PER YEAR that a woman spends adult and unmarried, not
+  // once per woman who ends the solve unmarried, which is what this used to
+  // be — and the change is not bookkeeping. The old shape asked one question
+  // of one narrow group and produced illegitimate births at 0.06–0.37% of
+  // all births, against its own configured intent of 2–3.5% and a literature
+  // range of 1–4%. It also put the risk in the wrong place: bastardy was a
+  // hazard of the YEARS spent unmarried and of age, which is why the
+  // late-marrying NW regions record more of it, and a large share of these
+  // children were borne by women who went on to marry someone else entirely
+  // — a group a once-per-never-married-woman roll cannot represent at all.
+  //
+  // Placed AFTER primary matching (so each woman's marriage year, and
+  // therefore her real exposure window, is known) but BEFORE the emigration
+  // and remarriage passes below: a natural child doesn't stop her from later
+  // emigrating or marrying, and all of that still runs normally afterward.
+  // The child becomes eligible for the ordinary marriage market too, via the
+  // interleaved runMatchingRounds() calls further down.
   //
   // Never assigns an unknown father: biography.ts's native-born birth
   // narration reads `father!`/`mother!` unconditionally for anyone who
@@ -744,75 +773,109 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // guaranteed present by construction") — inventing an unaddressable
   // father would break that. If no real, non-relative adult man exists yet
   // (only possible in a village's very first generation), the roll is
-  // simply skipped for that woman.
+  // simply skipped for that year.
+  const ILLEGITIMATE_MAX = 2;
+  /** A woman who bore one natural child did not bear the next the following
+   * spring — nursing suppressed conception here exactly as it does in
+   * genChildren's own spacing. */
+  const ILLEGITIMATE_SPACING = 3;
   function rollIllegitimateBirths(): void {
     for (const W of persons.slice()) {
-      if (W.sex !== "F" || W.founder || W.inOrders || W.spouse != null) continue;
+      if (W.sex !== "F" || W.founder || W.inOrders) continue;
       const r = makeRng(personStream(vHash, 970000, W.id));
-      if (!r.chance(demo.illegitimacyRate)) continue;
-      const ageLo = Math.max(14, region.marriageF[0] - 3);
-      const ageHi = Math.max(ageLo + 1, Math.min(region.marriageF[1] + 8, W.death.age - 1));
-      if (ageHi <= ageLo) continue;
-      // § childbed deaths: an unmarried woman the mortality roll says died in
-      // childbed has exactly one confinement the register could mean — date
-      // the birth to her own death year rather than an unrelated drawn one.
-      // The draw itself still happens either way, so her stream stays aligned
-      // with the branch not taken.
-      const drawnYear = W.birth + r.int(ageLo, ageHi);
-      const childbed = W.death.cause === "childbirth" && W.death.age >= ageLo && W.death.age <= ageHi + 1;
-      const y = childbed ? W.death.year : drawnYear;
-      if (!childbed && y >= W.death.year) continue;
-      const fatherCandidates = persons.filter(
-        (m) =>
-          m.sex === "M" &&
-          m.id !== W.father &&
-          !(m.father === W.father && W.father !== -1) &&
-          !(m.mother === W.mother && W.mother !== -1) &&
-          m.birth + 14 <= y &&
-          m.death.year > y,
-      );
-      if (!fatherCandidates.length) continue;
-      const fatherP = r.pick(fatherCandidates);
-      const sex: Sex = r.chance(0.5) ? "M" : "F";
-      const child = addPerson({
-        name: r.pick(sex === "M" ? region.maleNames : region.femaleNames),
-        surname: childSurname(fatherP, W),
-        sex,
-        birth: y,
-        cls: W.cls,
-        father: fatherP.id,
-        mother: W.id,
-        illegitimate: true,
-      });
-      child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
-      child.death = rollDeath(
-        makeRng(personStream(vHash, 7001, child.id)),
-        y,
-        sex,
-        CLASS_INFO[child.cls].wealth,
-        region,
-        child.riskTrade,
-        regionKey,
-        villageAddr,
-      );
-      // § legitimation: a substantial share of these were exactly a betrothed
-      // or courting couple whose child simply arrived before the wedding —
-      // if the father happens to still be unmarried, roll whether they go on
-      // to actually marry each other. Splicing the child into the resulting
-      // Couple's own children (not just leaving her found by childrenOf's
-      // separate illegitimate-scan) means she's now indistinguishable from
-      // any other child of that marriage to siblings/snapshot/succession —
-      // exactly the point, since per subsequens matrimonium treated her as
-      // legitimate from birth (bar England — see heirEligible above).
-      if (fatherP.spouse == null && r.chance(0.5)) {
-        const marriageYear = y + r.int(1, 2); // strictly after the birth year, never the same year
-        const c = marry(fatherP, W, marriageYear);
-        if (c) {
-          c.children.unshift(child.id);
-          child.legitimated = true;
-          child.legitimatedYear = marriageYear;
-          genChildren(c, 1495);
+      // Her exposure: from an age at which the register would have noticed,
+      // until she marries, dies, or the register stops recording births.
+      const from = W.birth + Math.max(14, region.marriageF[0] - 3);
+      const marriedAt = W.unions?.length ? couples[W.unions[0]].year : Number.POSITIVE_INFINITY;
+      const until = Math.min(W.death.year, marriedAt, GENERATION_LAST_YEAR + 1);
+
+      const borneIn = new Set<number>();
+      function bear(y: number): void {
+        const fatherCandidates = persons.filter(
+          (m) =>
+            m.sex === "M" &&
+            m.id !== W.father &&
+            !(m.father === W.father && W.father !== -1) &&
+            !(m.mother === W.mother && W.mother !== -1) &&
+            m.birth + 14 <= y &&
+            m.death.year > y,
+        );
+        if (!fatherCandidates.length) return;
+        const fatherP = r.pick(fatherCandidates);
+        const sex: Sex = r.chance(0.5) ? "M" : "F";
+        const child = addPerson({
+          name: r.pick(sex === "M" ? region.maleNames : region.femaleNames),
+          surname: childSurname(fatherP, W),
+          sex,
+          birth: y,
+          cls: W.cls,
+          father: fatherP.id,
+          mother: W.id,
+          illegitimate: true,
+        });
+        borneIn.add(y);
+        child.riskTrade = riskTradeOf(vHash, child.id, child.cls, child.sex);
+        child.death = rollDeath(
+          makeRng(personStream(vHash, 7001, child.id)),
+          y,
+          sex,
+          CLASS_INFO[child.cls].wealth,
+          region,
+          child.riskTrade,
+          regionKey,
+          villageAddr,
+        );
+        // § legitimation: a substantial share of these were exactly a
+        // betrothed or courting couple whose child simply arrived before the
+        // wedding — if BOTH are still unmarried, roll whether they go on to
+        // marry each other after all. Splicing the child into the resulting
+        // Couple's own children (not just leaving her found by childrenOf's
+        // separate illegitimate-scan) means she's now indistinguishable from
+        // any other child of that marriage to siblings/snapshot/succession —
+        // exactly the point, since per subsequens matrimonium treated her as
+        // legitimate from birth (bar England — see heirEligible above).
+        // § the celibate estate: a man in orders is deliberately still
+        // eligible to have FATHERED her — a priest's children are among the
+        // best-documented illegitimacies there are — but he cannot then
+        // marry the mother, so the legitimation branch has to exclude him.
+        if (fatherP.spouse == null && !fatherP.inOrders && W.spouse == null && r.chance(0.5)) {
+          const marriageYear = y + r.int(1, 2); // strictly after the birth year, never the same year
+          const c = marry(fatherP, W, marriageYear);
+          if (c) {
+            c.children.unshift(child.id);
+            child.legitimated = true;
+            child.legitimatedYear = marriageYear;
+            genChildren(c, GENERATION_LAST_YEAR);
+          }
         }
+      }
+
+      let lastBirth = Number.NEGATIVE_INFINITY;
+      for (let y = from; y < until; y++) {
+        if (borneIn.size >= ILLEGITIMATE_MAX) break;
+        if (y - lastBirth < ILLEGITIMATE_SPACING) continue;
+        if (!r.chance(demo.illegitimacyPerYear)) continue;
+        bear(y);
+        lastBirth = y;
+        // The legitimation branch above may have just married her; her
+        // exposure ends there, whatever the loop bound was computed as.
+        if (W.spouse != null) break;
+      }
+
+      // § childbed deaths: an unmarried woman whose own mortality roll says
+      // she died in childbed had a confinement by definition — the register
+      // would carry one birth that year. Without this the second childbed
+      // pass further down would quietly relabel her death as plain disease.
+      // Married women are not this pass's business: recordChildbedConfinements
+      // gives them a marital birth instead.
+      if (
+        W.death.cause === "childbirth" &&
+        W.death.year < marriedAt &&
+        W.death.year <= GENERATION_LAST_YEAR &&
+        !borneIn.has(W.death.year) &&
+        W.death.age >= 14
+      ) {
+        bear(W.death.year);
       }
     }
   }
@@ -983,7 +1046,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       const c = marry(m, best, year);
       if (c) {
         if (affinal) c.affinal = true; // she's a sister of his own late wife
-        genChildren(c, 1495);
+        genChildren(c, GENERATION_LAST_YEAR);
       }
       any = true;
     }
@@ -1032,7 +1095,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       const c = marry(best, w, year);
       if (c) {
         if (affinal) c.affinal = true; // he's a brother of her own late husband
-        genChildren(c, 1495);
+        genChildren(c, GENERATION_LAST_YEAR);
       }
       any = true;
     }
@@ -1106,7 +1169,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     for (const W of persons.slice()) {
       if (W.sex !== "F" || W.death.cause !== "childbirth") continue;
       const y = W.death.year;
-      if (y > 1495 || boreChildIn(W, y)) continue;
+      if (y > GENERATION_LAST_YEAR || boreChildIn(W, y)) continue;
       const c = unionAliveAt(W, y);
       if (!c || c.children.length >= 12) continue;
       makeChild(c, persons[c.husband], W, y);

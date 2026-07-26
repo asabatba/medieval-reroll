@@ -169,7 +169,8 @@ describe("resolveVillage invariants", () => {
     }
   });
 
-  it("children are born after their parents' marriage and before either parent dies (except a § legitimation splice, born before by definition, and a § childbed death, born in the mother's own last year)", () => {
+  it("children are born after their parents' marriage and before either parent dies (except a § legitimation splice, born before by definition, a § bridal pregnancy, born within the wedding year itself, and a § childbed death, born in the mother's own last year)", () => {
+    let sawBridal = 0;
     for (const env of envs) {
       for (const c of env.couples) {
         const H = env.persons[c.husband];
@@ -178,6 +179,16 @@ describe("resolveVillage invariants", () => {
           const child = env.persons[cid];
           if (child.legitimated) {
             expect(child.birth).toBeLessThan(c.year); // she predates the marriage that legitimated her, by definition
+          } else if (child.birth === c.year) {
+            // § bridal pregnancy: conceived before the wedding, born after it
+            // — the register's own commonest irregularity. Only ever the
+            // first child GENERATED for the wife's FIRST marriage, which is
+            // not the same as c.children[0]: a § legitimation splice unshifts
+            // a child born before the wedding onto the front of that list.
+            expect(W.unions?.[0]).toBe(env.couples.indexOf(c));
+            const generated = c.children.map((id) => env.persons[id]).filter((k) => !k.legitimated);
+            expect(Math.min(...generated.map((k) => k.birth))).toBe(child.birth);
+            sawBridal++;
           } else {
             expect(child.birth).toBeGreaterThan(c.year);
           }
@@ -198,6 +209,7 @@ describe("resolveVillage invariants", () => {
         }
       }
     }
+    expect(sawBridal).toBeGreaterThan(0);
   });
 
   it("no one is their own ancestor a few generations back (acyclic parentage)", () => {

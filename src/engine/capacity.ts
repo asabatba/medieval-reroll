@@ -59,11 +59,30 @@ export function holdingsOf(worldSeed: number, regionKey: string, villageIdx: num
 // century peak rather than refilling to it. Without this the check still
 // works, but it holds the village at a ceiling the fourteenth century set
 // and the fifteenth had no intention of farming.
+// The steps are also what dates the RECOVERY, and that is the harder half to
+// get right. Measured against this table's first shape the villages came back
+// far too soon and too completely — England 59 souls in 1340, 38 in 1350, and
+// 55 again by 1460; Catalonia 88, then 46, then 77 by 1430 — a recovery inside
+// two generations. The late-medieval trough was nothing like that short. The
+// English population went on FALLING to around 1450 and did not clearly turn
+// until near 1500; Catalonia's was held down by wave after wave of plague and
+// then the remença wars. The preventive check pushes hard toward whatever
+// ceiling it is given, so a ceiling that recovers early is a village that
+// recovers early: the trough has to be in the land, and it has to be long.
+// How far down the steps go is bounded from BELOW as well, and by something
+// other than taste: a ceiling is only a ceiling while the village is pressed
+// against it. Cut too deep and the region with the least demographic headroom
+// stops being capacity-limited at all and simply goes sub-replacement — which
+// is what a first attempt at this did to Tuscany, taking it from a village
+// holding steady around 50 souls to one draining from 45 to 28 across the
+// fifteenth century while England barely moved. A long trough is history; a
+// slow death is a broken parameter.
 const CULTIVATION: ReadonlyArray<readonly [number, number]> = [
   [1348, 1.0], // the high-water mark: marginal ground under the plough
-  [1380, 0.92], // vacant tenements, but heirs and neighbours still take most of them up
-  [1450, 0.82], // the deep retreat — engrossment, and the worst ground abandoned for good
-  [9999, 0.86], // a slight late recovery, against continuing conversion to pasture
+  [1375, 0.91], // vacant tenements, but heirs and neighbours still take most of them up
+  [1420, 0.84], // engrossment, arable down to pasture, the assarts going back to waste
+  [1470, 0.79], // the floor of it — the century's worst ground abandoned for good
+  [9999, 0.84], // the first real turn, late, and against continuing conversion to pasture
 ];
 
 /** Holdings actually worth taking up in a given year — the stock above,

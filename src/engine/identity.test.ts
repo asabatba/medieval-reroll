@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { decodePerson } from "./biography.js";
 import { canonicalRef, findResidenceRecord, residenceRef } from "./identity.js";
+import { childrenOf } from "./succession.js";
 import type { Envelope, Person } from "./types.js";
 import { resolveVillage } from "./village.js";
 
@@ -65,8 +66,30 @@ describe("cross-village identity", () => {
       expect(bio.spouse!.id).toBe(destSpouse.id);
       expect(bio.spouse!.addr).toEqual({ regionKey: destEnv.regionKey, villageIdx: destEnv.villageIdx });
       expect(bio.marriageYear).toBe(destCouple.year);
-      expect(bio.children.map((c) => c.id)).toEqual(destCouple.children);
-      for (const c of bio.children) expect(c.addr).toEqual({ regionKey: destEnv.regionKey, villageIdx: destEnv.villageIdx });
+      // Every child of the destination marriage shows up on the origin-side
+      // record, addressed to the destination. Not an exact equality any more:
+      // § illegitimacy means she may also have borne a natural child in her
+      // NATAL village in the years before she left, and childrenOf surfaces
+      // that too — genealogically hers, no part of this union, and addressed
+      // to the origin register that actually holds her. Which is the point of
+      // this whole module: a life split across two registers, each child
+      // carrying the address of the one that recorded it.
+      const destAddr = { regionKey: destEnv.regionKey, villageIdx: destEnv.villageIdx };
+      const originAddr = { regionKey: originEnv.regionKey, villageIdx: originEnv.villageIdx };
+      const atDest = bio.children.filter((c) => c.addr.regionKey === destAddr.regionKey && c.addr.villageIdx === destAddr.villageIdx);
+      // The two registers agree on her issue: what the origin-side record
+      // shows for the destination is exactly what the destination's own
+      // record shows. This used to be compared against one couple's children,
+      // which held only while she could have exactly one marriage and no
+      // children outside it — neither of which is true any more (§ remarriage
+      // depth, § illegitimacy).
+      expect(atDest.map((c) => c.id)).toEqual(childrenOf(destEnv, p.id).map((c) => c.id));
+      for (const cid of destCouple.children) expect(atDest.map((c) => c.id)).toContain(cid);
+      for (const c of bio.children) {
+        if (atDest.includes(c)) continue;
+        expect(c.addr).toEqual(originAddr);
+        expect(originEnv.persons[c.id].illegitimate).toBe(true);
+      }
       // and the marriage event names the real spouse
       const marriage = bio.events.find((e) => e.kind === "marriage");
       expect(marriage).toBeDefined();
