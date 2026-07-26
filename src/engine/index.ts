@@ -43,6 +43,25 @@ export { PLAGUES, plagueAt } from "./data/plagues.js";
 export { REGIONS } from "./data/regions.js";
 export { citeDocument } from "./documents.js";
 export { fatherOccupation } from "./fatherOccupation.js";
+// § the harvest: the subsistence year — documented failures as data, the
+// ordinary variance hashed per world, and the three things a bad harvest
+// did (killed, postponed weddings, thinned the next year's baptisms).
+export type { Dearth, HarvestGrade } from "./harvest.js";
+export {
+  DEARTH,
+  DEARTHS,
+  dearthAt,
+  dearthHazard,
+  FAMINE,
+  fertilityMult,
+  GOOD_HARVEST,
+  gradeOf,
+  harvestAt,
+  harvestSeries,
+  marriageDeferral,
+  namedDearthAt,
+  POOR_HARVEST,
+} from "./harvest.js";
 export { addrHash, makeRng } from "./hash.js";
 // Overlapping hierarchies (§10): independent trees over the same village
 // addresses, joined by a deterministic assignment table.
@@ -125,6 +144,10 @@ export type { HouseholdState, MaritalStatus, PersonState, VillageState } from ".
 export { CHURCH_HOUSEHOLD, MANOR_HOUSEHOLD, populationSeries, residentAt, villageStateAt } from "./snapshot.js";
 // Inheritance/household succession (§ family transitions), shared by Tier 2 and the snapshot layer.
 export { childrenOf, heirOf, inheritedFromFather } from "./succession.js";
+// § the tenement: the village's holdings as named ground with a size, and
+// the succession of families across each one.
+export type { Tenement, TenementSize, Tenure } from "./tenement.js";
+export { sizeRank, tenementHistory, tenementName, tenementOfCouple, tenementsOf } from "./tenement.js";
 export type {
   Address,
   Bio,

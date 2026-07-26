@@ -537,6 +537,72 @@ describe("the population curve", () => {
     expect(buildViewHTML(E, 1444, [{ kind: "king", regionKey: "england", reignIdx: 999 }], "en")).toBe("");
   });
 
+  // § the tenement: the only page whose subject is a piece of ground.
+  it("builds a tenement page: its size, its successive families, and its vacancies", () => {
+    const tens = E.tenementsOf(1444, "england", 0);
+    const venv = E.resolveVillage(1444, "england", 0);
+    // Pick one with a real succession on it.
+    const idx = tens.map((t) => t.idx).sort((a, b) => E.tenementHistory(venv, b).length - E.tenementHistory(venv, a).length)[0];
+    const history = E.tenementHistory(venv, idx);
+    for (const locale of ["en", "ca"] as const) {
+      const html = buildViewHTML(E, 1444, [{ kind: "tenement", regionKey: "england", villageIdx: 0, headIdx: idx }], locale);
+      expect(html).toContain(String(tens[idx].acres));
+      // Every holder is a row linking to the husband's own record.
+      for (const ten of history) {
+        expect(html).toContain(`${venv.regionKey}:${venv.villageIdx}:${ten.couple.husband}`);
+      }
+      expect(html).toContain(String(history[0].from));
+    }
+  });
+
+  it("shows the vacancies between tenures rather than closing the gap", () => {
+    // A holding standing empty after a plague is the point of the page, so
+    // a gap must be a row, not a silence.
+    const venv = E.resolveVillage(1444, "england", 0);
+    let gapsRendered = 0;
+    for (const t of E.tenementsOf(1444, "england", 0)) {
+      const history = E.tenementHistory(venv, t.idx);
+      let gaps = 0;
+      for (let i = 1; i < history.length; i++) if (history[i].from - history[i - 1].to > 2) gaps++;
+      if (!gaps) continue;
+      const html = buildViewHTML(E, 1444, [{ kind: "tenement", regionKey: "england", villageIdx: 0, headIdx: t.idx }], "en");
+      expect((html.match(/Stood vacant/g) ?? []).length).toBe(gaps);
+      gapsRendered += gaps;
+    }
+    expect(gapsRendered).toBeGreaterThan(0);
+  });
+
+  it("puts the holding on a person's record, as a link or an honest 'none'", () => {
+    // Somebody who actually married, so the holding vital has something to
+    // resolve; an unmarried person legitimately has no household land.
+    const married = env.persons.find((p) => p.unions?.length) ?? env.persons[0];
+    const html = buildRecordHTML(E, 1444, [{ regionKey: "england", villageIdx: 0, personId: married.id }], "en");
+    expect(html).toContain("Holding");
+    const ten = married.unions?.length ? env.couples[married.unions[0]].tenement : undefined;
+    if (ten != null) expect(html).toContain(`data-goto="tenement:england:0:${ten}"`);
+    else expect(html).toMatch(/undersettle|None/);
+  });
+
+  it("lists the whole tenantry on the village page, largest holding first", () => {
+    const html = buildViewHTML(E, 1444, [{ kind: "village", regionKey: "england", villageIdx: 0 }], "en");
+    const tens = E.tenementsOf(1444, "england", 0);
+    expect(html).toContain(`The tenantry — ${tens.length} holdings`);
+    expect((html.match(/data-goto="tenement:england:0:\d+"/g) ?? []).length).toBe(tens.length);
+  });
+
+  // § the harvest: emphasis, never a diverging colour pair.
+  it("draws the harvest series with one bar a year and the failures accented", () => {
+    const html = buildViewHTML(E, 1444, [{ kind: "village", regionKey: "england", villageIdx: 0 }], "en");
+    expect(html).toContain("The harvest");
+    const bars = (html.match(/class="hv-(bad|poor|ord|good)"/g) ?? []).length;
+    expect(bars).toBe(VILLAGE_YEAR_MAX - VILLAGE_YEAR_MIN + 1);
+    // The Great Famine is in there, named, and accented as a failure.
+    expect(html).toContain("the Great Famine");
+    expect(html).toContain('class="hv-bad"');
+    // Polarity is carried by position, so no second hue is needed for it.
+    expect(html).toContain('class="hv-mid"');
+  });
+
   it("a pontiff page for a term with no pope still renders, and says what it was", () => {
     // France recognised nobody between 1398 and 1402 — a real term, with a
     // real page, and no name to put on it.

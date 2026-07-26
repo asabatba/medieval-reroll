@@ -71,7 +71,7 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   if (parts.length === 5) {
     // § the church's own line joins the two feudal lines on this form: an
     // address, a kind of succession, and an index into it.
-    if (parts[3] !== "lord" && parts[3] !== "baron" && parts[3] !== "rector") return null;
+    if (parts[3] !== "lord" && parts[3] !== "baron" && parts[3] !== "rector" && parts[3] !== "tenement") return null;
     const headIdx = Number(parts[4]);
     if (!Number.isSafeInteger(headIdx) || headIdx < 0) return null;
     return { worldSeed, node: { kind: parts[3], regionKey: parts[1], villageIdx, headIdx } };
@@ -156,7 +156,8 @@ export function initApp(): void {
         return (a as HouseNode).villageIdx === (b as HouseNode).villageIdx;
       case "lord":
       case "baron":
-      case "rector": {
+      case "rector":
+      case "tenement": {
         const la = a as LordNode;
         const lb = b as LordNode;
         return la.villageIdx === lb.villageIdx && la.headIdx === lb.headIdx;
@@ -182,6 +183,7 @@ export function initApp(): void {
     if (parts[0] === "papacy") return { kind: "papacy", regionKey: parts[1] };
     if (parts[0] === "pontiff") return { kind: "pontiff", regionKey: parts[1], termIdx: +parts[2] };
     if (parts[0] === "rector") return { kind: "rector", regionKey: parts[1], villageIdx: +parts[2], headIdx: +parts[3] };
+    if (parts[0] === "tenement") return { kind: "tenement", regionKey: parts[1], villageIdx: +parts[2], headIdx: +parts[3] };
     if (parts[0] === "village") return { kind: "village", regionKey: parts[1], villageIdx: +parts[2] };
     if (isParishLevel(parts[0])) return { kind: parts[0], regionKey: parts[1], villageIdx: +parts[2] };
     if (parts[0] === "house") return { kind: "house", regionKey: parts[1], villageIdx: +parts[2] };
@@ -360,6 +362,8 @@ export function initApp(): void {
       if (!E.royalLineOf(parsed.node.regionKey)?.reigns[parsed.node.reignIdx]) return invalid();
     } else if (parsed.node.kind === "pontiff") {
       if (!E.papalSeriesOf(parsed.node.regionKey)[parsed.node.termIdx]) return invalid();
+    } else if (parsed.node.kind === "tenement") {
+      if (!E.tenementsOf(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx)[parsed.node.headIdx]) return invalid();
     } else if (parsed.node.kind === "rector") {
       if (!E.parishClergyOf(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx).heads[parsed.node.headIdx]) return invalid();
     } else if (parsed.node.kind === "lord" || parsed.node.kind === "baron") {

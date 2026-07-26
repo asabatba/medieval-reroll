@@ -1,6 +1,7 @@
 import type { Locale } from "../i18n/locale.js";
 import { demographyOf, periodMult, wealthIdx } from "./data/demography.js";
 import { plagueAt } from "./data/plagues.js";
+import { dearthHazard } from "./harvest.js";
 import { addrHash, hashStr, makeRng } from "./hash.js";
 import type { Death, DeathCause, Plague, Region, RiskTrade, Rng, Sex } from "./types.js";
 
@@ -24,6 +25,12 @@ export function baseHazard(age: number): number {
 export function famineAt(year: number, region: Region): boolean {
   return year >= region.famine[0] && year <= region.famine[1];
 }
+
+/** § the harvest: the region's own yield in a given year. Passed in rather
+ * than looked up here so rollDeath keeps working for the isolated unit
+ * calls that have no world to ask about the weather — those simply get the
+ * ordinary year the model always assumed. */
+export type HarvestReader = (year: number) => number;
 
 export function warAt(year: number, region: Region, locale: Locale = "en"): string | null {
   for (const [a, b] of region.warYears) if (year >= a && year <= b) return region.warNames[a]?.[locale] || FALLBACK_WAR[locale];
@@ -63,7 +70,7 @@ export function plagueArrivalYear(worldSeed: number, regionKey: string, villageI
 // being buried. Without this the register could go dark in a window year in
 // which nobody here actually died.
 export function registerBlackoutAt(worldSeed: number, regionKey: string, villageIdx: number, year: number, region: Region): boolean {
-  const plague = plagueAt(year);
+  const plague = plagueAt(year, regionKey);
   const war = warAt(year, region);
   if (!plague && !war) return false;
   const rng = makeRng(addrHash(worldSeed, [regionKey, villageIdx, "register-blackout", year]));
@@ -112,14 +119,28 @@ export function rollDeath(
   // that compare trades/regions with no village address to speak of, which
   // fall back to the per-person stagger below.
   village?: { worldSeed: number; villageIdx: number },
+  // § the harvest: the region's yield series. Omitted by the isolated unit
+  // calls, which then see nothing but ordinary years — the behaviour this
+  // function had before harvests existed.
+  harvest?: HarvestReader,
 ): Death {
   const demo = demographyOf(regionKey);
   const wi = wealthIdx(wealth);
   let age = 0;
   while (age <= 95) {
     const year = birth + age;
-    const plague = plagueAt(year);
-    const famine = famineAt(year, region) && wealth <= 2;
+    const plague = plagueAt(year, regionKey);
+    // § the harvest: hunger now comes from the year's actual yield, wherever
+    // the harvest failed, instead of from one hard-coded window per region.
+    // The old rule bit for every year of a fixed span at a flat rate and
+    // nowhere else — so Castile starved through the Great Famine, which
+    // never reached Iberia, and no village anywhere ever went hungry in the
+    // 1370s or the 1430s, when a good many of them did. Where no harvest
+    // reader is supplied (the isolated unit calls) this falls back to the
+    // region's own named window, which is what those tests were written
+    // against.
+    const dearth = harvest ? dearthHazard(harvest(year), harvest(year - 1), age, wealth) : 0;
+    const famine = harvest ? dearth > 0 : famineAt(year, region) && wealth <= 2;
     const warName = warAt(year, region);
     let h = baseHazard(age);
     if (age === 0) h *= demo.infantMult * demo.infantWealthMult[wi];
@@ -166,7 +187,11 @@ export function rollDeath(
         h = Math.min(0.9, h * 1.35 + (plague[2] >= 10 ? 0.004 : 0.002));
       }
     }
-    if (famine) h += age < 5 || age > 55 ? 0.1 : 0.03;
+    // § the harvest: graded by how badly the harvest actually failed, by
+    // age, and by whether the household had anything put by — where the old
+    // rule was one flat number for everyone poor.
+    if (harvest) h += dearth;
+    else if (famine) h += age < 5 || age > 55 ? 0.1 : 0.03;
     let warRisk = 0;
     if (warName && sex === "M" && age >= 16 && age <= 45) {
       warRisk = wealth >= 4 ? 0.012 : 0.005;
@@ -225,7 +250,11 @@ export function rollDeath(
     }
     if (rng() < h) {
       if (plague && rng() < 0.8) cause = "plague";
-      else if (famine && rng() < 0.7) cause = "famine";
+      // § the harvest: the share of the year's hazard that the hunger
+      // actually was, rather than a flat 0.7 for anyone poor in a famine
+      // window — so a death in a merely poor year is only sometimes hunger,
+      // and a death in a total failure usually is.
+      else if (famine && rng() < (harvest ? Math.min(0.85, dearth / Math.max(h, 0.001)) : 0.7)) cause = "famine";
       else if (warName && rng() < warRisk / Math.max(h, 0.001)) cause = "war";
       else if (maternalRisk > 0 && rng() < maternalRisk / Math.max(h, 0.001)) cause = "childbirth";
       // Infancy first: a death in the first year is the register's own

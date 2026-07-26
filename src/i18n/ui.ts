@@ -196,6 +196,30 @@ interface UiStrings {
   closedSeasonLabel: string;
   monthCount: (month: string, n: number) => string;
   easterOf: (year: number, day: number, month: string) => string;
+  // ---- § the tenement: the ground itself as a record ----
+  tenementSize: Record<"virgate" | "halfVirgate" | "cottage" | "toft", string>;
+  tenementNamed: (surname: string) => string;
+  tenementUnnamed: (n: number) => string;
+  acresOf: (n: number, unit: string) => string;
+  tenementLandLabel: string;
+  tenementHoldersLabel: string;
+  tenementStandingLabel: string;
+  tenementHolders: string;
+  tenementNote: string;
+  tenementVacant: (years: number) => string;
+  tenementNeverHeld: string;
+  childrenBorne: (n: number) => string;
+  tenantryHeader: (n: number) => string;
+  tenantryNote: string;
+  holdersCount: (n: number) => string;
+  holdingLabel: string;
+  undersettle: string;
+  // ---- § the harvest / § the deserted village ----
+  desertedNote: (year: number) => string;
+  harvestHeader: string;
+  harvestNote: string;
+  harvestGrade: Record<"good" | "ordinary" | "poor" | "dearth" | "famine", string>;
+  harvestYear: (year: number, grade: string) => string;
   // ---- U2: the lifeline ----
   lifelineCaption: (age: number, plagues: number) => string;
   lifelineAria: (name: string, birth: number, death: number, age: number, plagues: number) => string;
@@ -407,6 +431,32 @@ export const UI: Record<Locale, UiStrings> = {
     closedSeasonLabel: "closed to weddings",
     monthCount: (month, n) => `${month}: ${n}`,
     easterOf: (year, day, month) => `Easter ${year} fell on ${day} ${month}`,
+    tenementSize: { virgate: "A virgate", halfVirgate: "A half-virgate", cottage: "A cottage holding", toft: "A toft" },
+    tenementNamed: (surname) => `${surname}'s tenement`,
+    tenementUnnamed: (n) => `The ${n === 1 ? "first" : n === 2 ? "second" : n === 3 ? "third" : `${n}th`} tenement`,
+    acresOf: (n, unit) => `${n} ${unit}`,
+    tenementLandLabel: "Arable",
+    tenementHoldersLabel: "Families",
+    tenementStandingLabel: "Held",
+    tenementHolders: "Successive holders",
+    tenementNote:
+      "A holding kept its name long after the family that gave it one had gone — court rolls are full of tenements named for people not in them. What follows is the succession of households on this one piece of ground, and the vacancies are as much a part of it as the tenures.",
+    tenementVacant: (years) => `Stood vacant ${years} ${years === 1 ? "year" : "years"}`,
+    tenementNeverHeld: "No household is recorded on this ground.",
+    childrenBorne: (n) => (n ? `${n} ${n === 1 ? "child" : "children"}` : "no issue"),
+    tenantryHeader: (n) => `The tenantry — ${n} holdings`,
+    tenantryNote:
+      "The village's land as an extent would list it: every tenement with its size, largest first. A household needed one of these to exist at all, which is what holds this population to its land.",
+    holdersCount: (n) => `${n} ${n === 1 ? "family" : "families"}`,
+    holdingLabel: "Holding",
+    undersettle: "None — an undersettle",
+    desertedNote: (year) =>
+      `The village stood empty by ${year}. Its land went back to pasture and its name survived on a map: something like a tenth of English villages ended this way, and a run of failed harvests on thin ground is how.`,
+    harvestHeader: "The harvest",
+    harvestNote:
+      "The yield of the region's harvest, year by year. The documented failures are history — the Great Famine, lo mal any primer, the dear years of the 1430s — and the ordinary variation around them is this world's own weather. A bad year killed the old and the young, and it postponed weddings.",
+    harvestGrade: { good: "a good harvest", ordinary: "an ordinary year", poor: "a poor harvest", dearth: "dearth", famine: "famine" },
+    harvestYear: (year, grade) => `${year} — ${grade}`,
     lifelineCaption: (age, plagues) => `${age} years · ${plagues === 1 ? "one pestilence" : `${plagues} pestilences`} lived through`,
     lifelineAria: (name, birth, death, age, plagues) =>
       `The life of ${name}, ${birth} to ${death}, ${age} years, against the plagues, famines and wars of the region: ${plagues} pestilences lived through.`,
@@ -608,6 +658,32 @@ export const UI: Record<Locale, UiStrings> = {
     closedSeasonLabel: "tancat als casaments",
     monthCount: (month, n) => `${month}: ${n}`,
     easterOf: (year, day, month) => `La Pasqua de ${year} va caure el ${day} ${deCa(month)}`,
+    tenementSize: { virgate: "Un mas sencer", halfVirgate: "Mig mas", cottage: "Un maset", toft: "Un corral" },
+    tenementNamed: (surname) => `El mas dels ${surname}`,
+    tenementUnnamed: (n) => `El mas ${n}è`,
+    acresOf: (n, unit) => `${n} ${unit}`,
+    tenementLandLabel: "Terra de conreu",
+    tenementHoldersLabel: "Famílies",
+    tenementStandingLabel: "Tingut",
+    tenementHolders: "Successió de tinents",
+    tenementNote:
+      "Un mas conservava el nom molt després que la família que l'hi havia donat hagués desaparegut — els rotlles de la cort són plens de masos anomenats per gent que ja no hi és. El que segueix és la successió de cases damunt d'aquest tros de terra, i els buits en formen part tant com les tinences.",
+    tenementVacant: (years) => `Va restar buit ${years} ${years === 1 ? "any" : "anys"}`,
+    tenementNeverHeld: "No consta cap casa en aquesta terra.",
+    childrenBorne: (n) => (n ? `${n} ${n === 1 ? "fill" : "fills"}` : "sense descendència"),
+    tenantryHeader: (n) => `La tinença — ${n} masos`,
+    tenantryNote:
+      "La terra del poble tal com la llistaria un capbreu: cada mas amb la seva mida, del més gran al més petit. Una casa necessitava un d'aquests per existir, i això és el que lliga aquesta població a la seva terra.",
+    holdersCount: (n) => `${n} ${n === 1 ? "família" : "famílies"}`,
+    holdingLabel: "Mas",
+    undersettle: "Cap — hi vivia de rellogat",
+    desertedNote: (year) =>
+      `El poble era buit el ${year}. La terra tornà a pastura i el nom va sobreviure en un mapa: alguna cosa com un desè dels pobles anglesos van acabar així, i una seguida de collites fallides en terra prima és com.`,
+    harvestHeader: "La collita",
+    harvestNote:
+      "El rendiment de la collita de la regió, any per any. Les fallides documentades són història — la Gran Fam, lo mal any primer, els anys cars dels anys 1430 — i la variació ordinària al seu voltant és el temps propi d'aquest món. Un mal any matava els vells i els infants, i endarreria els casaments.",
+    harvestGrade: { good: "bona collita", ordinary: "any ordinari", poor: "collita pobra", dearth: "carestia", famine: "fam" },
+    harvestYear: (year, grade) => `${year} — ${grade}`,
     lifelineCaption: (age, plagues) => `${age} anys · ${plagues === 1 ? "una pestilència" : `${plagues} pestilències`} viscudes`,
     lifelineAria: (name, birth, death, age, plagues) =>
       `La vida de ${name}, de ${birth} a ${death}, ${age} anys, contra les pestes, fams i guerres de la regió: ${plagues} pestilències viscudes.`,

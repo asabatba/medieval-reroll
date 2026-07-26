@@ -48,11 +48,13 @@ import { CLASS_INFO, CLASSES, ceilingPressure, hasCeiling, URBAN_CLASSES } from 
 import { demographyOf } from "./data/demography.js";
 import { placeOf } from "./data/placeNames.js";
 import { REGIONS } from "./data/regions.js";
+import { DEARTH, fertilityMult, harvestAt, marriageDeferral } from "./harvest.js";
 import { addrHash, makeRng, personStream } from "./hash.js";
-import { famineAt, rollDeath, warAt } from "./mortality.js";
+import { type HarvestReader, rollDeath, warAt } from "./mortality.js";
 import { clusterBase, clusterOffset, higherRankRegions, LOCAL_CLUSTER } from "./rank.js";
 import { assignServiceMasters, resolveServiceSpells } from "./service.js";
 import { settlementTypeOf } from "./settlement.js";
+import { tenementsOf } from "./tenement.js";
 import type { Address, Couple, Death, Envelope, Person, Sex, SocialClass } from "./types.js";
 import { cacheClear, cacheGet, cacheSet, cacheSize } from "./villageCache.js";
 import { riskTradeOf, rollDownwardMobility, rollMobility, rollService, rollVocation } from "./villageMobility.js";
@@ -134,6 +136,48 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
   // § plague waves: handed to every rollDeath below so a wave's arrival year
   // is a fact about THIS village, shared by everyone who lived through it.
   const villageAddr = { worldSeed, villageIdx };
+  // § the harvest (harvest.ts): the region's yield series, read at the two
+  // points a bad year actually bit — the mortality walk, and the year a
+  // couple set the wedding for. Regional, so every village of the region
+  // starves in the same years, which is what made a dearth an event
+  // contemporaries could name.
+  const yieldAt: HarvestReader = (year) => harvestAt(worldSeed, regionKey, year);
+  /** The wedding year, pushed back out of a hunger year into the next one
+   * the couple could afford. Bounded by marriageDeferral itself, so this
+   * can never spiral past two years — the generational restraint is the
+   * preventive check's job, not the weather's. */
+  /** § the harvest: the most a bad year may push a wedding, in total.
+   *
+   * One year, which is both the defensible reading — a couple waits for
+   * the NEXT harvest and marries into it — and the value the aggregate
+   * bands want. At two the marriage metrics drifted out of every band
+   * demography.test.ts holds (the Mediterranean squeeze, the marrying-out
+   * share, the peasant share of the village), because a delay of two years
+   * on a fifteenth-century marriage window is a large fraction of it. */
+  const MAX_HARVEST_DEFERRAL = 1;
+  function deferForHarvest(year: number, deadline?: number): number {
+    // Capped at two years TOTAL, not two per bad year. Left to compound,
+    // a run of failures walked a wedding four and five years down the
+    // calendar, which is not what a dearth does: a couple waits for the
+    // next harvest they can afford and marries into it, and if the bad
+    // years keep coming they marry anyway. The generational restraint is
+    // the preventive check's job (capacity.ts), not the weather's.
+    let y = year;
+    for (let guard = 0; guard < 3 && y - year < MAX_HARVEST_DEFERRAL; guard++) {
+      const push = marriageDeferral(yieldAt(y));
+      if (!push) break;
+      y = Math.min(y + push, year + MAX_HARVEST_DEFERRAL);
+    }
+    // A postponement past the end of a life is not a postponement, it is a
+    // marriage that never happened — and modelling it as one quietly turned
+    // the Mediterranean marriage squeeze inside out. There the brides are
+    // young and numerous and the surplus falls on the MEN (the catasto's
+    // near-universal female marriage beside a great many unmarried men);
+    // deferring a bride past her own death year instead pushed permanent
+    // celibacy onto the women, inverting the one pattern demography.test.ts
+    // exists to hold. So the wait is capped by the life it is asked of.
+    return deadline != null && y >= deadline ? Math.min(year, deadline - 1) : y;
+  }
 
   // § the preventive check (capacity.ts): how much of the village's land is
   // already spoken for, as of a given year. Read at the two moments a real
@@ -157,6 +201,96 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     for (const ci of p.unions ?? []) if (couples[ci].year <= year) found = ci;
     return found;
   }
+  // § the tenement (tenement.ts): the village's actual holdings, each with
+  // a size, rather than the bare count the preventive check measured
+  // against. The stock and the count are the same number by construction —
+  // tenementsOf is built off holdingsOf — so nothing about the check
+  // changes; what changes is that a household now stands on a NAMED piece
+  // of ground that outlives it.
+  const tenements = tenementsOf(worldSeed, regionKey, villageIdx);
+
+  /** The years a household actually sits on its ground: from the wedding
+   * until the last of the pair is dead, gone, or has moved to a later
+   * union's holding.
+   *
+   * Both deaths are already rolled by the time anybody marries, so this is
+   * knowable at assignment — which matters, because couples are NOT created
+   * in chronological order. The marriage matching runs in rounds, so a
+   * couple built later can have an earlier wedding year than one built
+   * before it, and a check that only asked "is this holding free in the
+   * wedding year" happily gave the same ground to a household of 1380 that
+   * it had already given to one of 1400. Overlapping the whole span is what
+   * makes the occupancy actually exclusive. */
+  function tenureSpan(ci: number): [number, number] {
+    const c = couples[ci];
+    const endOf = (p: Person): number => {
+      if (p.emigrated) return c.year;
+      const end = p.death.year;
+      for (const u of p.unions ?? []) if (couples[u].year > c.year) return Math.min(end, couples[u].year);
+      return end;
+    };
+    return [c.year, Math.max(endOf(persons[c.husband]), endOf(persons[c.wife]))];
+  }
+
+  /** Free for the whole of [from, to] — nobody else's tenure overlaps it.
+   *
+   * `exceptCouple` is the household asking; `alsoExcept` is the one it is
+   * SUCCEEDING on the same ground, which has to be exempted or the rule
+   * blocks itself. A widow remarrying keeps her holding, but at the moment
+   * she remarries her new union is not yet on her `unions` list, so her old
+   * tenure still looks as though it runs to her death — and her own former
+   * household was therefore found sitting on the ground she was trying to
+   * stay on. Measured: the keep-your-holding rule fired exactly zero times
+   * before this. */
+  function tenementFree(t: number, from: number, to: number, exceptCouple: number, alsoExcept = -1): boolean {
+    for (let ci = 0; ci < couples.length; ci++) {
+      if (ci === exceptCouple || ci === alsoExcept || couples[ci].tenement !== t) continue;
+      const [a, b] = tenureSpan(ci);
+      if (from <= b && a <= to) return false;
+    }
+    return true;
+  }
+
+  /** The ground a new household takes up.
+   *
+   * The order is the one the court rolls show. A surviving spouse
+   * remarrying keeps the holding they already sit on — a remarriage moves
+   * a household, it does not found a second one. Otherwise the heir takes
+   * his father's tenement if it has actually fallen vacant, which is what
+   * makes succession a fact about a PLACE and not merely about a person.
+   * Failing that he takes up whatever is standing empty, and a household
+   * with something behind it takes the better ground. And where nothing is
+   * free he holds nothing at all: an undersettle on another man's land,
+   * which is a real category the surveys record and the bare count could
+   * not express. */
+  function assignTenement(H: Person, W: Person, year: number, ci: number): number | null {
+    // The span this household would occupy, computed the same way every
+    // other tenure is (the couple is not on `couples` yet, so this mirrors
+    // tenureSpan against the record about to be pushed).
+    const to = Math.max(H.emigrated ? year : H.death.year, W.emigrated ? year : W.death.year);
+    // A surviving spouse remarrying stays on the ground they already hold.
+    for (const p of [H, W]) {
+      const prev = currentUnionAt(p, year - 1);
+      const held = prev != null ? couples[prev].tenement : undefined;
+      if (held != null && tenementFree(held, year, to, ci, prev!)) return held;
+    }
+    // The father's holding, if he is gone from it and this son is the heir.
+    if (H.father >= 0) {
+      const fatherUnion = currentUnionAt(persons[H.father], year - 1) ?? persons[H.father].unions?.[0];
+      const paternal = fatherUnion != null ? couples[fatherUnion].tenement : undefined;
+      if (paternal != null && isHeir(persons, region, regionKey, H) && tenementFree(paternal, year, to, ci)) return paternal;
+    }
+    const free = tenements.filter((t) => tenementFree(t.idx, year, to, ci));
+    if (!free.length) return null;
+    // A gentry or merchant household takes the best ground going; a serf
+    // takes what is left. Reading the wealth grade rather than the class
+    // keeps this in step with everything else that grades a household.
+    const wealth = CLASS_INFO[H.cls].wealth;
+    if (wealth >= 3) return free[0].idx;
+    if (wealth === 1) return free[free.length - 1].idx;
+    return free[Math.floor(free.length / 2)].idx;
+  }
+
   function pressureAt(year: number): number {
     let held = 0;
     for (let ci = 0; ci < couples.length; ci++) {
@@ -283,8 +417,8 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     });
     H.riskTrade = riskTradeOf(vHash, H.id, H.cls, H.sex);
     W.riskTrade = riskTradeOf(vHash, W.id, W.cls, W.sex);
-    H.death = rollDeath(makeRng(personStream(vHash, 7001, H.id)), hb, "M", wealth, region, H.riskTrade, regionKey, villageAddr);
-    W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", wealth, region, W.riskTrade, regionKey, villageAddr);
+    H.death = rollDeath(makeRng(personStream(vHash, 7001, H.id)), hb, "M", wealth, region, H.riskTrade, regionKey, villageAddr, yieldAt);
+    W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", wealth, region, W.riskTrade, regionKey, villageAddr, yieldAt);
     // founders are guaranteed to reach marriage (they existed to found the
     // line) — extend a death that would otherwise fall on or before the
     // marriage year itself, not just one that's short of a fixed age floor.
@@ -309,6 +443,11 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     const c: Couple = { husband: H.id, wife: W.id, year, children: [] };
     if (isConsanguineous(persons, H, W)) c.consanguineous = true;
     const ci = couples.length;
+    // § the tenement: which piece of ground this household actually stands
+    // on. Assigned here because marry() is the one place a household comes
+    // into being, and read back by tenement.ts for the holding's own page.
+    const t = assignTenement(H, W, year, ci);
+    if (t != null) c.tenement = t;
     couples.push(c);
     if (!H.unions) H.unions = [];
     H.unions.push(ci);
@@ -395,6 +534,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       child.riskTrade,
       regionKey,
       villageAddr,
+      yieldAt,
     );
     // § male out-migration: a non-heir son — of ANY wealth grade, not just
     // the low-wealth default rollService already covers — is likelier to be
@@ -481,7 +621,12 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
       // after one who lived. The draw happens either way, so which branch is
       // taken never changes the shared stream's draw count.
       const spacing = rng.int(demo.birthSpacing[0], demo.birthSpacing[1]);
-      y += child.death.age === 0 ? demo.birthSpacing[0] : spacing;
+      // § the harvest: hunger suppresses conception, and the deficit turns
+      // up in the baptisms of the year after — so a bad harvest widens the
+      // interval rather than removing a child outright. The draw happens
+      // either way, so the branch taken never changes the stream's count.
+      const hungry = fertilityMult(yieldAt(y)) < 1 && rng.chance(1 - fertilityMult(yieldAt(y)));
+      y += (child.death.age === 0 ? demo.birthSpacing[0] : spacing) + (hungry ? 1 : 0);
     }
   }
 
@@ -577,7 +722,13 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         // household, so he waits for one to fall vacant — and if none does
         // within reach, he never marries, and falls through to the
         // out-migration pass below like any other unmatched man.
-        let wantYear = M.birth + mAge;
+        // § the harvest: a couple did not marry in a year when bread was at
+        // famine price — the marriage register empties in a dearth and
+        // fills again after the next good harvest. Applied before the
+        // holdings check, since a man who waits out a bad year then still
+        // has to find a tenement at the end of it.
+        let wantYear = deferForHarvest(M.birth + mAge, M.death.year);
+        const harvestPush = Math.max(0, wantYear - (M.birth + mAge));
         if (pressureAt(wantYear) >= HOLDINGS_FULL) {
           const wait = WAIT_FOR_HOLDING.find((d) => pressureAt(wantYear + d) < HOLDINGS_FULL);
           if (wait === undefined) continue;
@@ -603,7 +754,14 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           // If the check delays the marriage it delays the market, both sides
           // of it. Worst in the Mediterranean, whose window is the narrowest
           // and starts earliest, and whose villages are the most crowded.
-          if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6 + Math.max(0, marriageAgeShift(pressure))) continue;
+          // § the harvest: and the same is true of a delay for a bad year.
+          // It is the identical bug in a second guise — a push applied to
+          // HIS year while her band stays pinned to her birth — and it
+          // reproduced the identical symptom: measured, it moved permanent
+          // celibacy in Italy off the men and onto the women, inverting the
+          // Mediterranean pattern this model was corrected to produce. If
+          // the harvest delays the marriage it delays the market too.
+          if (wAgeAt < region.marriageF[0] - 1 || wAgeAt > region.marriageF[1] + 6 + Math.max(0, marriageAgeShift(pressure)) + harvestPush) continue;
           if (W.death.year <= wantYear || M.death.year <= wantYear) continue;
           // § consanguinity avoidance: a first cousin is a last resort, not
           // an equal candidate — the impediment and the cost of the
@@ -675,7 +833,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
               incomer: true,
               origin: null,
             });
-            W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region, "normal", regionKey, villageAddr);
+            W.death = rollDeath(makeRng(personStream(vHash, 7001, W.id)), wb, "F", CLASS_INFO[M.cls].wealth, region, "normal", regionKey, villageAddr, yieldAt);
             if (W.death.year <= wantYear) {
               const deathYear = wantYear + 1 + rng.int(0, 25);
               W.death = { year: deathYear, age: deathYear - wb, cause: "disease" };
@@ -702,7 +860,10 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
         // he does — the men's loop above already shifts her age wherever she
         // was matched there, and this keeps the immigrant-groom route from
         // being the one door that ignores how full the village is.
-        const wantYear = W.birth + rng.int(region.marriageF[0], region.marriageF[1]) + marriageAgeShift(pressureAt(W.birth + region.marriageF[0]));
+        const wantYear = deferForHarvest(
+          W.birth + rng.int(region.marriageF[0], region.marriageF[1]) + marriageAgeShift(pressureAt(W.birth + region.marriageF[0])),
+          W.death.year,
+        );
         if (W.death.year <= wantYear) continue;
         // § vacant holdings: a village with tenements standing empty was a
         // village worth coming to, and it is the reason the post-plague
@@ -772,7 +933,17 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
             origin: null,
           });
           M.riskTrade = riskTradeOf(vHash, M.id, M.cls, M.sex);
-          M.death = rollDeath(makeRng(personStream(vHash, 7001, M.id)), mb, "M", CLASS_INFO[W.cls].wealth, region, M.riskTrade, regionKey, villageAddr);
+          M.death = rollDeath(
+            makeRng(personStream(vHash, 7001, M.id)),
+            mb,
+            "M",
+            CLASS_INFO[W.cls].wealth,
+            region,
+            M.riskTrade,
+            regionKey,
+            villageAddr,
+            yieldAt,
+          );
           if (M.death.year <= wantYear) {
             const deathYear = wantYear + 1 + rng.int(0, 25);
             M.death = { year: deathYear, age: deathYear - mb, cause: "disease" };
@@ -865,6 +1036,7 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
           child.riskTrade,
           regionKey,
           villageAddr,
+          yieldAt,
         );
         // § legitimation: a substantial share of these were exactly a
         // betrothed or courting couple whose child simply arrived before the
@@ -985,7 +1157,14 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     // cloister, not another parish's.
     if (W.sex !== "F" || W.founder || W.inOrders || W.spouse != null || W.emigrated || W.death.age < region.marriageF[1]) continue;
     const atYear = W.birth + region.marriageF[1];
-    const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
+    // § the harvest: a hard year is one the crop actually failed in,
+    // wherever and whenever that was — not one inside a fixed window. This
+    // read famineAt(), and narrowing that window to the Great Famine proper
+    // quietly cut the years in which people were pushed off the land, which
+    // is the mechanism this rate exists to represent: a dearth emptied
+    // parishes, and it is why the emigration rate has a pressured branch.
+
+    const pressured = yieldAt(atYear) < DEARTH || !!warAt(atYear, region);
     // § the preventive check: emigration is the release valve for crowding,
     // so it has to answer to it. A village with tenements standing empty
     // after the plague kept its daughters; one with none to give could not.
@@ -1035,7 +1214,13 @@ function solveVillage(worldSeed: number, regionKey: string, villageIdx: number):
     if (M.death.age < region.marriageM[1]) continue;
     const heir = isHeir(persons, region, regionKey, M);
     const atYear = M.birth + region.marriageM[1];
-    const pressured = famineAt(atYear, region) || !!warAt(atYear, region);
+    // § the harvest: a hard year is one the crop actually failed in,
+    // wherever and whenever that was — not one inside a fixed window. This
+    // read famineAt(), and narrowing that window to the Great Famine proper
+    // quietly cut the years in which people were pushed off the land, which
+    // is the mechanism this rate exists to represent: a dearth emptied
+    // parishes, and it is why the emigration rate has a pressured branch.
+    const pressured = yieldAt(atYear) < DEARTH || !!warAt(atYear, region);
     const chance = pressured ? demo.maleOutMigration.pressured : heir ? demo.maleOutMigration.heirBase : demo.maleOutMigration.nonHeirBase;
     // § the preventive check: same valve as the women's pass above. A
     // younger son with no holding to wait for left; a younger son in a

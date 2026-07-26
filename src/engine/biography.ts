@@ -43,6 +43,7 @@ import { PLAGUES, plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
 import { citeDocument } from "./documents.js";
 import { fatherOccupation } from "./fatherOccupation.js";
+import { FAMINE, harvestAt, namedDearthAt, POOR_HARVEST } from "./harvest.js";
 import { makeRng, personStream } from "./hash.js";
 import { manorOf, parishMotherVillageIdx, parishOf } from "./hierarchy.js";
 import { findResidenceRecord } from "./identity.js";
@@ -300,7 +301,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   const birthDateOfPerson = (person: Person, e = env): MedievalDate | undefined => personBirthDate(e.vHash, person) ?? undefined;
 
   // Birth
-  const bornPlague = plagueAt(p.birth);
+  const bornPlague = plagueAt(p.birth, env.regionKey);
   const bNote = ca
     ? bornPlague
       ? ` — {{nascut/nascuda}} en any de pesta, ${bornPlague[3].ca}`
@@ -1028,7 +1029,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
 
   // Children — real, from the envelope
   for (const c of children) {
-    const cp = plagueAt(c.birth);
+    const cp = plagueAt(c.birth, env.regionKey);
     if (c.death.age === 0) {
       ev(
         c.birth,
@@ -1214,7 +1215,7 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // texture-entry suppression above as an unexplained gap.
   if (blackoutYears.size) {
     const year = Math.min(...blackoutYears);
-    const plague = plagueAt(year);
+    const plague = plagueAt(year, env.regionKey);
     const crisis = plague ? plague[3][locale] : warAt(year, region, locale) || (ca ? "aquells anys" : "those years");
     ev(
       year,
@@ -1465,6 +1466,46 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
     if (w[1] < p.birth + w[3] || w[0] > (departureYear ?? p.death.year)) continue;
     if (w[2] && !w[2].includes(env.regionKey)) continue;
     if (rng.chance(w[4])) ev(Math.max(w[0], p.birth + w[3]), w[7](p, locale, literate), w[5], SRC[locale][w[6] as DocumentKind]);
+  }
+
+  // § the harvest: the year the crop failed was the most memorable thing
+  // that happened to most people in most decades, and the register had no
+  // way to say so. Only the worst one of a life is narrated — a villager
+  // who saw four bad years remembers the year of the great dearth, not a
+  // list — and a documented failure is named, while an ordinary one is
+  // simply a hungry year.
+  {
+    const lastYear = departureYear ?? p.death.year;
+    let worstYear = 0;
+    let worstYield = POOR_HARVEST;
+    for (let y = Math.max(p.birth + 5, 1290); y <= lastYear; y++) {
+      const h = harvestAt(env.worldSeed, env.regionKey, y);
+      if (h < worstYield) {
+        worstYield = h;
+        worstYear = y;
+      }
+    }
+    if (worstYear && rng.chance(worstYield < FAMINE ? 0.75 : 0.4)) {
+      const named = namedDearthAt(env.regionKey, worstYear);
+      const what = named ? named.name[locale] : ca ? "un any de fam" : "a year of hunger";
+      const bought = wealth >= 3;
+      ev(
+        worstYear,
+        ca
+          ? `La collita va fallar — ${what}. ${
+              bought
+                ? "La casa va comprar gra a preu de fam i va passar l'any; als camins hi havia gent d'altres parròquies demanant pa."
+                : "Es van menjar el gra de sembrar, i el que es va poder plegar dels marges. Els vells i els infants van ser els primers a caure."
+            }`
+          : `The harvest failed — ${what}. ${
+              bought
+                ? "The household bought grain at famine price and came through the year; there were folk from other parishes on the roads, begging bread."
+                : "They ate the seed corn, and what could be gathered from the hedges. The old and the children went first."
+            }`,
+        "famine",
+        cite(named ? "chron" : "reg"),
+      );
+    }
   }
 
   // § named epidemics: the dated outbreaks, as chronicle news for anyone

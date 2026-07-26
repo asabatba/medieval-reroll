@@ -84,7 +84,7 @@ export function honourFamilyOf(worldSeed: number, regionKey: string, villageIdx:
  * whose tenure contains ANCHOR_YEAR gets `anchorFirst` as his given name —
  * see the header comment. All draws come from the caller's rng, so the line
  * is as deterministic as any other envelope output. */
-function growLine(rng: Rng, surname: string, anchorFirst: string, region: Region): LordTenure[] {
+function growLine(rng: Rng, surname: string, anchorFirst: string, region: Region, regionKey: string): LordTenure[] {
   // Real houses recycled a couple of dynastic names generation after
   // generation; keep a small pool seeded with the anchor's own name.
   const dynastic = [anchorFirst, rng.pick(region.maleNames), rng.pick(region.maleNames)];
@@ -105,7 +105,7 @@ function growLine(rng: Rng, surname: string, anchorFirst: string, region: Region
     const prevDied = heads.length ? heads[heads.length - 1].died : Number.NEGATIVE_INFINITY;
     const died = Math.max(born + span, prevDied + 1, acceded + 1);
     const inWar = region.warYears.some(([a, b]) => died >= a && died <= b);
-    const cause: LordTenure["cause"] = plagueAt(died) && rng.chance(0.5) ? "plague" : inWar && rng.chance(0.35) ? "war" : "oldage";
+    const cause: LordTenure["cause"] = plagueAt(died, regionKey) && rng.chance(0.5) ? "plague" : inWar && rng.chance(0.35) ? "war" : "oldage";
     const first = rng.chance(0.65) ? rng.pick(dynastic) : rng.pick(region.maleNames);
     heads.push({ name: `${first} ${surname}`, born, acceded, died, relation, cause });
     // Successor: usually a son (sometimes a minor, or posthumous — history
@@ -143,7 +143,7 @@ export function honourLineOf(worldSeed: number, regionKey: string, villageIdx: n
   const { surname, block } = honourFamilyOf(worldSeed, regionKey, villageIdx);
   const rng = makeRng(addrHash(worldSeed, [regionKey, "honour-line", block]));
   const first = rng.pick(region.maleNames);
-  const line: NobleLine = { surname, heads: growLine(rng, surname, first, region) };
+  const line: NobleLine = { surname, heads: growLine(rng, surname, first, region, regionKey) };
   nobleLineCacheSet(key, line);
   return line;
 }
@@ -162,7 +162,7 @@ export function manorLineOf(worldSeed: number, regionKey: string, villageIdx: nu
   // these two draws produce is the fief.lord printed on every record.
   const anchorFirst = rng.pick(region.maleNames);
   const surname = rng.chance(0.5) ? honourSurname : rng.pick(region.surnames);
-  const line: NobleLine = { surname, heads: growLine(rng, surname, anchorFirst, region) };
+  const line: NobleLine = { surname, heads: growLine(rng, surname, anchorFirst, region, regionKey) };
   nobleLineCacheSet(key, line);
   return line;
 }

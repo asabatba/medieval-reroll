@@ -74,7 +74,7 @@ const REGION_DATA = {
     ],
     marriageF: [19, 24],
     marriageM: [23, 28],
-    famine: [1315, 1322],
+    famine: [1315, 1317],
     famineName: { en: "the Great Famine", ca: "la Gran Fam" },
     warYears: [
       [1346, 1360],
@@ -131,7 +131,7 @@ const REGION_DATA = {
     ],
     marriageF: [17, 22],
     marriageM: [22, 27],
-    famine: [1315, 1322],
+    famine: [1315, 1317],
     famineName: { en: "the Great Famine", ca: "la Gran Fam" },
     warYears: [
       [1337, 1360],
@@ -280,7 +280,7 @@ const REGION_DATA = {
     surnames: ["Müller", "Weber", "Schmidt", "Wagner", "Fischer", "Zimmermann", "Schneider", "Bauer", "Koch", "Gerber", "Pfeifer", "Hofmann"],
     marriageF: [19, 24],
     marriageM: [24, 29],
-    famine: [1315, 1322],
+    famine: [1315, 1317],
     famineName: { en: "the Great Famine", ca: "la Gran Fam" },
     warYears: [
       [1419, 1436],
@@ -330,8 +330,12 @@ const REGION_DATA = {
     surnames: ["García", "Fernández", "Rodríguez", "Martínez", "Sánchez", "Gómez", "López", "Díaz", "Ruiz", "Álvarez", "Ibáñez", "Ortiz"],
     marriageF: [16, 20],
     marriageM: [22, 27],
-    famine: [1315, 1322],
-    famineName: { en: "the Great Famine", ca: "la Gran Fam" },
+    // § the harvest: the Great Famine was a north-European rain event that
+    // never reached Iberia. Castile and Portugal had their own subsistence
+    // crisis at the turn of the century instead, which is what the
+    // chroniclers there record — and what data/harvest.ts starves them in.
+    famine: [1301, 1303],
+    famineName: { en: "the hunger of the first years of the century", ca: "la fam dels primers anys del segle" },
     warYears: [
       [1366, 1369],
       [1475, 1479],
@@ -418,7 +422,7 @@ const REGION_DATA = {
     ],
     marriageF: [18, 23],
     marriageM: [22, 27],
-    famine: [1315, 1322],
+    famine: [1315, 1317],
     famineName: { en: "the Great Famine", ca: "la Gran Fam" },
     warYears: [
       [1296, 1328],
@@ -492,8 +496,12 @@ const REGION_DATA = {
     ],
     marriageF: [16, 20],
     marriageM: [21, 26],
-    famine: [1315, 1322],
-    famineName: { en: "the Great Famine", ca: "la Gran Fam" },
+    // § the harvest: the Great Famine was a north-European rain event that
+    // never reached Iberia. Castile and Portugal had their own subsistence
+    // crisis at the turn of the century instead, which is what the
+    // chroniclers there record — and what data/harvest.ts starves them in.
+    famine: [1301, 1303],
+    famineName: { en: "the hunger of the first years of the century", ca: "la fam dels primers anys del segle" },
     warYears: [
       [1369, 1382],
       [1383, 1385],

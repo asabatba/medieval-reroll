@@ -1216,6 +1216,45 @@ details.village {
   color: var(--bone-dim);
 }
 
+/* ---- § the harvest ----
+   Emphasis, not a diverging pair: the bar's direction from the midline
+   carries the polarity, so the chart survives being read with no colour
+   at all. Only the failures take an accent. */
+.harvestfig {
+  margin: 0;
+  padding: 12px 18px 0;
+}
+.harvestsvg {
+  display: block;
+  width: 100%;
+  height: 68px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.hv-ord {
+  fill: rgba(var(--line-rgb), 1);
+}
+.hv-good {
+  fill: rgba(var(--verdigris-rgb), 0.55);
+}
+.hv-poor {
+  fill: var(--bone-dim);
+}
+.hv-bad {
+  fill: var(--rubric);
+}
+.hv-mid {
+  stroke: var(--bone-dim);
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
+/* ---- § the deserted village ---- */
+.honour-note.deserted {
+  border-left: 2px solid var(--rubric);
+}
+
 /* ---- § the season: months of the register ---- */
 .season-note {
   padding: 12px 18px 0;

@@ -124,6 +124,7 @@ function growClergy(rng: Rng, regionKey: string): Incumbent[] {
     // him, and the earliest one that does is the one that did.
     if (sameYear < SAME_YEAR_LIMIT) {
       for (const pl of PLAGUES) {
+        if (pl[5] && !pl[5].includes(regionKey)) continue;
         const from = Math.max(instituted, pl[0]);
         const to = Math.min(vacated, pl[1]);
         if (from > to) continue;
@@ -203,7 +204,7 @@ export function institutionsBetween(line: ClergyLine, from: number, to: number):
 
 /** Whether a year saw the living fall vacant by pestilence — the fact the
  * institution registers are famous for. */
-export function plagueVacancyAt(line: ClergyLine, year: number): Incumbent | null {
-  for (const h of line.heads) if (h.end === "plague" && h.vacated === year && plagueAt(year)) return h;
+export function plagueVacancyAt(line: ClergyLine, year: number, regionKey?: string): Incumbent | null {
+  for (const h of line.heads) if (h.end === "plague" && h.vacated === year && plagueAt(year, regionKey)) return h;
   return null;
 }

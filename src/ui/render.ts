@@ -90,7 +90,28 @@ export interface RectorNode {
   headIdx: number;
   crumb?: string;
 }
-export type StackNode = PersonNode | RoyalNode | KingNode | HouseNode | LordNode | VillageNode | ParishNode | PapacyNode | PontiffNode | RectorNode;
+/** § the tenement: one holding of a village, and every family that ever
+ * stood on it. The only page in the app whose subject is a piece of
+ * ground rather than a person or an institution. */
+export interface TenementNode {
+  kind: "tenement";
+  regionKey: string;
+  villageIdx: number;
+  headIdx: number;
+  crumb?: string;
+}
+export type StackNode =
+  | PersonNode
+  | RoyalNode
+  | KingNode
+  | HouseNode
+  | LordNode
+  | VillageNode
+  | ParishNode
+  | PapacyNode
+  | PontiffNode
+  | RectorNode
+  | TenementNode;
 
 export function isPersonNode(node: StackNode): node is PersonNode {
   return node.kind == null || node.kind === "person";
@@ -105,7 +126,7 @@ export function locator(worldSeed: number, node: StackNode | PersonAddress): str
   if ("kind" in node && node.kind === "papacy") return `${worldSeed}:${node.regionKey}:papacy`;
   if ("kind" in node && node.kind === "pontiff") return `${worldSeed}:${node.regionKey}:papacy:${node.termIdx}`;
   if ("kind" in node && node.kind === "house") return `${worldSeed}:${node.regionKey}:${node.villageIdx}:house`;
-  if ("kind" in node && (node.kind === "lord" || node.kind === "baron" || node.kind === "rector"))
+  if ("kind" in node && (node.kind === "lord" || node.kind === "baron" || node.kind === "rector" || node.kind === "tenement"))
     return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.kind}:${node.headIdx}`;
   const p = node as PersonAddress;
   return worldSeed + ":" + p.regionKey + ":" + p.villageIdx + ":" + p.personId;
@@ -152,7 +173,7 @@ export function villageGoto(addr: Address): string {
 function parishGoto(kind: "parish" | "deanery" | "diocese", addr: Address): string {
   return `${kind}:${addr.regionKey}:${addr.villageIdx}`;
 }
-function lordGoto(kind: "lord" | "baron" | "rector", addr: Address, headIdx: number): string {
+function lordGoto(kind: "lord" | "baron" | "rector" | "tenement", addr: Address, headIdx: number): string {
   return `${kind}:${addr.regionKey}:${addr.villageIdx}:${headIdx}`;
 }
 function papacyGoto(regionKey: string): string {
@@ -328,7 +349,7 @@ export function renderVillageBody(E: typeof Engine, env: Envelope, year: number,
   const byId = new Map(state.residents.map((r) => [r.id, r]));
 
   const badges: string[] = [];
-  const pl = E.plagueAt(year);
+  const pl = E.plagueAt(year, env.regionKey);
   if (pl) badges.push(`<span class="badge b-plague">☠ ${esc(pl[3][locale])}</span>`);
   if (E.famineAt(year, env.region)) badges.push(`<span class="badge b-famine">${esc(env.region.famineName[locale])} · ${esc(t.famineBadge)}</span>`);
   const war = E.warAt(year, env.region, locale);
@@ -790,6 +811,7 @@ function buildViewBody(E: typeof Engine, worldSeed: number, stack: StackNode[], 
   if (node.kind === "papacy") return buildPapacyHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "pontiff") return buildPontiffHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "rector") return buildRectorHTML(E, worldSeed, stack, node, locale);
+  if (node.kind === "tenement") return buildTenementHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "house") return buildNobleHouseHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "lord" || node.kind === "baron") return buildLordHTML(E, worldSeed, stack, node, locale);
   return buildRecordHTML(E, worldSeed, stack, locale);
@@ -812,6 +834,19 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
   // instead of it.
   const birthFeast = feastLabel(E, t, bio.birthDate, bio.birth, locale);
   const deathFeast = feastLabel(E, t, bio.deathDate, bio.death.year, locale);
+  // § the tenement: the ground this person's own household stood on — the
+  // first union they held, which is the holding their record belongs to.
+  // An undersettle held none, and the page says so rather than inventing
+  // one: the category is real and the surveys record it.
+  const ownCouple = env.persons[node.personId].unions?.[0];
+  const ownTenement = ownCouple != null ? env.couples[ownCouple].tenement : undefined;
+  const tenements = E.tenementsOf(worldSeed, node.regionKey, node.villageIdx);
+  const holdingHtml =
+    ownTenement != null && tenements[ownTenement]
+      ? `<button class="namelink" data-goto="${lordGoto("tenement", node, ownTenement)}">${esc(
+          E.tenementName(env, ownTenement) ? t.tenementNamed(E.tenementName(env, ownTenement)!) : t.tenementUnnamed(ownTenement + 1),
+        )}</button>`
+      : `<span class="dim">${esc(ownCouple != null ? t.undersettle : t.none)}</span>`;
   const vitals: [string, string, string][] = [
     [t.born, bio.birth + "", ""],
     [t.died, bio.death.year + " · " + (locale === "ca" ? "als " + bio.death.age + " anys" : "aged " + bio.death.age), "red"],
@@ -861,6 +896,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     <div class="vital"><div class="k">${t.lord}</div><div class="v"><button class="namelink" data-goto="${lordVitalGoto}">${esc(bio.fief.lord)}</button></div></div>
     <div class="vital"><div class="k">${t.sovereign}</div><div class="v"><button class="namelink" data-goto="${sovereignVitalGoto}">${esc(bio.sovereign)}</button></div></div>
     <div class="vital"><div class="k">${t.incumbentTitle[bio.rectorTitle]}</div><div class="v"><button class="namelink" data-goto="${lordGoto("rector", node, bio.rectorIdx)}">${esc(bio.rector)}</button></div></div>
+    <div class="vital"><div class="k">${t.holdingLabel}</div><div class="v">${holdingHtml}</div></div>
     <div class="vital"><div class="k">${t.pontiff}</div><div class="v">${
       bio.pontiffIdx >= 0
         ? `<button class="namelink" data-goto="${pontiffGoto(node.regionKey, bio.pontiffIdx)}">${esc(bio.pontiff || t.noPontiff)}</button>`
@@ -1343,7 +1379,7 @@ function renderIncumbents(E: typeof Engine, worldSeed: number, node: ParishNode,
   let worstCount = 0;
   const byYear = new Map<number, number>();
   for (const h of line.heads) {
-    if (!E.plagueAt(h.instituted)) continue;
+    if (!E.plagueAt(h.instituted, node.regionKey)) continue;
     const n = (byYear.get(h.instituted) ?? 0) + 1;
     byYear.set(h.instituted, n);
     if (n > worstCount) {
@@ -1358,6 +1394,138 @@ function renderIncumbents(E: typeof Engine, worldSeed: number, node: ParishNode,
     (worstCount >= 2 ? `<div class="honour-note reveal">${esc(t.clergyPlagueNote(worstYear, worstCount))}</div>` : "") +
     `<div class="reigns reveal">${rows}</div>`
   );
+}
+
+// ---- § the harvest ----
+//
+// Deliberately NOT a diverging colour pair. The data is polarity — above
+// or below an ordinary year — and the textbook answer is two hues either
+// side of a neutral midpoint. This palette cannot supply one: it has
+// three chromatic tokens, and two of the three pairs (gilt/rubric,
+// rubric/verdigris) collapse under deuteranopia, red-green being the
+// classic failure. So the POSITION carries the polarity — the bar grows up
+// or down from the ordinary-year line — and colour is used for emphasis
+// only, with the failures in rubric and every other year recessive. A
+// reader who sees no colour at all still reads the chart off the baseline.
+//
+// Drawn on exactly the population curve's x-scale, so the trough in one
+// can be read against the bad years in the other.
+const HARVEST_H = 68;
+const HARVEST_MID = 34;
+
+function renderHarvestSection(E: typeof Engine, worldSeed: number, env: Envelope, locale: Locale): string {
+  const t = UI[locale];
+  const years = VILLAGE_YEAR_MAX - VILLAGE_YEAR_MIN;
+  const slot = CHART_W / (years + 1);
+  const barW = Math.max(1.2, slot - 0.6);
+  let marks = "";
+  for (let y = VILLAGE_YEAR_MIN; y <= VILLAGE_YEAR_MAX; y++) {
+    const yield_ = E.harvestAt(worldSeed, env.regionKey, y);
+    const grade = E.gradeOf(yield_);
+    // Clamped so one catastrophic year cannot flatten the rest of the
+    // series; 0.45–1.3 covers the table's whole range.
+    const dev = Math.max(-1, Math.min(1, (yield_ - 1) / 0.4));
+    const h = Math.abs(dev) * (HARVEST_MID - 4);
+    const x = (y - VILLAGE_YEAR_MIN) * slot;
+    const cls = grade === "famine" || grade === "dearth" ? "hv-bad" : grade === "poor" ? "hv-poor" : grade === "good" ? "hv-good" : "hv-ord";
+    const named = E.namedDearthAt(env.regionKey, y);
+    const label = `${t.harvestYear(y, t.harvestGrade[grade])}${named ? ` · ${named.name[locale]}` : ""}`;
+    marks += `<rect class="${cls}" x="${x.toFixed(1)}" y="${(dev >= 0 ? HARVEST_MID - h : HARVEST_MID).toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0.8, h).toFixed(1)}"><title>${esc(label)}</title></rect>`;
+  }
+  return `<details class="register reveal"><summary>${esc(t.harvestHeader)}</summary>
+    <p class="season-note">${esc(t.harvestNote)}</p>
+    <figure class="harvestfig">
+      <svg class="harvestsvg" viewBox="0 0 ${CHART_W} ${HARVEST_H}" preserveAspectRatio="none" role="img"
+           aria-label="${esc(`${t.harvestHeader}: ${VILLAGE_YEAR_MIN}–${VILLAGE_YEAR_MAX}, ${env.region.name[locale]}`)}">
+        ${marks}
+        <line class="hv-mid" x1="0" y1="${HARVEST_MID}" x2="${CHART_W}" y2="${HARVEST_MID}"/>
+      </svg>
+      <figcaption class="poplegend"><span>${VILLAGE_YEAR_MIN}</span><span class="pc-low">${esc(t.harvestGrade.famine)}</span><span>${VILLAGE_YEAR_MAX}</span></figcaption>
+    </figure>
+  </details>`;
+}
+
+// ---- § the tenement ----
+//
+// The page this whole phase exists for. Every other record in the app is
+// about a person or an institution; this one is about a piece of ground,
+// and what it shows is the thing a manorial court roll series actually
+// records and nothing else here could: one holding, and the succession of
+// families across two and a half centuries of it — the gaps where it stood
+// vacant after a plague, the surname changing when a line failed, the
+// widow keeping it, the neighbour taking it up.
+function buildTenementHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: TenementNode, locale: Locale): string {
+  const t = UI[locale];
+  const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
+  const tenements = E.tenementsOf(worldSeed, node.regionKey, node.villageIdx);
+  const ten = tenements[node.headIdx];
+  if (!ten) return "";
+  const history = E.tenementHistory(env, ten.idx);
+  const known = E.tenementName(env, ten.idx);
+  const title = known ? t.tenementNamed(known) : t.tenementUnnamed(ten.idx + 1);
+  node.crumb = title;
+  const land = env.region.landUnit[locale];
+
+  // Vacancy is the point, not a gap in the data: a holding standing empty
+  // for thirty years after 1349 is the single most eloquent thing a court
+  // roll can say, so the empty stretches get rows of their own.
+  const rows: string[] = [];
+  let prevEnd: number | null = null;
+  for (const ten2 of history) {
+    if (prevEnd != null && ten2.from - prevEnd > 2) {
+      rows.push(
+        `<div class="ryrow interregnum"><span class="ry-years">${prevEnd + 1}–${ten2.from - 1}</span><span class="ry-style">${esc(t.tenementVacant(ten2.from - prevEnd - 1))}</span><span class="ry-house">—</span></div>`,
+      );
+    }
+    const H = env.persons[ten2.couple.husband];
+    const W = env.persons[ten2.couple.wife];
+    rows.push(`<button class="ryrow tenure" data-goto="${env.regionKey}:${env.villageIdx}:${H.id}">
+      <span class="ry-years">${ten2.from}–${ten2.to}</span>
+      <span class="ry-style">${esc(`${H.name} ${H.surname}`)} &amp; ${esc(`${W.name} ${W.surname}`)}</span>
+      <span class="ry-house">${esc(t.childrenBorne(ten2.couple.children.length))}</span>
+    </button>`);
+    prevEnd = ten2.to;
+  }
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(t.tenementSize[ten.size])} · ${esc(t.acresOf(ten.acres, land))} · <button class="namelink" data-goto="${villageGoto(node)}">${esc(env.place[locale])}</button></div>
+    <div class="vitals">
+      <div class="vital"><div class="k">${t.tenementLandLabel}</div><div class="v">${esc(t.acresOf(ten.acres, land))}</div></div>
+      <div class="vital"><div class="k">${t.tenementHoldersLabel}</div><div class="v gold">${history.length}</div></div>
+      <div class="vital"><div class="k">${t.tenementStandingLabel}</div><div class="v">${history.length ? `${history[0].from}–${history[history.length - 1].to}` : "—"}</div></div>
+    </div>
+  </article>`;
+  html += `<div class="honour-note reveal">${esc(t.tenementNote)}</div>`;
+  html += `<div class="sect reveal"><h2>${esc(t.tenementHolders)}</h2></div><div class="reigns reveal">${rows.join("") || `<div class="ryrow"><span class="ry-style">${esc(t.tenementNeverHeld)}</span></div>`}</div>`;
+  html += `<div class="royal-link reveal"><button class="namelink" data-goto="${villageGoto(node)}">${esc(env.place[locale])}</button></div>`;
+  return html;
+}
+
+/** The village's whole tenantry, largest holding first — the manorial
+ * extent, which is the document this list actually is. */
+function renderTenementSection(E: typeof Engine, worldSeed: number, node: Address, env: Envelope, locale: Locale, currentTen: number | null): string {
+  const t = UI[locale];
+  const tenements = E.tenementsOf(worldSeed, node.regionKey, node.villageIdx);
+  const land = env.region.landUnit[locale];
+  const rows = tenements
+    .map((ten) => {
+      const history = E.tenementHistory(env, ten.idx);
+      const known = E.tenementName(env, ten.idx);
+      return `<button class="ryrow${ten.idx === currentTen ? " lived" : ""}" data-goto="${lordGoto("tenement", node, ten.idx)}">
+      <span class="ry-years">${esc(t.acresOf(ten.acres, land))}</span>
+      <span class="ry-style">${esc(known ? t.tenementNamed(known) : t.tenementUnnamed(ten.idx + 1))}</span>
+      <span class="ry-house">${esc(t.tenementSize[ten.size])} · ${esc(t.holdersCount(history.length))}</span>
+    </button>`;
+    })
+    .join("");
+  return `<details class="register reveal"><summary>${esc(t.tenantryHeader(tenements.length))}</summary>
+    <div class="honour-note">${esc(t.tenantryNote)}</div>
+    <div class="reigns">${rows}</div>
+  </details>`;
 }
 
 // ---- § the village route ----
@@ -1420,10 +1588,29 @@ function buildVillageHTML(E: typeof Engine, worldSeed: number, stack: StackNode[
   // shut is a page that looks empty. It opens on the year of greatest
   // extent, not defaultVillageYear's birth-plus-thirty — that is a PERSON's
   // prime, and a place has no such thing.
+  // § the deserted village: a village whose last soul is gone is a fact
+  // about the late Middle Ages, not an empty page — so say it. The harvest
+  // series made this common enough (3% of villages, against a tenth in the
+  // English record) that leaving it silent would read as a broken page.
+  let lastYear = -1;
+  for (let i = counts.length - 1; i >= 0; i--) {
+    if (counts[i] > 0) {
+      lastYear = i;
+      break;
+    }
+  }
+  if (lastYear >= 0 && lastYear < counts.length - 1) {
+    html += `<div class="honour-note deserted reveal">${esc(t.desertedNote(VILLAGE_YEAR_MIN + lastYear + 1))}</div>`;
+  }
+
   html += renderVillageSection(E, env, VILLAGE_YEAR_MIN + peak, locale, -1, true);
+  // § the tenement: the village's land, holding by holding — the extent
+  // that the population curve above is measured against.
+  html += renderTenementSection(E, worldSeed, node, env, locale, null);
   // § the season: the register's own shape across the twelve months —
   // which is a fact about the place, so it lives on the place's page.
   html += renderSeasonSection(E, env, locale);
+  html += renderHarvestSection(E, worldSeed, env, locale);
   html += renderParishRegister(E, env, locale, -1);
   return html;
 }

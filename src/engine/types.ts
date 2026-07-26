@@ -161,6 +161,12 @@ export interface Couple {
    * (dispensation required) despite there being no blood tie at all. Not
    * blocked, same as consanguineous. */
   affinal?: boolean;
+  /** § the tenement: which of the village's holdings this household stood
+   * on (tenement.ts's tenementsOf index). Unset for an undersettle — a
+   * household living on another man's land, in the village but not of its
+   * tenantry, which the surveys record and a bare count of holdings could
+   * not represent at all. */
+  tenement?: number;
 }
 
 export interface Region {
@@ -214,8 +220,15 @@ export interface Envelope {
   diagnostics: SolveDiagnostics;
 }
 
-// [startYear, endYear, severityMultiplier, name, childMultiplier]
-export type Plague = [number, number, number, LocalText, number];
+// [startYear, endYear, severityMultiplier, name, childMultiplier, regions?]
+//
+// § named epidemics: the trailing region filter exists for exactly one
+// entry, and it is not a plague at all. The sweating sickness of 1485 came
+// into England with Henry Tudor's army, killed inside a day, and was never
+// once recorded outside England — so applying it to a Catalan village, as
+// a region-blind table did, invented a wave that never happened there.
+// Absent (the normal case) means the wave reached everywhere modelled.
+export type Plague = [number, number, number, LocalText, number, (string[] | null)?];
 
 export interface ClassInfo {
   label: LocalText;

@@ -21,10 +21,20 @@ export const PLAGUES: Plague[] = [
   [1463, 1465, 2.5, { en: "the plague of the 1460s", ca: "la pesta dels anys 1460" }, 1],
   [1471, 1473, 2.5, { en: "the pestilence of 1471", ca: "la pestilència de 1471" }, 1.2],
   [1479, 1480, 3, { en: "the great plague of 1479–80", ca: "la gran pesta de 1479–80" }, 1],
-  [1485, 1486, 2, { en: "the sweating sickness", ca: "la malaltia de la suor" }, 0.5],
+  // England only — see the Plague type. It arrived with an army and stayed
+  // on one island.
+  [1485, 1486, 2, { en: "the sweating sickness", ca: "la malaltia de la suor" }, 0.5, ["england"]],
 ];
 
-export function plagueAt(year: number): Plague | null {
-  for (const p of PLAGUES) if (year >= p[0] && year <= p[1]) return p;
+/** The wave running in `year`. Pass `regionKey` to respect a wave's own
+ * region filter; omitting it answers "was there a wave anywhere", which is
+ * what the chronology-only callers (the population chart's bands, the
+ * noble lines' causes of death) actually want. */
+export function plagueAt(year: number, regionKey?: string): Plague | null {
+  for (const p of PLAGUES) {
+    if (year < p[0] || year > p[1]) continue;
+    if (regionKey && p[5] && !p[5].includes(regionKey)) continue;
+    return p;
+  }
   return null;
 }
