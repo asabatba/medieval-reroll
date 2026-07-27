@@ -1,7 +1,8 @@
 import type { Locale } from "../i18n/locale.js";
 import { demographyOf, periodMult, wealthIdx } from "./data/demography.js";
 import { plagueAt } from "./data/plagues.js";
-import { dearthHazard } from "./harvest.js";
+import { outbreakHazard } from "./epidemics.js";
+import { crisisFeverHazard, dearthHazard } from "./harvest.js";
 import { addrHash, hashStr, makeRng } from "./hash.js";
 import type { Death, DeathCause, Plague, Region, RiskTrade, Rng, Sex } from "./types.js";
 
@@ -141,6 +142,20 @@ export function rollDeath(
     // against.
     const dearth = harvest ? dearthHazard(harvest(year), harvest(year - 1), age, wealth) : 0;
     const famine = harvest ? dearth > 0 : famineAt(year, region) && wealth <= 2;
+    // § the epidemic year: the two things that used to reach `disease` at
+    // the flat background rate and therefore killed nobody in particular —
+    // a dated outbreak (the sweat, the great rheum, the dear-years fever)
+    // and the crisis fever that follows any failed harvest. Both are excess
+    // over an ordinary year, so both belong here rather than in the life
+    // table. The endemic entries of data/epidemics.ts deliberately do NOT
+    // appear: they are a decomposition of the background, not an addition
+    // to it, and giving them a hazard would count the same deaths twice.
+    //
+    // Without a harvest reader (the isolated unit calls) the crisis fever
+    // has no failure to answer to and the outbreaks see an ordinary year,
+    // which is the behaviour those tests were written against.
+    const thisHarvest = harvest ? harvest(year) : 1;
+    const epidemic = outbreakHazard(year, regionKey, age, thisHarvest) + (harvest ? crisisFeverHazard(thisHarvest, harvest(year - 1), age, wealth) : 0);
     const warName = warAt(year, region);
     let h = baseHazard(age);
     if (age === 0) h *= demo.infantMult * demo.infantWealthMult[wi];
@@ -192,6 +207,7 @@ export function rollDeath(
     // rule was one flat number for everyone poor.
     if (harvest) h += dearth;
     else if (famine) h += age < 5 || age > 55 ? 0.1 : 0.03;
+    h += epidemic;
     let warRisk = 0;
     if (warName && sex === "M" && age >= 16 && age <= 45) {
       warRisk = wealth >= 4 ? 0.012 : 0.005;
@@ -255,6 +271,12 @@ export function rollDeath(
       // window — so a death in a merely poor year is only sometimes hunger,
       // and a death in a total failure usually is.
       else if (famine && rng() < (harvest ? Math.min(0.85, dearth / Math.max(h, 0.001)) : 0.7)) cause = "famine";
+      // § the epidemic year: checked right after hunger, since in a dearth
+      // the two are competing for the same deaths and the fever should get
+      // the share it actually took. Outside a crisis this is the dated
+      // outbreaks alone, and in an ordinary year it is zero and costs a
+      // comparison.
+      else if (epidemic > 0 && rng() < epidemic / Math.max(h, 0.001)) cause = "epidemic";
       else if (warName && rng() < warRisk / Math.max(h, 0.001)) cause = "war";
       else if (maternalRisk > 0 && rng() < maternalRisk / Math.max(h, 0.001)) cause = "childbirth";
       // Infancy first: a death in the first year is the register's own

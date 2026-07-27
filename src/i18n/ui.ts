@@ -232,6 +232,55 @@ interface UiStrings {
   familyTree: string;
   self: (sex: "M" | "F") => string;
   outOfWedlock: string;
+  // ---- § the price of bread: prices, wages, and the manor court ----
+  pricesHeader: string;
+  pricesNote: string;
+  wheatPriceLabel: string;
+  dayWageLabel: string;
+  realWageLabel: string;
+  /** "£1 4s 2d", written the way it was written. */
+  money: (l: number, s: number, d: number) => string;
+  realWageDays: (days: number) => string;
+  priceYearTip: (year: number, price: string, wage: string, days: number) => string;
+  courtRollHeader: string;
+  courtRollNote: string;
+  dueLabel: Record<"entryfine" | "heriot" | "merchet" | "leyrwite", string>;
+  dueReason: Record<"entryfine" | "heriot" | "merchet" | "leyrwite", string>;
+  dueHeirTag: string;
+  courtRollEmpty: string;
+  dueTotal: (n: number, money: string) => string;
+  subsistenceHeader: string;
+  subsistenceNote: string;
+  subsistenceYield: (quarters: string, acres: number, unit: string) => string;
+  subsistenceNeed: (quarters: string, mouths: number) => string;
+  subsistenceFed: (money: string) => string;
+  subsistenceShort: (days: number) => string;
+  subsistenceNoLand: string;
+  // ---- § the region route ----
+  regionOfHeader: (name: string) => string;
+  regionNote: string;
+  villagesHeader: string;
+  villagesNote: (n: number) => string;
+  regionCrisesHeader: string;
+  regionCrisisKind: Record<"famine" | "war" | "plague" | "revolt" | "epidemic", string>;
+  royalLineLabel: string;
+  papacyLabel: string;
+  inheritanceLabel: string;
+  inheritanceCustom: Record<"impartible" | "partible", string>;
+  currencyLabel: string;
+  regionSample: string;
+  // ---- § the pedigree ----
+  pedigreeHeader: string;
+  pedigreeNote: string;
+  ancestorsHeader: string;
+  descendantsHeader: string;
+  /** "father's mother" — the path back from the subject. */
+  lineLabel: (line: ("father" | "mother")[]) => string;
+  generationBack: (n: number) => string;
+  generationDown: (n: number) => string;
+  pedigreeNoAncestors: string;
+  pedigreeNoDescendants: string;
+  pedigreeOpen: string;
   // ---- theme switch ----
   themeDark: string;
   themeLight: string;
@@ -473,6 +522,60 @@ export const UI: Record<Locale, UiStrings> = {
     familyTree: "Family tree",
     self: (sex) => (sex === "F" ? "Herself" : "Himself"),
     outOfWedlock: "Born out of wedlock",
+    pricesHeader: "The price of bread",
+    pricesNote:
+      "A quarter of wheat against a day's wage. The price answers to the harvest far harder than the shortfall itself — a tenth off the crop puts a third on the price, because nobody can decline to eat — and the wage answers to the plague, which killed a third of the men who worked for it and doubled what the rest could ask. The line is what a labourer paid in days of his own work; where it falls, he is better off.",
+    wheatPriceLabel: "A quarter of wheat",
+    dayWageLabel: "A day's labour",
+    realWageLabel: "Days' work for a quarter",
+    money: (l, s, d) => [l ? `£${l}` : "", s ? `${s}s` : "", d || (!l && !s) ? `${d}d` : ""].filter(Boolean).join(" "),
+    realWageDays: (days) => `${days.toFixed(0)} days`,
+    priceYearTip: (year, price, wage, days) => `${year}: a quarter ${price}, a day's work ${wage} — ${days.toFixed(0)} days for a quarter`,
+    courtRollHeader: "The manor court",
+    courtRollNote:
+      "Every payment this holding owed the lord, and what gave rise to it. Nothing here is invented: each entry is an event already in the register — a holding taken up, a tenant dead on the land, a daughter of the house married, a child born to her out of wedlock — priced by the manorial tariff and, for an entry fine, by how badly other men wanted the same ground that year.",
+    dueLabel: { entryfine: "Entry fine", heriot: "Heriot", merchet: "Merchet", leyrwite: "Leyrwite" },
+    dueReason: {
+      entryfine: "for licence to enter the holding",
+      heriot: "the best beast, on the tenant's death",
+      merchet: "for licence to marry",
+      leyrwite: "for bearing a child out of wedlock",
+    },
+    dueHeirTag: "by inheritance",
+    courtRollEmpty: "No business — this ground was never taken up.",
+    dueTotal: (n, money) => `${n} entries · ${money} in all`,
+    subsistenceHeader: "Whether the land fed them",
+    subsistenceNote:
+      "Ten to twelve acres of arable fed a family of five under these yields, which puts a half-virgate just above the line and every cottage below it. A cottar was not a smaller virgater; he was a wage labourer with a garden, and this is the reckoning that says so.",
+    subsistenceYield: (quarters, acres, unit) => `${quarters} quarters off ${acres} ${unit}`,
+    subsistenceNeed: (quarters, mouths) => `${quarters} quarters for ${mouths} in the house`,
+    subsistenceFed: (money) => `Fed, with ${money} of grain to sell`,
+    subsistenceShort: (days) => `Short — ${days.toFixed(0)} days of wage work to make it up`,
+    subsistenceNoLand: "No holding at all — an undersettle, living by wages on another man's land",
+    regionOfHeader: (name) => name,
+    regionNote:
+      "The rung above the village, and the one everything else in this world is keyed to: the harvest that failed across all of it at once, the king it obeyed, the pope it recognised, and the names its people were given. The villages below are a window on an address space that runs on without end — every index is a real place, and this is simply where the visitation started.",
+    villagesHeader: "Villages of the region",
+    villagesNote: (n) => `The first ${n} addresses, with what the register found in each.`,
+    regionCrisesHeader: "Crises of record",
+    regionCrisisKind: { famine: "Dearth", war: "War", plague: "Pestilence", revolt: "Revolt", epidemic: "Epidemic" },
+    royalLineLabel: "Royal line",
+    papacyLabel: "Obedience",
+    inheritanceLabel: "Custom of inheritance",
+    inheritanceCustom: { impartible: "Impartible — the eldest son takes all", partible: "Partible — divided among the sons" },
+    currencyLabel: "Money of account",
+    regionSample: "sampled",
+    pedigreeHeader: "Pedigree",
+    pedigreeNote:
+      "Four generations up and three down, followed across parish boundaries: an immigrant ancestor's own parents are read from her origin register, and a child who married out is followed into the register where her children were actually baptised. Every name here is a record you can open.",
+    ancestorsHeader: "Ancestry",
+    descendantsHeader: "Descent",
+    lineLabel: (line) => line.map((l) => (l === "father" ? "father" : "mother")).join("'s "),
+    generationBack: (n) => (n === 1 ? "Parents" : n === 2 ? "Grandparents" : n === 3 ? "Great-grandparents" : `${n} generations back`),
+    generationDown: (n) => (n === 1 ? "Children" : n === 2 ? "Grandchildren" : n === 3 ? "Great-grandchildren" : `${n} generations down`),
+    pedigreeNoAncestors: "No forebears on this register — the line begins here.",
+    pedigreeNoDescendants: "No issue on any register.",
+    pedigreeOpen: "Open pedigree",
     themeDark: "Night parchment",
     themeLight: "Day parchment",
   },
@@ -705,6 +808,67 @@ export const UI: Record<Locale, UiStrings> = {
     familyTree: "Arbre genealògic",
     self: (sex) => (sex === "F" ? "Ella mateixa" : "Ell mateix"),
     outOfWedlock: "Nascuts fora del matrimoni",
+    pricesHeader: "El preu del pa",
+    pricesNote:
+      "Una quartera de blat contra el jornal d'un dia. El preu respon a la collita molt més fort que no pas la mateixa fallada — una desena part menys de gra en puja el preu una tercera part, perquè ningú no pot deixar de menjar — i el jornal respon a la pesta, que matà un terç dels homes que hi treballaven i doblà el que la resta podien demanar. La línia és el que un jornaler pagava en dies de la seva pròpia feina; allà on baixa, viu millor.",
+    wheatPriceLabel: "Una quartera de blat",
+    dayWageLabel: "Un jornal",
+    realWageLabel: "Dies de feina per una quartera",
+    money: (l, s, d) => [l ? `£${l}` : "", s ? `${s}s` : "", d || (!l && !s) ? `${d}d` : ""].filter(Boolean).join(" "),
+    realWageDays: (days) => `${days.toFixed(0)} dies`,
+    priceYearTip: (year, price, wage, days) => `${year}: una quartera ${price}, un jornal ${wage} — ${days.toFixed(0)} dies per una quartera`,
+    courtRollHeader: "La cort del senyor",
+    courtRollNote:
+      "Cada pagament que aquesta tinença devia al senyor, i què el va originar. Res d'això no és inventat: cada entrada és un fet que ja consta al registre — una tinença presa, un tinent mort a la terra, una filla de la casa casada, un fill nascut a ella fora del matrimoni — taxat per la tarifa senyorial i, en el cas de l'entrada, per com de fort altres homes volien aquell mateix tros aquell any.",
+    dueLabel: { entryfine: "Entrada", heriot: "Lluïsme de mort", merchet: "Marquet", leyrwite: "Multa de fornicació" },
+    dueReason: {
+      entryfine: "per llicència d'entrar a la tinença",
+      heriot: "la bèstia millor, a la mort del tinent",
+      merchet: "per llicència de casar-se",
+      leyrwite: "per haver tingut un fill fora del matrimoni",
+    },
+    dueHeirTag: "per herència",
+    courtRollEmpty: "Sense afers — aquesta terra no fou mai presa.",
+    dueTotal: (n, money) => `${n} entrades · ${money} en total`,
+    subsistenceHeader: "Si la terra els alimentava",
+    subsistenceNote:
+      "De deu a dotze acres de conreu alimentaven una família de cinc amb aquests rendiments, cosa que deixa la mitja vessana just per damunt de la ratlla i tota casa de cabaner per sota. Un cabaner no era un pagès més petit; era un jornaler amb un hort, i aquest és el compte que ho diu.",
+    subsistenceYield: (quarters, acres, unit) => `${quarters} quarteres de ${acres} ${unit}`,
+    subsistenceNeed: (quarters, mouths) => `${quarters} quarteres per a ${mouths} a casa`,
+    subsistenceFed: (money) => `Alimentats, amb ${money} de gra per vendre`,
+    subsistenceShort: (days) => `Curts — ${days.toFixed(0)} dies de jornal per cobrir-ho`,
+    subsistenceNoLand: "Cap tinença — un sotsestant, que viu de jornals a la terra d'un altre",
+    regionOfHeader: (name) => name,
+    regionNote:
+      "El graó damunt del poble, i aquell al qual tota la resta d'aquest món està lligada: la collita que fallà a tot arreu alhora, el rei que obeïa, el papa que reconeixia i els noms que rebia la seva gent. Els pobles de sota són una finestra sobre un espai d'adreces que continua sense fi — cada índex és un lloc real, i això només és on ha començat la visita.",
+    villagesHeader: "Pobles de la regió",
+    villagesNote: (n) => `Les primeres ${n} adreces, amb el que el registre ha trobat a cadascuna.`,
+    regionCrisesHeader: "Crisis de registre",
+    regionCrisisKind: { famine: "Carestia", war: "Guerra", plague: "Pestilència", revolt: "Revolta", epidemic: "Epidèmia" },
+    royalLineLabel: "Línia reial",
+    papacyLabel: "Obediència",
+    inheritanceLabel: "Costum successori",
+    inheritanceCustom: { impartible: "Indivisible — el fill gran s'ho queda tot", partible: "Divisible — repartida entre els fills" },
+    currencyLabel: "Moneda de compte",
+    regionSample: "mostra",
+    pedigreeHeader: "Pedigrí",
+    pedigreeNote:
+      "Quatre generacions amunt i tres avall, seguides a través dels límits parroquials: els pares d'una avantpassada immigrada es llegeixen al registre del seu origen, i una filla que es casà fora se segueix fins al registre on els seus fills foren realment batejats. Cada nom d'aquí és un registre que podeu obrir.",
+    ancestorsHeader: "Ascendència",
+    descendantsHeader: "Descendència",
+    // Catalan builds the possessive the other way round: "father's mother"
+    // is "la mare del pare", so the path is read back to front.
+    lineLabel: (line) =>
+      line
+        .slice()
+        .reverse()
+        .map((l) => (l === "father" ? "pare" : "mare"))
+        .join(" del "),
+    generationBack: (n) => (n === 1 ? "Pares" : n === 2 ? "Avis" : n === 3 ? "Besavis" : `${n} generacions enrere`),
+    generationDown: (n) => (n === 1 ? "Fills" : n === 2 ? "Néts" : n === 3 ? "Besnéts" : `${n} generacions avall`),
+    pedigreeNoAncestors: "Cap avantpassat en aquest registre — la línia comença aquí.",
+    pedigreeNoDescendants: "Cap descendència en cap registre.",
+    pedigreeOpen: "Obre el pedigrí",
     themeDark: "Pergamí de nit",
     themeLight: "Pergamí de dia",
   },

@@ -28,9 +28,14 @@ export type { ClergyLine, IncumbencyEnd, Incumbent } from "./clergy.js";
 export { CLERGY_FROM, CLERGY_TO, incumbencyIndexAt, institutionsBetween, parishClergyOf, parishSeatOf, plagueVacancyAt, rectorAt } from "./clergy.js";
 export { CLASS_INFO } from "./data/classes.js";
 export { DEFAULT_DEMOGRAPHY, DEMOGRAPHY, demographyOf } from "./data/demography.js";
+// § the price of bread: the price and wage series, the manorial tariff,
+// and the two things they finally let the model say — what a year cost,
+// and whether a holding fed the household standing on it.
+export type { DueKind } from "./data/economy.js";
+export { DAY_WAGE, ENTRY_FINE, HERIOT, HERIOT_BEAST, LEYRWITE_RANGE, MERCHET_RANGE, trendAt, WHEAT_TREND } from "./data/economy.js";
 // § named epidemics: the dated outbreaks and the endemic background that
 // name a `disease` death instead of leaving it in the grey bucket.
-export type { Epidemic } from "./data/epidemics.js";
+export type { Epidemic, EpidemicAgeShape } from "./data/epidemics.js";
 export { EPIDEMICS, epidemicAt, epidemicNews } from "./data/epidemics.js";
 // § the appropriated living: the clergy line stores a saint INDEX, not a
 // name, so the priory holding the tithes can be named in either locale.
@@ -42,12 +47,19 @@ export { placeOf, placeShortOf } from "./data/placeNames.js";
 export { PLAGUES, plagueAt } from "./data/plagues.js";
 export { REGIONS } from "./data/regions.js";
 export { citeDocument } from "./documents.js";
+export type { CourtEntry, Subsistence } from "./economy.js";
+export { courtRollOf, dayWageAt, lsd, occupancyAt, priceSeries, realWageDays, subsistenceOf, wheatPriceAt } from "./economy.js";
+// § the epidemic year: the dated outbreaks as actual mortality, not as a
+// relabelling of deaths the model was going to produce anyway.
+export { outbreakAt, outbreakHazard } from "./epidemics.js";
 export { fatherOccupation } from "./fatherOccupation.js";
 // § the harvest: the subsistence year — documented failures as data, the
 // ordinary variance hashed per world, and the three things a bad harvest
 // did (killed, postponed weddings, thinned the next year's baptisms).
 export type { Dearth, HarvestGrade } from "./harvest.js";
 export {
+  CRISIS_FEVER_SHARE,
+  crisisFeverHazard,
   DEARTH,
   DEARTHS,
   dearthAt,

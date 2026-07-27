@@ -22,7 +22,16 @@ export type SettlementType = "rural" | "urban";
  * good on, because a coroner had to sit on every one of them. The engine even
  * cited a coroner's roll for some of them (documents.ts's `coroner`) while
  * calling the cause disease. */
-export type DeathCause = "plague" | "famine" | "war" | "infancy" | "childhood" | "childbirth" | "accident" | "violence" | "disease" | "oldage";
+/** § the epidemic year: the third crisis regime. `plague` is bubonic and has
+ * its own chronology; `famine` is starvation. Between them sat everything the
+ * chroniclers named and counted separately — the sweating sickness of 1485,
+ * the great rheum of 1427, and above all the fever that ran behind every
+ * failed harvest, which killed more of a subsistence crisis's dead than
+ * hunger itself ever did. All of that used to reach `disease`, an
+ * undifferentiated background at a flat rate, so no named outbreak in the
+ * table killed a single person: it only relabelled deaths the model would
+ * have produced anyway. */
+export type DeathCause = "plague" | "famine" | "epidemic" | "war" | "infancy" | "childhood" | "childbirth" | "accident" | "violence" | "disease" | "oldage";
 
 /** Occupational hazard category, rolled at Tier 1 alongside death and read back by
  * Tier 2 so the occupation narrative it decodes stays consistent with the mechanic. */

@@ -10,6 +10,7 @@ import {
   type KingNode,
   type LordNode,
   locator,
+  type PedigreeNode,
   type PersonNode,
   type PontiffNode,
   renderVillageBody,
@@ -38,8 +39,20 @@ function isParishLevel(s: string): s is ParishLevel {
 }
 
 function parseLocator(s: string): { worldSeed: number; node: StackNode } | null {
-  const parts = s.trim().replace(/^#/, "").split(":");
-  if (parts.length < 3 || parts.length > 5) return null;
+  // § the year in the locator: an optional `@year` on the END of the whole
+  // locator, split off before anything else so every branch below sees the
+  // address it always saw. Only the two node kinds that HAVE a
+  // village-in-year section carry it; anywhere else it is simply ignored
+  // rather than rejected, since it qualifies a view and not an address.
+  const raw = s.trim().replace(/^#/, "");
+  const at = raw.lastIndexOf("@");
+  const yearPart = at >= 0 ? Number(raw.slice(at + 1)) : Number.NaN;
+  const year = Number.isSafeInteger(yearPart) ? yearPart : undefined;
+  const parts = (at >= 0 ? raw.slice(0, at) : raw).split(":");
+  // § the region route: two segments is now valid — the shortest locator in
+  // the app, and the top of the tree. Everything below still needs at least
+  // a village.
+  if (parts.length < 2 || parts.length > 5) return null;
   const worldSeed = Number(parts[0]);
   // Object.hasOwn (not a bracket-truthy check): REGIONS is a plain object
   // literal, so a region segment of "__proto__"/"constructor"/"toString"
@@ -47,6 +60,7 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   // built-in and pass validation, then crash deep inside resolveVillage
   // once something tries to read a region-shaped property off it.
   if (!Number.isSafeInteger(worldSeed) || worldSeed < 0 || !Object.hasOwn(E.REGIONS, parts[1])) return null;
+  if (parts.length === 2) return { worldSeed, node: { kind: "region", regionKey: parts[1] } };
   if (parts[2] === "royal") {
     if (parts.length === 3) return { worldSeed, node: { kind: "royal", regionKey: parts[1] } };
     if (parts.length !== 4) return null;
@@ -67,8 +81,16 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   const villageIdx = Number(parts[2]);
   if (!Number.isSafeInteger(villageIdx) || villageIdx < 0) return null;
   // § the village route: three segments and no more is the place itself.
-  if (parts.length === 3) return { worldSeed, node: { kind: "village", regionKey: parts[1], villageIdx } };
+  if (parts.length === 3) return { worldSeed, node: { kind: "village", regionKey: parts[1], villageIdx, year } };
   if (parts.length === 5) {
+    // § the pedigree: the one five-segment form whose LAST segment is the
+    // word and whose fourth is the index — because it is a view of a
+    // person's own record, not an index into a succession.
+    if (parts[4] === "pedigree") {
+      const personId = Number(parts[3]);
+      if (!Number.isSafeInteger(personId) || personId < 0) return null;
+      return { worldSeed, node: { kind: "pedigree", regionKey: parts[1], villageIdx, personId } };
+    }
     // § the church's own line joins the two feudal lines on this form: an
     // address, a kind of succession, and an index into it.
     if (parts[3] !== "lord" && parts[3] !== "baron" && parts[3] !== "rector" && parts[3] !== "tenement") return null;
@@ -81,7 +103,7 @@ function parseLocator(s: string): { worldSeed: number; node: StackNode } | null 
   if (isParishLevel(parts[3])) return { worldSeed, node: { kind: parts[3], regionKey: parts[1], villageIdx } };
   const personId = Number(parts[3]);
   if (!Number.isSafeInteger(personId) || personId < 0) return null;
-  return { worldSeed, node: { regionKey: parts[1], villageIdx, personId } };
+  return { worldSeed, node: { regionKey: parts[1], villageIdx, personId, year } };
 }
 
 export function initApp(): void {
@@ -141,6 +163,9 @@ export function initApp(): void {
     const kind = a.kind ?? "person";
     if (kind !== (b.kind ?? "person") || a.regionKey !== b.regionKey) return false;
     switch (kind) {
+      // Region, royal line and papacy are each one page per region, and the
+      // region has already been compared above.
+      case "region":
       case "royal":
       case "papacy":
         return true;
@@ -162,6 +187,11 @@ export function initApp(): void {
         const lb = b as LordNode;
         return la.villageIdx === lb.villageIdx && la.headIdx === lb.headIdx;
       }
+      case "pedigree": {
+        const pa = a as PedigreeNode;
+        const pb = b as PedigreeNode;
+        return pa.villageIdx === pb.villageIdx && pa.personId === pb.personId;
+      }
       default: {
         const pa = a as PersonNode;
         const pb = b as PersonNode;
@@ -178,6 +208,8 @@ export function initApp(): void {
   // "rector:region:village:head" (a parish incumbent's).
   function gotoNode(goto: string): StackNode {
     const parts = goto.split(":");
+    if (parts[0] === "region") return { kind: "region", regionKey: parts[1] };
+    if (parts[0] === "pedigree") return { kind: "pedigree", regionKey: parts[1], villageIdx: +parts[2], personId: +parts[3] };
     if (parts[0] === "royal") return { kind: "royal", regionKey: parts[1] };
     if (parts[0] === "king") return { kind: "king", regionKey: parts[1], reignIdx: +parts[2] };
     if (parts[0] === "papacy") return { kind: "papacy", regionKey: parts[1] };
@@ -300,6 +332,14 @@ export function initApp(): void {
       let frame: number | null = null;
       const show = (year: number): void => {
         yearOut.textContent = String(year);
+        // § the year in the locator: the slider IS part of the address, so
+        // moving it moves the URL. replaceState rather than pushState —
+        // dragging across two centuries would otherwise leave two hundred
+        // history entries between you and the page you came from.
+        villageOf.year = year;
+        const loc = locator(worldSeed, node);
+        seedbox.value = loc;
+        history.replaceState(stack, "", `#${loc}`);
         if (nowLine && chart) {
           const w = chart.viewBox.baseVal.width;
           const x = String(((year - +slider.min) / (+slider.max - +slider.min)) * w);
@@ -355,7 +395,7 @@ export function initApp(): void {
       seedbox.focus();
       return false;
     };
-    if (isPersonNode(parsed.node)) {
+    if (isPersonNode(parsed.node) || parsed.node.kind === "pedigree") {
       const env = E.resolveVillage(parsed.worldSeed, parsed.node.regionKey, parsed.node.villageIdx);
       if (!env.persons[parsed.node.personId]) return invalid();
     } else if (parsed.node.kind === "king") {

@@ -24,14 +24,43 @@
 // match wins, so the dated outbreaks are listed first and claim the year
 // from the endemic background.
 //
-// § naming, not hazard. This changes what a death is CALLED, never how
-// likely it was: the causes themselves are rolled at Tier 1 (mortality.ts)
-// and touching them would re-roll every envelope in every world. Wiring
-// these into the hazard belongs with the harvest series, where the
-// re-roll is paid for once and deliberately.
+// § the epidemic year — and which half of this table earns a hazard.
+//
+// This file used to name deaths and nothing more, on the grounds that
+// touching the causes re-rolls every envelope in every world. That was
+// worth deferring once; it is not worth deferring twice, and it left the
+// table saying something false. The sweating sickness of 1485 killed
+// nobody. The great rheum of 1427 killed nobody. Every "outbreak" was a
+// relabelling of deaths the model was going to produce anyway, which is
+// the one thing a dated epidemic must not be.
+//
+// But only HALF of this table may have a hazard, and the split is the
+// whole design:
+//
+//  - The DATED outbreaks are excess. They are events on top of an
+//    ordinary year, the chroniclers counted them as such, and the model
+//    genuinely lacks them. These carry `excess`.
+//  - The ENDEMIC entries are not. The ague, the flux and the consumption
+//    are what the `disease` background already IS — they are a
+//    decomposition of Russell's life table, not an addition to it, and
+//    giving them a hazard would double-count the mortality they already
+//    explain. These carry no `excess` and never will.
+//
+// The fever that runs behind a failed harvest is the third case and lives
+// in harvest.ts (`crisisFeverHazard`), because it is a response to the
+// harvest rather than a dated event: it fires wherever and whenever the
+// crop failed, in any world, which is exactly what a table of dates
+// cannot express.
 // =====================================================================
 import type { Locale } from "../../i18n/locale.js";
 import type { LocalText, Rng } from "../types.js";
+
+/** How an outbreak's excess mortality was distributed across ages.
+ *
+ * `adults` is the sweating sickness's famous inversion — it took grown men
+ * in their strength and left the old and the poor, which is precisely why
+ * contemporaries knew at once that it was not the plague come back. */
+export type EpidemicAgeShape = "adults" | "old" | "all";
 
 export interface Epidemic {
   from: number;
@@ -47,6 +76,19 @@ export interface Epidemic {
   detail: Record<Locale, string[]>;
   /** Chronicle news, for an outbreak the parish would have talked about. */
   news?: LocalText;
+  /** Peak excess yearly mortality, on a DATED outbreak only — see the header
+   * on why the endemic entries must never have one. Applied in the first
+   * year of the window and at a quarter of it afterwards: a wave is one bad
+   * year with a tail, not a plateau. */
+  excess?: number;
+  /** Which ages the excess fell on. Ignored without `excess`. */
+  shape?: EpidemicAgeShape;
+  /** The outbreak rode on a subsistence crisis, so its excess is scaled by
+   * how badly the harvest ACTUALLY failed in this world rather than being a
+   * constant. Reroll the seed and the dear years of the late 1430s are still
+   * dear — they are documented — but the fever behind them answers to the
+   * yield the harvest series gives them. */
+  harvestDriven?: boolean;
 }
 
 export const EPIDEMICS: Epidemic[] = [
@@ -61,6 +103,11 @@ export const EPIDEMICS: Epidemic[] = [
     name: { en: "the sweating sickness", ca: "la malaltia de la suor" },
     chance: 0.75,
     ageMin: 12,
+    // Sharp and short rather than deep: the sweat emptied a town in a
+    // fortnight and was gone, and its national toll was nothing like a
+    // plague year's. What made it memorable was who it took, not how many.
+    excess: 0.018,
+    shape: "adults",
     detail: {
       en: [
         "took the sweating sickness that came in with the new king's soldiers: well at dinner, and dead before the same hour the next day",
@@ -86,6 +133,13 @@ export const EPIDEMICS: Epidemic[] = [
     regions: ["england", "scotland"],
     name: { en: "the sickness of the dear years", ca: "la malaltia dels anys cars" },
     chance: 0.55,
+    // The clearest case in the table of a fever that is a passenger on a
+    // harvest: the dear years are documented (data/harvest.ts) and the
+    // sickness rode them, so its weight follows the yield rather than
+    // standing on its own.
+    excess: 0.015,
+    shape: "all",
+    harvestDriven: true,
     detail: {
       en: [
         "died of the fever that ran through the dear years, when bread was at famine price and folk ate what they could get",
@@ -109,6 +163,11 @@ export const EPIDEMICS: Epidemic[] = [
     regions: null,
     name: { en: "the great rheum", ca: "el gran refredament" },
     chance: 0.5,
+    // Laid up every house and killed few of them — but the few were the
+    // old, and an influenza-shaped winter is one of the commonest excess-
+    // mortality signatures in any pre-modern burial series.
+    excess: 0.011,
+    shape: "old",
     detail: {
       en: [
         "died of the coughing sickness that went through the whole country that winter, taking the old and the short-winded",

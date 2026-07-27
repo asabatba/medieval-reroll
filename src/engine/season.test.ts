@@ -180,7 +180,9 @@ describe("§ the season: dating the register", () => {
       ["italy", 0],
     ] as const) {
       const env = resolveVillage(1444, rk, vi);
-      env.couples.forEach((c, i) => marriages[coupleMarriageDate(env.vHash, i, c.year).month - 1]++);
+      env.couples.forEach((c, i) => {
+        marriages[coupleMarriageDate(env.vHash, i, c.year).month - 1]++;
+      });
       for (const p of env.persons) {
         if (p.death.cause !== "plague") continue;
         plagueBurials[personDeathDate(env.vHash, p).month - 1]++;

@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { decodePerson } from "./biography.js";
 import { EPIDEMICS, epidemicAt, epidemicNews } from "./data/epidemics.js";
 import { REGIONS } from "./data/regions.js";
+import { outbreakAt, outbreakHazard } from "./epidemics.js";
+import { CRISIS_FEVER_SHARE, crisisFeverHazard, dearthHazard, harvestAt } from "./harvest.js";
 import { makeRng } from "./hash.js";
 import type { Rng } from "./types.js";
 import { resolveVillage } from "./village.js";
@@ -100,6 +102,143 @@ describe("§ named epidemics: the table", () => {
   });
 });
 
+describe("§ the epidemic year: the hazard", () => {
+  it("gives a hazard to the dated outbreaks and never to the endemic background", () => {
+    // The rule the whole split rests on: the endemic entries decompose the
+    // life table's disease background, so a hazard on them would count the
+    // same deaths twice. This is checkable straight off the table.
+    for (const e of EPIDEMICS) {
+      const dated = e.to - e.from < 20;
+      if (dated) {
+        expect(e.excess, e.name.en).toBeGreaterThan(0);
+        expect(e.shape, e.name.en).toBeDefined();
+      } else {
+        expect(e.excess, e.name.en).toBeUndefined();
+      }
+    }
+    // And no endemic entry can be reached through the hazard lookup at all.
+    for (const rk of REGION_KEYS) {
+      for (const year of [1300, 1400, 1450]) {
+        expect(outbreakAt(year, rk, 40), `${rk} ${year}`).toBeNull();
+      }
+    }
+  });
+
+  it("keeps the sweat in England, in its own years, and on grown men", () => {
+    expect(outbreakHazard(1485, "england", 30, 1)).toBeGreaterThan(0);
+    expect(outbreakHazard(1485, "catalonia", 30, 1)).toBe(0);
+    expect(outbreakHazard(1480, "england", 30, 1)).toBe(0);
+    // The inversion that gave it its name: it passed over children and the
+    // old and took adults in their strength.
+    expect(outbreakHazard(1485, "england", 8, 1)).toBe(0);
+    expect(outbreakHazard(1485, "england", 30, 1)).toBeGreaterThan(outbreakHazard(1485, "england", 70, 1));
+  });
+
+  it("makes a wave one bad year with a tail, not a plateau", () => {
+    expect(outbreakHazard(1486, "england", 30, 1)).toBeLessThan(outbreakHazard(1485, "england", 30, 1) / 2);
+  });
+
+  it("lets the world's own harvest decide how hard the dear-years fever hit", () => {
+    // The one harvest-driven entry: documented years, but a weight that
+    // answers to the yield rather than to a constant.
+    const bad = outbreakHazard(1438, "england", 30, 0.5);
+    const fine = outbreakHazard(1438, "england", 30, 1.0);
+    expect(bad).toBeGreaterThan(fine);
+    expect(fine).toBeGreaterThan(0);
+  });
+
+  it("runs the crisis fever behind the hunger, flatter and further up the social scale", () => {
+    expect(crisisFeverHazard(1.0, 1.0, 30, 2)).toBe(0);
+    // It lags: a fine harvest after a failed one still carries fever.
+    expect(crisisFeverHazard(1.0, 0.5, 30, 2)).toBeGreaterThan(0);
+    // Flatter in age than starvation, and shallower in wealth.
+    const feverRatio = crisisFeverHazard(0.5, 1.0, 70, 2) / crisisFeverHazard(0.5, 1.0, 30, 2);
+    const hungerRatio = dearthHazard(0.5, 1.0, 70, 2) / dearthHazard(0.5, 1.0, 30, 2);
+    expect(feverRatio).toBeLessThan(hungerRatio);
+    const feverWealth = crisisFeverHazard(0.5, 1.0, 30, 5) / crisisFeverHazard(0.5, 1.0, 30, 2);
+    const hungerWealth = dearthHazard(0.5, 1.0, 30, 5) / dearthHazard(0.5, 1.0, 30, 2);
+    expect(feverWealth).toBeGreaterThan(hungerWealth);
+  });
+
+  it("splits the crisis budget rather than adding to it", () => {
+    // The calibration promise: hunger plus fever together stay close to
+    // what hunger alone used to be, so the population curve the whole
+    // capacity model was tuned against does not move under this.
+    for (const age of [2, 30, 70]) {
+      for (const wealth of [1, 2, 4]) {
+        const total = dearthHazard(0.5, 1.0, age, wealth) + crisisFeverHazard(0.5, 1.0, age, wealth);
+        const before = dearthHazard(0.5, 1.0, age, wealth) / (1 - CRISIS_FEVER_SHARE);
+        expect(total, `age ${age} wealth ${wealth}`).toBeGreaterThan(before * 0.7);
+        expect(total, `age ${age} wealth ${wealth}`).toBeLessThan(before * 1.4);
+      }
+    }
+  });
+});
+
+describe("§ the epidemic year: in the register", () => {
+  it("actually kills someone in the sweating sickness, and only in England", () => {
+    // The point of the whole change: before it, no named outbreak in the
+    // table killed a single person — it only relabelled deaths the model
+    // was going to produce anyway.
+    let englishSweat = 0;
+    for (let v = 0; v < 20; v++) {
+      for (const p of resolveVillage(1444, "england", v).persons) {
+        if (p.death.cause === "epidemic" && p.death.year >= 1485 && p.death.year <= 1487) englishSweat++;
+      }
+    }
+    expect(englishSweat).toBeGreaterThan(0);
+    // Catalonia never saw it, so no Catalan may die of an epidemic in a
+    // year whose only outbreak was the sweat.
+    for (let v = 0; v < 20; v++) {
+      for (const p of resolveVillage(1444, "catalonia", v).persons) {
+        if (p.death.year >= 1485 && p.death.year <= 1487 && p.death.cause === "epidemic") {
+          // Only admissible if a harvest failure was behind it.
+          expect(harvestAt(1444, "catalonia", p.death.year) < 0.88 || harvestAt(1444, "catalonia", p.death.year - 1) < 0.88).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("makes epidemic a real but minor share of the register's deaths", () => {
+    for (const rk of ["england", "castile", "italy"]) {
+      let epidemic = 0;
+      let n = 0;
+      for (let v = 0; v < 6; v++) {
+        for (const p of resolveVillage(1444, rk, v).persons) {
+          n++;
+          if (p.death.cause === "epidemic") epidemic++;
+        }
+      }
+      const share = epidemic / n;
+      expect(share, `${rk} epidemic share`).toBeGreaterThan(0.002);
+      expect(share, `${rk} epidemic share`).toBeLessThan(0.06);
+    }
+  });
+
+  it("names an epidemic death with the outbreak that caused it, not with a fresh roll", () => {
+    // A death whose cause IS epidemic already knows what killed it, so the
+    // burial entry must agree with the table rather than draw again.
+    const detailOf = (text: string) => EPIDEMICS.find((e) => e.detail.en.some((d) => text.includes(d.slice(0, 34))));
+    let checked = 0;
+    for (let v = 0; v < 20 && checked < 5; v++) {
+      const env = resolveVillage(1444, "england", v);
+      for (const p of env.persons) {
+        if (p.death.cause !== "epidemic") continue;
+        const known = outbreakAt(p.death.year, "england", p.death.age);
+        if (!known) continue;
+        const bio = decodePerson(env, p.id, "en");
+        const close = bio?.events.find((e) => e.kind === "death" || e.kind === "elsewhere");
+        if (!close) continue;
+        const hit = detailOf(close.text);
+        if (!hit) continue;
+        expect(hit.name.en, `${p.death.year}`).toBe(known.name.en);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+});
+
 describe("§ named epidemics: in the register", () => {
   it("names a real share of the disease deaths, and only disease deaths", () => {
     const detailOf = (text: string) => EPIDEMICS.find((e) => e.detail.en.some((d) => text.includes(d.slice(0, 34))));
@@ -118,9 +257,15 @@ describe("§ named epidemics: in the register", () => {
         const hit = detailOf(close.text);
         if (hit) {
           named++;
-          // A named epidemic may only ever claim a `disease` death, and only
-          // in a region and year it actually reached.
-          expect(p.death.cause, `${rk}: ${hit.name.en}`).toBe("disease");
+          // § the epidemic year: a named epidemic may claim either of two
+          // causes, and WHICH one is the whole split. An endemic entry has
+          // no hazard, so it can only ever be a naming of a `disease`
+          // death; a dated outbreak carries one, so it may also own an
+          // `epidemic` death outright. What must never happen is the
+          // reverse — an endemic entry claiming a death that a hazard it
+          // does not have was supposed to have caused.
+          if (hit.excess == null) expect(p.death.cause, `${rk}: ${hit.name.en}`).toBe("disease");
+          else expect(["disease", "epidemic"], `${rk}: ${hit.name.en}`).toContain(p.death.cause);
           if (hit.regions) expect(hit.regions, hit.name.en).toContain(rk);
           expect(p.death.year).toBeGreaterThanOrEqual(hit.from);
           expect(p.death.year).toBeLessThanOrEqual(hit.to);

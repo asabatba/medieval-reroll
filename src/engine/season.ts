@@ -174,6 +174,12 @@ const DEATH_SEASON: Record<DeathCause, MonthWeights> = {
   plague: [2, 2, 3, 5, 8, 14, 20, 20, 13, 7, 3, 2],
   // The hungry gap: the old harvest exhausted, the new one not yet in.
   famine: [6, 7, 9, 11, 13, 14, 13, 9, 6, 4, 4, 4],
+  // § the epidemic year: the famine curve, lagged. This is the same fact
+  // the hazard states (harvest.ts's crisisFeverHazard "lags") said in the
+  // other of the two languages the engine speaks — the fever peaks after
+  // the worst of the hunger, not with it, which is why a crisis burial
+  // register has two humps and not one.
+  epidemic: [5, 5, 6, 7, 9, 11, 13, 14, 13, 9, 5, 3],
   // The campaigning season, and the disease that travelled with it.
   war: [3, 3, 5, 8, 11, 13, 14, 14, 12, 8, 5, 4],
   // Newborns die of the cold: a winter excess on top of the birth curve.

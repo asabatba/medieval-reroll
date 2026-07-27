@@ -42,6 +42,7 @@ import { placeOf, placeShortOf } from "./data/placeNames.js";
 import { PLAGUES, plagueAt } from "./data/plagues.js";
 import { REGIONS } from "./data/regions.js";
 import { citeDocument } from "./documents.js";
+import { outbreakAt } from "./epidemics.js";
 import { fatherOccupation } from "./fatherOccupation.js";
 import { FAMINE, harvestAt, namedDearthAt, POOR_HARVEST } from "./harvest.js";
 import { makeRng, personStream } from "./hash.js";
@@ -1370,8 +1371,20 @@ export function decodePerson(env: Envelope, id: number, locale: Locale): Bio | n
   // before whether or not an epidemic claims the death. That is deliberate:
   // it means adding this moved no draw in the main decode stream, so every
   // OTHER line of every existing biography is unchanged.
+  //
+  // § the epidemic year: a death whose CAUSE is now `epidemic` is not a
+  // candidate for naming — it is already known which epidemic killed
+  // {{him/her}}, because a dated outbreak's own hazard is what did it. So
+  // that case looks the answer up rather than rolling for it, and only a
+  // crisis-fever death with no named outbreak behind it falls through to
+  // the DEATH_DETAIL.epidemic pool.
   const epiRng = makeRng(personStream(env.vHash, 41000, id));
-  const epidemic = p.death.cause === "disease" ? epidemicAt(p.death.year, env.regionKey, p.death.age, epiRng) : null;
+  const epidemic =
+    p.death.cause === "disease"
+      ? epidemicAt(p.death.year, env.regionKey, p.death.age, epiRng)
+      : p.death.cause === "epidemic"
+        ? outbreakAt(p.death.year, env.regionKey, p.death.age)
+        : null;
   const drawnDetail = rng.pick(deathPool);
   const dd = epidemic ? epiRng.pick(epidemic.detail[locale]) : drawnDetail;
   if (departureYear != null && destPerson && destUnion && destSpouse && destRecord) {

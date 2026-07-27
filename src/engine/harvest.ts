@@ -85,7 +85,25 @@ export function namedDearthAt(regionKey: string, year: number): Dearth | null {
   return dearthAt(regionKey, year);
 }
 
-/** Excess yearly mortality from a failed harvest.
+/** § the epidemic year: how much of a subsistence crisis's excess mortality
+ * was the fever rather than the hunger.
+ *
+ * The single best-established correction to a naive famine model, and the
+ * one this engine was missing. People in a dearth overwhelmingly did not
+ * die of starvation: they died of typhus, of dysentery, of the relapsing
+ * fevers that follow when the underfed take to the roads, crowd into
+ * towns, and beg at doors. Contemporaries could see the difference — the
+ * hunger killed the poorest in their own houses, the fever came afterwards
+ * and got into the manor house too.
+ *
+ * So this is a SPLIT of the crisis budget, not an addition to it. The
+ * total excess a failed harvest produces stays where capacity.ts and the
+ * population curve were calibrated to have it; a third of it now falls
+ * under a different cause, with a flatter age profile and a much shallower
+ * wealth gradient, because that is who the fever actually took. */
+export const CRISIS_FEVER_SHARE = 0.34;
+
+/** Excess yearly mortality from hunger itself.
  *
  * Shaped like the hazard the old fixed famine window already added, but
  * graded by how bad the year actually was and by whether the household
@@ -95,8 +113,15 @@ export function namedDearthAt(regionKey: string, year: number): Dearth | null {
  *
  * A second bad year running is far worse than the first, because the seed
  * corn is already gone; the caller passes the previous year's yield so
- * that run can be represented rather than each year standing alone. */
+ * that run can be represented rather than each year standing alone.
+ *
+ * § the epidemic year: this is now the starvation share of the crisis
+ * only. `crisisFeverHazard` carries the rest. */
 export function dearthHazard(harvest: number, prevHarvest: number, age: number, wealth: number): number {
+  return starvationHazard(harvest, prevHarvest, age, wealth) * (1 - CRISIS_FEVER_SHARE);
+}
+
+function starvationHazard(harvest: number, prevHarvest: number, age: number, wealth: number): number {
   if (harvest >= POOR_HARVEST) return 0;
   // 0 at the poor-harvest threshold, 1 at total failure.
   const depth = Math.min(1, (POOR_HARVEST - harvest) / (POOR_HARVEST - 0.45));
@@ -119,6 +144,54 @@ export function dearthHazard(harvest: number, prevHarvest: number, age: number, 
   // The second failure in a row, with the seed corn eaten.
   if (prevHarvest < DEARTH) h *= 1.5;
   return h;
+}
+
+/** § the epidemic year: the fever behind the hunger — the other side of the
+ * crisis split, and the reason a dearth's burial register does not read
+ * like a list of the starved.
+ *
+ * Three things distinguish it from `dearthHazard`, and all three are what
+ * the evidence says:
+ *
+ *  - It LAGS. The classic crisis-mortality curve peaks after the worst of
+ *    the dearth, not during it, so last year's failure counts nearly as
+ *    heavily as this year's — and the fever goes on killing into a year
+ *    whose own harvest came in fine.
+ *  - It is FLATTER in age. Starvation is a disease of the very young and
+ *    the very old; typhus took working adults in numbers hunger alone
+ *    never did.
+ *  - It reaches the WELL-OFF. Not equally — better houses, fewer beggars
+ *    at the door — but a fever crossing a parish does not stop at the
+ *    gentry's gate the way an empty barn does.
+ *
+ * The `harvest`/`prevHarvest` pair is the same one dearthHazard takes, so
+ * a caller already computing one gets the other for nothing. */
+export function crisisFeverHazard(harvest: number, prevHarvest: number, age: number, wealth: number): number {
+  // The lag reaches back only across a genuine DEARTH, not across any
+  // year that merely came in under an ordinary one. That distinction is
+  // load-bearing rather than cosmetic: roughly a quarter of all years are
+  // poor, so a lag keyed to POOR_HARVEST fired in something near half of
+  // them and turned a crisis mechanism into a standing tax on adult life
+  // — which is net-new mortality the crisis-budget split does not pay
+  // for, and it showed up as a measurably thinner fifteenth century and a
+  // marriage market short of men.
+  if (harvest >= POOR_HARVEST && prevHarvest >= DEARTH) return 0;
+  const depthOf = (y: number): number => Math.max(0, Math.min(1, (POOR_HARVEST - y) / (POOR_HARVEST - 0.45)));
+  // The lag, made explicit: whichever of the two years weighs heavier,
+  // with last year's failure discounted only slightly.
+  const depth = Math.max(depthOf(harvest), prevHarvest < DEARTH ? depthOf(prevHarvest) * 0.8 : 0);
+  const vulnerable = age < 5 || age > 55;
+  // Flatter than starvation's near 4:1, but not flat. A death-neutral
+  // reallocation is not a POPULATION-neutral one — moving deaths off the
+  // old and onto adults of childbearing age costs the village every child
+  // those adults would have had, which measured out as a fifteenth century
+  // several per cent thinner than the baseline's. Real, in the right
+  // direction, and larger than the evidence will carry at full flatness.
+  let h = depth * (vulnerable ? 0.03 : 0.013);
+  if (wealth <= 1) h *= 1.15;
+  else if (wealth === 3) h *= 0.85;
+  else if (wealth >= 4) h *= 0.6;
+  return h * CRISIS_FEVER_SHARE;
 }
 
 /** Years a couple puts the wedding off because of the year they are in.

@@ -12,6 +12,22 @@ import { esc, KIND_LABEL } from "./dom.js";
 export interface PersonNode extends PersonAddress {
   kind?: "person";
   crumb?: string;
+  /** § the year in the locator: which year the village-in-year section is
+   * standing on. See `locator` for why this is part of the address. */
+  year?: number;
+}
+/** § the region route: the rung above the village, and until now the only
+ * one in the whole app that dead-ended. Every locator in this world begins
+ * `seed:region:…` and there was no page at `seed:region` — so the region
+ * name was the one entity the UI printed that could not be clicked, and the
+ * tree that walks person → village → parish → deanery → diocese simply
+ * stopped when you tried to walk up out of a village. It is also the only
+ * page that can be arrived at without already knowing an address, which
+ * makes it the app's first real index. */
+export interface RegionNode {
+  kind: "region";
+  regionKey: string;
+  crumb?: string;
 }
 export interface RoyalNode {
   kind: "royal";
@@ -50,6 +66,8 @@ export interface VillageNode {
   regionKey: string;
   villageIdx: number;
   crumb?: string;
+  /** § the year in the locator. */
+  year?: number;
 }
 /** § the parish route: a rung of the ECCLESIASTICAL tree, which does not nest
  * inside the civil one (hierarchy.ts) — so it is addressed by a village that
@@ -100,8 +118,23 @@ export interface TenementNode {
   headIdx: number;
   crumb?: string;
 }
+/** § the pedigree: one person's line, many generations, in both directions.
+ *
+ * The engine has been able to do this since lineage.ts was written — and
+ * `ancestorsOf`/`descendantsOf` were exported, tested, and called by
+ * nothing. The family tree on a record is one step each way by design; this
+ * is the view that spends what that traversal already paid for, including
+ * the expensive part: following an immigrant ancestor UP into her own
+ * origin register, and an emigrated child DOWN into the register where her
+ * children were actually baptised. */
+export interface PedigreeNode extends PersonAddress {
+  kind: "pedigree";
+  crumb?: string;
+}
 export type StackNode =
   | PersonNode
+  | PedigreeNode
+  | RegionNode
   | RoyalNode
   | KingNode
   | HouseNode
@@ -117,8 +150,35 @@ export function isPersonNode(node: StackNode): node is PersonNode {
   return node.kind == null || node.kind === "person";
 }
 
+export function pedigreeGoto(addr: PersonAddress): string {
+  return `pedigree:${addr.regionKey}:${addr.villageIdx}:${addr.personId}`;
+}
+
+/** § the year in the locator.
+ *
+ * The village-in-year slider and the scrubbable population curve were pure
+ * DOM state: you could drag to 1349, watch the households empty, copy the
+ * link — and hand somebody a page standing on a different year entirely.
+ * For an app whose entire premise is that the address IS the thing, that
+ * was the sharpest remaining inconsistency in it.
+ *
+ * A suffix rather than a segment, because it is not a rung of the tree: it
+ * qualifies a place (or a person's view of their place), and every locator
+ * without it is still valid and still means what it always meant. */
+function yearSuffix(node: StackNode | PersonAddress): string {
+  const year = "year" in node ? node.year : undefined;
+  return year == null ? "" : `@${year}`;
+}
+
 export function locator(worldSeed: number, node: StackNode | PersonAddress): string {
-  if ("kind" in node && node.kind === "village") return `${worldSeed}:${node.regionKey}:${node.villageIdx}`;
+  // § the region route: two segments — the shortest locator there is, and
+  // what a village's own looks like with the village taken off the end, so
+  // truncating any URL in the app keeps walking up the tree.
+  if ("kind" in node && node.kind === "region") return `${worldSeed}:${node.regionKey}`;
+  // § the pedigree: a person's own locator with a word on the end, so it is
+  // visibly a view OF that record rather than a different record.
+  if ("kind" in node && node.kind === "pedigree") return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.personId}:pedigree`;
+  if ("kind" in node && node.kind === "village") return `${worldSeed}:${node.regionKey}:${node.villageIdx}${yearSuffix(node)}`;
   if ("kind" in node && (node.kind === "parish" || node.kind === "deanery" || node.kind === "diocese"))
     return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.kind}`;
   if ("kind" in node && node.kind === "royal") return `${worldSeed}:${node.regionKey}:royal`;
@@ -129,7 +189,7 @@ export function locator(worldSeed: number, node: StackNode | PersonAddress): str
   if ("kind" in node && (node.kind === "lord" || node.kind === "baron" || node.kind === "rector" || node.kind === "tenement"))
     return `${worldSeed}:${node.regionKey}:${node.villageIdx}:${node.kind}:${node.headIdx}`;
   const p = node as PersonAddress;
-  return worldSeed + ":" + p.regionKey + ":" + p.villageIdx + ":" + p.personId;
+  return worldSeed + ":" + p.regionKey + ":" + p.villageIdx + ":" + p.personId + yearSuffix(node);
 }
 
 // § the season: the engine hands back structured dates (MedievalDate) and
@@ -158,6 +218,10 @@ function addrStr(addr: Address, id: number): string {
 }
 
 // data-goto targets for the nobility views (parsed in app.ts's bindGoto).
+export function regionGoto(regionKey: string): string {
+  return `region:${regionKey}`;
+}
+
 function royalGoto(regionKey: string): string {
   return `royal:${regionKey}`;
 }
@@ -443,6 +507,15 @@ const CHART_TOP = 6;
  * fall away steeply, and reading that as the village's low point would report
  * a fact about where the register ends rather than about the village. */
 const REGISTER_LAST_FULL_YEAR = 1495;
+
+/** § the year in the locator: a year off a hand-edited URL, kept inside the
+ * register or thrown away. Returns undefined rather than clamping a wild
+ * value, so a nonsense year falls back to the page's own default instead of
+ * silently opening on 1290. */
+export function clampVillageYear(year: number | undefined): number | undefined {
+  if (year == null || !Number.isFinite(year)) return undefined;
+  return year >= VILLAGE_YEAR_MIN && year <= VILLAGE_YEAR_MAX ? year : undefined;
+}
 
 export function chartYearAt(fraction: number): number {
   const span = VILLAGE_YEAR_MAX - VILLAGE_YEAR_MIN;
@@ -809,6 +882,8 @@ export function buildViewHTML(E: typeof Engine, worldSeed: number, stack: StackN
 
 function buildViewBody(E: typeof Engine, worldSeed: number, stack: StackNode[], locale: Locale): string {
   const node = stack[stack.length - 1];
+  if (node.kind === "region") return buildRegionHTML(E, worldSeed, stack, node, locale);
+  if (node.kind === "pedigree") return buildPedigreeHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "village") return buildVillageHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "parish" || node.kind === "deanery" || node.kind === "diocese") return buildParishHTML(E, worldSeed, stack, node, locale);
   if (node.kind === "royal") return buildRoyalLineHTML(E, worldSeed, stack, node, locale);
@@ -900,6 +975,7 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     <div class="vital"><div class="k">${t.honour}</div><div class="v"><button class="namelink" data-goto="${houseGoto(node)}">${esc(bio.fief.honour)}</button></div></div>
     <div class="vital"><div class="k">${t.lord}</div><div class="v"><button class="namelink" data-goto="${lordVitalGoto}">${esc(bio.fief.lord)}</button></div></div>
     <div class="vital"><div class="k">${t.sovereign}</div><div class="v"><button class="namelink" data-goto="${sovereignVitalGoto}">${esc(bio.sovereign)}</button></div></div>
+    <div class="vital"><div class="k">${t.region}</div><div class="v"><button class="namelink" data-goto="${regionGoto(node.regionKey)}">${esc(bio.region)}</button></div></div>
     <div class="vital"><div class="k">${t.incumbentTitle[bio.rectorTitle]}</div><div class="v"><button class="namelink" data-goto="${lordGoto("rector", node, bio.rectorIdx)}">${esc(bio.rector)}</button></div></div>
     <div class="vital"><div class="k">${t.holdingLabel}</div><div class="v">${holdingHtml}</div></div>
     <div class="vital"><div class="k">${t.pontiff}</div><div class="v">${
@@ -995,17 +1071,32 @@ export function buildRecordHTML(E: typeof Engine, worldSeed: number, stack: Stac
     html += `</div>`;
   }
 
+  // § the price of bread: whether this household's own land fed it. Placed
+  // after the marriage section because it needs a household to be about —
+  // and taken twelve years in, when the children are born and eating and
+  // the holding is under the most strain it will ever be under.
+  if (ownCouple != null) {
+    const c = env.couples[ownCouple];
+    html += renderSubsistenceSection(E, worldSeed, env, ownCouple, Math.min(c.year + 12, bio.death.year), locale);
+  }
+
   // Parish register browser
   html += renderParishRegister(E, env, locale, node.personId);
 
   // Village-in-year view (§ year layer), defaulting to the subject's prime
-  html += renderVillageSection(E, env, defaultVillageYear(bio.birth), locale, node.personId);
+  // — or to whatever year the locator carries (§ the year in the locator),
+  // so a shared link opens on the year it was shared from.
+  html += renderVillageSection(E, env, clampVillageYear(node.year) ?? defaultVillageYear(bio.birth), locale, node.personId);
 
   html += `<div class="ledger reveal">
     ${t.ledger(bio.death.age, bio.plaguesLived, !!bio.widowed, bio.literate)}
   </div>`;
 
   html += renderFamilyTree(t, bio);
+  // § the pedigree: the one-step tree above is deliberately one step. This
+  // is the way out of it, into the many-generation traversal the engine has
+  // always been able to do and nothing ever asked it for.
+  html += `<div class="royal-link reveal"><button class="namelink" data-goto="${pedigreeGoto(node)}">${esc(t.pedigreeOpen)}</button></div>`;
 
   return html;
 }
@@ -1502,6 +1593,133 @@ function renderHarvestSection(E: typeof Engine, worldSeed: number, env: Envelope
   </details>`;
 }
 
+// ---- § the price of bread ----
+//
+// One series, deliberately, and the same reason the rest of this file gives:
+// this palette's gilt and rubric are 0.3 ΔE apart under deuteranopia in the
+// light theme, so no figure here may ask a reader to tell two lines apart.
+// Which is convenient, because the two-line version (price and wage) is the
+// worse chart anyway. The number that means something is the ratio — how
+// many days of his own work a labourer gave for a quarter of wheat — and it
+// carries both movements at once: the spikes are the failed harvests, and
+// the step down in the middle of the century is the Black Death paying the
+// survivors. Price and wage are still there, on every year's tooltip.
+//
+// Drawn on the population curve's x-scale, like the harvest figure, so all
+// three read against each other.
+const PRICE_H = 76;
+const PRICE_TOP = 6;
+
+function renderPriceSection(E: typeof Engine, worldSeed: number, env: Envelope, locale: Locale): string {
+  const t = UI[locale];
+  const series = E.priceSeries(worldSeed, env.regionKey, VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX);
+  // Clamped rather than auto-scaled: one Great Famine year would otherwise
+  // flatten two centuries of the thing worth looking at.
+  const ceiling = 90;
+  const yOf = (days: number) => PRICE_H - (Math.min(days, ceiling) / ceiling) * (PRICE_H - PRICE_TOP);
+  const points = series.map((row, i) => `${chartX(VILLAGE_YEAR_MIN + i).toFixed(1)},${yOf(row.realWage).toFixed(1)}`);
+  const line = `M${points.join("L")}`;
+
+  const money = (pence: number) => {
+    const m = E.lsd(pence);
+    return t.money(m.l, m.s, m.d);
+  };
+  // Per-year hit targets, so every point on the line can name its price and
+  // its wage — the two numbers the ratio is hiding.
+  const slot = CHART_W / series.length;
+  const tips = series
+    .map((row, i) => {
+      const year = VILLAGE_YEAR_MIN + i;
+      return `<rect class="pr-hit" x="${(i * slot).toFixed(1)}" y="0" width="${slot.toFixed(2)}" height="${PRICE_H}"><title>${esc(
+        t.priceYearTip(year, money(row.price), money(row.wage), row.realWage),
+      )}</title></rect>`;
+    })
+    .join("");
+  const bands = E.PLAGUES.filter((pl) => pl[1] >= VILLAGE_YEAR_MIN && pl[0] <= VILLAGE_YEAR_MAX)
+    .map((pl) => {
+      const x = chartX(Math.max(VILLAGE_YEAR_MIN, pl[0]));
+      const w = Math.max(1.5, chartX(Math.min(VILLAGE_YEAR_MAX, pl[1])) - x);
+      return `<rect class="pc-plague" x="${x.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${PRICE_H}"><title>${esc(pl[3][locale])}</title></rect>`;
+    })
+    .join("");
+
+  const early = series[1330 - VILLAGE_YEAR_MIN];
+  const late = series[1450 - VILLAGE_YEAR_MIN];
+  return `<details class="register reveal"><summary>${esc(t.pricesHeader)}</summary>
+    <p class="season-note">${esc(t.pricesNote)}</p>
+    <div class="vitals">
+      <div class="vital"><div class="k">${esc(t.wheatPriceLabel)} · 1330</div><div class="v">${esc(money(early.price))}</div></div>
+      <div class="vital"><div class="k">${esc(t.dayWageLabel)} · 1330</div><div class="v">${esc(money(early.wage))}</div></div>
+      <div class="vital"><div class="k">${esc(t.realWageLabel)} · 1330</div><div class="v red">${esc(t.realWageDays(early.realWage))}</div></div>
+      <div class="vital"><div class="k">${esc(t.realWageLabel)} · 1450</div><div class="v gold">${esc(t.realWageDays(late.realWage))}</div></div>
+    </div>
+    <figure class="pricefig">
+      <svg class="pricesvg" viewBox="0 0 ${CHART_W} ${PRICE_H}" preserveAspectRatio="none" role="img"
+           aria-label="${esc(`${t.pricesHeader}: ${t.realWageLabel}, ${VILLAGE_YEAR_MIN}–${VILLAGE_YEAR_MAX}, ${env.region.name[locale]}`)}">
+        ${bands}
+        <path class="pr-line" d="${line}" vector-effect="non-scaling-stroke"/>
+        ${tips}
+      </svg>
+      <figcaption class="poplegend">
+        <span>${VILLAGE_YEAR_MIN}</span>
+        <span class="pc-low">${esc(t.realWageLabel)}</span>
+        <span>${VILLAGE_YEAR_MAX}</span>
+      </figcaption>
+    </figure>
+  </details>`;
+}
+
+/** § the price of bread: the court roll of one holding — the section the
+ * tenement page was always missing. documents.ts has been citing "Manor
+ * court roll" as a source since long before there was any court business
+ * to put in one. */
+function renderCourtRollSection(E: typeof Engine, worldSeed: number, env: Envelope, tenementIdx: number, locale: Locale): string {
+  const t = UI[locale];
+  const roll = E.courtRollOf(worldSeed, env, tenementIdx);
+  const money = (pence: number) => {
+    const m = E.lsd(pence);
+    return t.money(m.l, m.s, m.d);
+  };
+  const rows = roll
+    .map((e) => {
+      const p = env.persons[e.personId];
+      return `<button class="ryrow tenure" data-goto="${env.regionKey}:${env.villageIdx}:${e.personId}">
+        <span class="ry-years">${e.year}</span>
+        <span class="ry-style">${esc(`${p.name} ${p.surname}`)} · <i class="due">${esc(t.dueLabel[e.kind])}</i>${
+          e.heir ? ` <i class="feast">${esc(t.dueHeirTag)}</i>` : ""
+        }<br><small class="dim">${esc(t.dueReason[e.kind])}</small></span>
+        <span class="ry-house due-amount">${esc(money(e.amount))}</span>
+      </button>`;
+    })
+    .join("");
+  const total = roll.reduce((s, e) => s + e.amount, 0);
+  return `<div class="sect reveal"><h2>${esc(t.courtRollHeader)}</h2></div>
+    <div class="honour-note reveal">${esc(t.courtRollNote)}</div>
+    <div class="reigns reveal">${rows || `<div class="ryrow"><span class="ry-style">${esc(t.courtRollEmpty)}</span></div>`}</div>
+    ${roll.length ? `<div class="honour-note reveal">${esc(t.dueTotal(roll.length, money(total)))}</div>` : ""}`;
+}
+
+/** § the subsistence line: whether this household's own land fed it. The
+ * calculation that finally makes the size classes in tenement.ts mean
+ * something — and the one that explains the undersettle. */
+function renderSubsistenceSection(E: typeof Engine, worldSeed: number, env: Envelope, coupleIdx: number, year: number, locale: Locale): string {
+  const t = UI[locale];
+  const s = E.subsistenceOf(worldSeed, env, coupleIdx, year);
+  if (!s) return "";
+  const land = env.region.landUnit[locale];
+  const money = (pence: number) => {
+    const m = E.lsd(pence);
+    return t.money(m.l, m.s, m.d);
+  };
+  const verdict = s.acres === 0 ? t.subsistenceNoLand : s.wageDays > 0 ? t.subsistenceShort(s.wageDays) : t.subsistenceFed(money(s.surplusPence));
+  return `<div class="sect reveal"><h2>${esc(t.subsistenceHeader)}</h2></div>
+    <div class="honour-note reveal">${esc(t.subsistenceNote)}</div>
+    <div class="vitals reveal">
+      <div class="vital"><div class="k">${year}</div><div class="v">${esc(t.subsistenceYield(s.netQuarters.toFixed(1), s.acres, land))}</div></div>
+      <div class="vital"><div class="k">${esc(t.subsistenceNeed(s.needQuarters.toFixed(1), s.mouths))}</div><div class="v ${s.wageDays > 0 ? "red" : "gold"}">${esc(verdict)}</div></div>
+    </div>`;
+}
+
 // ---- § the tenement ----
 //
 // The page this whole phase exists for. Every other record in the app is
@@ -1558,6 +1776,15 @@ function buildTenementHTML(E: typeof Engine, worldSeed: number, stack: StackNode
   </article>`;
   html += `<div class="honour-note reveal">${esc(t.tenementNote)}</div>`;
   html += `<div class="sect reveal"><h2>${esc(t.tenementHolders)}</h2></div><div class="reigns reveal">${rows.join("") || `<div class="ryrow"><span class="ry-style">${esc(t.tenementNeverHeld)}</span></div>`}</div>`;
+  // § the price of bread: the court roll of this ground, and whether it fed
+  // the first household that stood on it — the two things a page about a
+  // piece of land was still unable to say. The subsistence reckoning is
+  // taken twelve years into a tenure, when the household is at full size
+  // and the question actually bites.
+  html += renderCourtRollSection(E, worldSeed, env, ten.idx, locale);
+  if (history.length) {
+    html += renderSubsistenceSection(E, worldSeed, env, history[0].coupleIdx, Math.min(history[0].from + 12, history[0].to), locale);
+  }
   html += `<div class="royal-link reveal"><button class="namelink" data-goto="${villageGoto(node)}">${esc(env.place[locale])}</button></div>`;
   return html;
 }
@@ -1622,7 +1849,7 @@ function buildVillageHTML(E: typeof Engine, worldSeed: number, stack: StackNode[
   <article class="card reveal">
     <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
     <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
-    <div class="dates">${esc(urban ? t.settlementUrban : t.settlementRural)} · ${esc(env.region.name[locale])} · ${t.registerSpanValue(VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX)}</div>
+    <div class="dates">${esc(urban ? t.settlementUrban : t.settlementRural)} · <button class="namelink" data-goto="${regionGoto(node.regionKey)}">${esc(env.region.name[locale])}</button> · ${t.registerSpanValue(VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX)}</div>
     <div class="vitals">
       <div class="vital"><div class="k">${t.holdingsLabel}</div><div class="v">${esc(t.holdingsValue(stock, cultivated, VILLAGE_YEAR_MAX))}</div></div>
       <div class="vital"><div class="k">${t.peakLabel}</div><div class="v gold">${esc(t.peakValue(counts[peak], VILLAGE_YEAR_MIN + peak))}</div></div>
@@ -1660,7 +1887,7 @@ function buildVillageHTML(E: typeof Engine, worldSeed: number, stack: StackNode[
     html += `<div class="honour-note deserted reveal">${esc(t.desertedNote(VILLAGE_YEAR_MIN + lastYear + 1))}</div>`;
   }
 
-  html += renderVillageSection(E, env, VILLAGE_YEAR_MIN + peak, locale, -1, true);
+  html += renderVillageSection(E, env, clampVillageYear(node.year) ?? VILLAGE_YEAR_MIN + peak, locale, -1, true);
   // § the tenement: the village's land, holding by holding — the extent
   // that the population curve above is measured against.
   html += renderTenementSection(E, worldSeed, node, env, locale, null);
@@ -1668,11 +1895,182 @@ function buildVillageHTML(E: typeof Engine, worldSeed: number, stack: StackNode[
   // which is a fact about the place, so it lives on the place's page.
   html += renderSeasonSection(E, env, locale);
   html += renderHarvestSection(E, worldSeed, env, locale);
+  // § the price of bread: directly under the harvest, because it is what
+  // the harvest MEANT to anyone who had to buy bread — the same x-scale,
+  // so a spike here sits over the failure that caused it.
+  html += renderPriceSection(E, worldSeed, env, locale);
   // § the far end: who came from beyond the region, and who left for it —
   // the one section that reads another region's register, and the reason
   // it is here rather than inside the solve.
   html += renderFarEndSection(E, worldSeed, env, locale);
   html += renderParishRegister(E, env, locale, -1);
+  return html;
+}
+
+// ---- § the pedigree ----
+//
+// Four generations up and three down. The asymmetry is not arbitrary:
+// ancestors are bounded at 2^depth and cost one memoized solve per
+// immigrant line, while descendants branch by however many children each
+// generation actually had and can run to hundreds of nodes at depth four.
+// Three down is where a real family reaches the edge of the register
+// anyway.
+const PEDIGREE_UP = 4;
+const PEDIGREE_DOWN = 3;
+
+function pedigreeRow(name: string, sub: string, person: { birth: number; death: Death }, addr: string): string {
+  return `<button class="ryrow tenure" data-goto="${addr}">
+    <span class="ry-years">${person.birth}–${person.death.year}</span>
+    <span class="ry-style">${esc(name)}</span>
+    <span class="ry-house">${esc(sub)}</span>
+  </button>`;
+}
+
+function buildPedigreeHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: PedigreeNode, locale: Locale): string {
+  const t = UI[locale];
+  const env = E.resolveVillage(worldSeed, node.regionKey, node.villageIdx);
+  const subject = env.persons[node.personId];
+  if (!subject) return "";
+  const title = `${subject.name} ${subject.surname}`;
+  node.crumb = title;
+
+  const ancestors = E.ancestorsOf(env, node.personId, PEDIGREE_UP);
+  const descendants = E.descendantsOf(env, node.personId, PEDIGREE_DOWN);
+
+  const groupUp = new Map<number, string[]>();
+  for (const a of ancestors) {
+    const row = pedigreeRow(`${a.name} ${a.surname}`, t.lineLabel(a.line), a, addrStr(a.addr, a.id));
+    groupUp.set(a.generation, [...(groupUp.get(a.generation) ?? []), row]);
+  }
+  const groupDown = new Map<number, string[]>();
+  for (const d of descendants) {
+    // A descendant found in another register is worth saying so about —
+    // it is the whole reason this traversal is not a local one.
+    const away = d.addr.regionKey !== node.regionKey || d.addr.villageIdx !== node.villageIdx;
+    const sub = away ? E.placeShortOf(worldSeed, d.addr.regionKey, d.addr.villageIdx) : (t.self(d.sex) ?? "");
+    const row = pedigreeRow(`${d.name} ${d.surname}`, away ? sub : "", d, addrStr(d.addr, d.id));
+    groupDown.set(d.generation, [...(groupDown.get(d.generation) ?? []), row]);
+  }
+
+  const section = (header: string, group: Map<number, string[]>, label: (n: number) => string, empty: string): string => {
+    let out = `<div class="sect reveal"><h2>${esc(header)}</h2></div>`;
+    if (!group.size) return `${out}<div class="honour-note reveal">${esc(empty)}</div>`;
+    for (const gen of [...group.keys()].sort((a, b) => a - b)) {
+      out += `<div class="sect reveal sub"><h2>${esc(label(gen))}</h2></div><div class="reigns reveal">${group.get(gen)!.join("")}</div>`;
+    }
+    return out;
+  };
+
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(t.pedigreeHeader[0])}</span>${esc(t.pedigreeHeader.slice(1))}</h1>
+    <div class="dates"><button class="namelink" data-goto="${addrStr(node, node.personId)}">${esc(title)}</button> · ${subject.birth}–${subject.death.year} · <button class="namelink" data-goto="${villageGoto(node)}">${esc(env.place[locale])}</button></div>
+    <div class="vitals">
+      <div class="vital"><div class="k">${esc(t.ancestorsHeader)}</div><div class="v gold">${ancestors.length}</div></div>
+      <div class="vital"><div class="k">${esc(t.descendantsHeader)}</div><div class="v gold">${descendants.length}</div></div>
+    </div>
+  </article>`;
+  html += `<div class="honour-note reveal">${esc(t.pedigreeNote)}</div>`;
+  html += section(t.ancestorsHeader, groupUp, t.generationBack, t.pedigreeNoAncestors);
+  html += section(t.descendantsHeader, groupDown, t.generationDown, t.pedigreeNoDescendants);
+  return html;
+}
+
+// ---- § the region route ----
+//
+// How wide a window on the village address space this page shows. The
+// space itself is unbounded (rank.ts's RANK_SCALE), so like the deanery's
+// visitation window this is a sample and says so.
+//
+// Every column here is a PURE FUNCTION OF THE ADDRESS — the place name,
+// whether it is a market town, how many holdings its fields carry, which
+// parish it answers to. None of it resolves a village. That is the whole
+// reason the page can list two dozen of them at once: a solve is ~30ms and
+// twenty-four of them would be a page that visibly hangs, for columns that
+// would tell you less than these do.
+const REGION_WINDOW = 24;
+
+function buildRegionHTML(E: typeof Engine, worldSeed: number, stack: StackNode[], node: RegionNode, locale: Locale): string {
+  const t = UI[locale];
+  const region = E.REGIONS[node.regionKey];
+  if (!region) return "";
+  const title = region.name[locale];
+  node.crumb = title;
+
+  const rows: string[] = [];
+  for (let i = 0; i < REGION_WINDOW; i++) {
+    const urban = E.settlementTypeOf(worldSeed, node.regionKey, i) === "urban";
+    const holdings = E.holdingsOf(worldSeed, node.regionKey, i);
+    const parish = E.bareParishOf(worldSeed, node.regionKey, i);
+    rows.push(`<button class="ryrow" data-goto="${villageGoto({ regionKey: node.regionKey, villageIdx: i })}">
+      <span class="ry-years">${i}</span>
+      <span class="ry-style">${esc(E.placeShortOf(worldSeed, node.regionKey, i))}${urban ? ` <i class="feast">${esc(t.settlementUrban)}</i>` : ""}</span>
+      <span class="ry-house">${esc(`${t.holdersCount(holdings)} · ${parish.deanery}`)}</span>
+    </button>`);
+  }
+
+  // The crises of record: everything this region's own data says happened
+  // to all of it at once, in one chronological list. Scattered across four
+  // tables until now (regions.ts, harvest.ts, plagues.ts, epidemics.ts) and
+  // visible only as bands behind a chart.
+  type Crisis = { year: number; to: number; kind: "famine" | "war" | "plague" | "revolt" | "epidemic"; name: string };
+  const crises: Crisis[] = [];
+  for (const d of E.DEARTHS) {
+    if (d.regions && !d.regions.includes(node.regionKey)) continue;
+    crises.push({ year: d.from, to: d.to, kind: "famine", name: d.name[locale] });
+  }
+  for (const pl of E.PLAGUES) {
+    const only = pl[5];
+    if (only && !only.includes(node.regionKey)) continue;
+    crises.push({ year: pl[0], to: pl[1], kind: "plague", name: pl[3][locale] });
+  }
+  for (const e of E.EPIDEMICS) {
+    // Only the dated outbreaks: the endemic entries are a standing fact
+    // about the place, not an event in its history.
+    if (e.to - e.from >= 20) continue;
+    if (e.regions && !e.regions.includes(node.regionKey)) continue;
+    crises.push({ year: e.from, to: e.to, kind: "epidemic", name: e.name[locale] });
+  }
+  for (const [from, to] of region.warYears) {
+    crises.push({ year: from, to, kind: "war", name: region.warNames[from]?.[locale] ?? t.regionCrisisKind.war });
+  }
+  if (region.revolt) crises.push({ year: region.revolt.year, to: region.revolt.year, kind: "revolt", name: region.revolt.name[locale] });
+  crises.sort((a, b) => a.year - b.year);
+  const crisisRows = crises
+    .map(
+      (c) => `<div class="ryrow">
+      <span class="ry-years">${c.year}${c.to > c.year ? `–${c.to}` : ""}</span>
+      <span class="ry-style">${esc(c.name)}</span>
+      <span class="ry-house">${esc(t.regionCrisisKind[c.kind])}</span>
+    </div>`,
+    )
+    .join("");
+
+  const royal = E.royalLineOf(node.regionKey);
+  let html = renderLineageBar(stack, t);
+  html += `
+  <article class="card reveal">
+    <div class="eyebrow">${esc(t.record)} ${esc(locator(worldSeed, node))}</div>
+    <h1 class="name"><span class="init">${esc(title[0])}</span>${esc(title.slice(1))}</h1>
+    <div class="dates">${esc(t.registerSpanValue(VILLAGE_YEAR_MIN, VILLAGE_YEAR_MAX))}</div>
+    <div class="vitals">
+      <div class="vital"><div class="k">${esc(t.inheritanceLabel)}</div><div class="v">${esc(t.inheritanceCustom[region.inheritance])}</div></div>
+      <div class="vital"><div class="k">${esc(t.currencyLabel)}</div><div class="v">${esc(region.currency)}</div></div>
+      <div class="vital"><div class="k">${esc(t.royalLineLabel)}</div><div class="v"><button class="namelink" data-goto="${royalGoto(node.regionKey)}">${esc(
+        royal?.title[locale] ?? "—",
+      )}</button></div></div>
+      <div class="vital"><div class="k">${esc(t.papacyLabel)}</div><div class="v"><button class="namelink" data-goto="${papacyGoto(node.regionKey)}">${esc(
+        t.papacyLabel,
+      )}</button></div></div>
+    </div>
+  </article>`;
+  html += `<div class="honour-note reveal">${esc(t.regionNote)}</div>`;
+  html += `<div class="sect reveal"><h2>${esc(t.regionCrisesHeader)}</h2></div><div class="reigns reveal">${crisisRows}</div>`;
+  html += `<div class="sect reveal"><h2>${esc(t.villagesHeader)}</h2></div>
+    <div class="honour-note reveal">${esc(t.villagesNote(REGION_WINDOW))}</div>
+    <div class="reigns reveal">${rows.join("")}</div>`;
   return html;
 }
 
@@ -1806,7 +2204,9 @@ function buildParishHTML(E: typeof Engine, worldSeed: number, stack: StackNode[]
     );
   }
   up.push(`<div class="vital"><div class="k">${t.province}</div><div class="v">${esc(jur.province)}</div></div>`);
-  up.push(`<div class="vital"><div class="k">${t.region}</div><div class="v">${esc(region.name[locale])}</div></div>`);
+  up.push(
+    `<div class="vital"><div class="k">${t.region}</div><div class="v"><button class="namelink" data-goto="${regionGoto(node.regionKey)}">${esc(region.name[locale])}</button></div></div>`,
+  );
   html += `<div class="vitals reveal">${up.join("")}</div>`;
   html += body;
   return html;

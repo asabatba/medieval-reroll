@@ -15,7 +15,13 @@ import { resolveVillage } from "./village.js";
 
 const SEED = 4242;
 const REGION_KEYS = Object.keys(REGIONS);
-const VILLAGES = 12;
+// § the epidemic year: raised from 12. The plateau assertion below is a
+// ±20–25% band on ONE region's mean end-of-register population, and twelve
+// villages does not resolve that. Measured across sample sizes at this same
+// seed, Italy's end/post-plague ratio reads 0.775 at 12 villages, 0.833 at
+// 16, 0.916 at 20 and 0.946 at 24 — the low reading was the sample, not the
+// model, and it would have had the epidemic hazard tuned to satisfy noise.
+const VILLAGES = 20;
 
 const envs = REGION_KEYS.flatMap((rk) => Array.from({ length: VILLAGES }, (_, v) => ({ rk, v, env: resolveVillage(SEED, rk, v) })));
 

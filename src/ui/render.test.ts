@@ -661,3 +661,107 @@ describe("the population curve", () => {
     }
   });
 });
+
+// § the price of bread, § the region route, § the pedigree — the views the
+// engine work of this phase exists to be seen through.
+describe("the economy, the region and the pedigree, as pages", () => {
+  const worldSeed = 1444;
+
+  it("draws the real wage as ONE series, with both numbers behind it on every year", () => {
+    const html = buildViewHTML(E, worldSeed, [{ kind: "village", regionKey: "england", villageIdx: 0 }], "en");
+    expect(html).toContain("The price of bread");
+    // One line, not two: this palette cannot carry a second series (gilt and
+    // rubric collapse under deuteranopia in the light theme), so the ratio
+    // is the series and the price and wage live on the tooltips.
+    expect((html.match(/class="pr-line"/g) ?? []).length).toBe(1);
+    const hits = (html.match(/class="pr-hit"/g) ?? []).length;
+    expect(hits).toBe(VILLAGE_YEAR_MAX - VILLAGE_YEAR_MIN + 1);
+    // The headline contrast the whole series exists for. (esc() turns the
+    // apostrophe into an entity, so match the rendered form.)
+    expect(html).toMatch(/Days&#39; work for a quarter/);
+  });
+
+  it("gives a tenement a court roll whose every entry names someone on the register", () => {
+    // Find a holding with real tenurial history behind it.
+    let html = "";
+    let idx = -1;
+    const env0 = E.resolveVillage(worldSeed, "england", 0);
+    for (let i = 0; i < E.tenementsOf(worldSeed, "england", 0).length; i++) {
+      if (E.courtRollOf(worldSeed, env0, i).length >= 4) {
+        idx = i;
+        html = buildViewHTML(E, worldSeed, [{ kind: "tenement", regionKey: "england", villageIdx: 0, headIdx: i }], "en");
+        break;
+      }
+    }
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(html).toContain("The manor court");
+    expect(html).toContain("Entry fine");
+    // Every row is a link to the person who paid, which is the claim the
+    // section makes about itself: nothing here is invented.
+    const roll = E.courtRollOf(worldSeed, env0, idx);
+    for (const e of roll) {
+      expect(html).toContain(`data-goto="england:0:${e.personId}"`);
+    }
+    expect(html).toContain("entries ·");
+  });
+
+  it("says whether a household's own land fed it, on the record and on the ground", () => {
+    const env = E.resolveVillage(worldSeed, "england", 0);
+    const ci = env.couples.findIndex((c) => c.tenement != null);
+    expect(ci).toBeGreaterThanOrEqual(0);
+    const personId = env.couples[ci].husband;
+    const html = buildViewHTML(E, worldSeed, [{ regionKey: "england", villageIdx: 0, personId }], "en");
+    expect(html).toContain("Whether the land fed them");
+    expect(html).toMatch(/quarters off \d+/);
+  });
+
+  it("renders a region page with its crises and a window of its villages", () => {
+    const html = buildViewHTML(E, worldSeed, [{ kind: "region", regionKey: "england" }], "en");
+    expect(html).toContain("England");
+    expect(html).toContain("Crises of record");
+    // The crises really are drawn from all four tables, not just one.
+    expect(html).toContain("the Great Famine");
+    expect(html).toContain("Pestilence");
+    // Every village row is a link to that village's own page.
+    expect((html.match(/data-goto="village:england:\d+"/g) ?? []).length).toBeGreaterThan(10);
+    // And the region's two other heads, each a page of its own.
+    expect(html).toContain('data-goto="royal:england"');
+    expect(html).toContain('data-goto="papacy:england"');
+  });
+
+  it("keeps a region's crisis list to the crises that region actually had", () => {
+    // The sweating sickness was never recorded outside England, and the
+    // Great Famine never reached Iberia.
+    const england = buildViewHTML(E, worldSeed, [{ kind: "region", regionKey: "england" }], "en");
+    const castile = buildViewHTML(E, worldSeed, [{ kind: "region", regionKey: "castile" }], "en");
+    expect(england).toContain("the sweating sickness");
+    expect(castile).not.toContain("the sweating sickness");
+    expect(castile).not.toContain("the Great Famine");
+  });
+
+  it("walks a pedigree further than the one-step tree, and across parish boundaries where it must", () => {
+    // Somebody with real depth behind them: a native with grandparents on
+    // this register.
+    const env = E.resolveVillage(worldSeed, "england", 0);
+    let subject = -1;
+    for (const p of env.persons) {
+      if (E.ancestorsOf(env, p.id, 4).length >= 4) {
+        subject = p.id;
+        break;
+      }
+    }
+    expect(subject).toBeGreaterThanOrEqual(0);
+    const html = buildViewHTML(E, worldSeed, [{ kind: "pedigree", regionKey: "england", villageIdx: 0, personId: subject }], "en");
+    // The card title carries a drop-cap span, so the heading is never one
+    // contiguous string in the markup — the locator and the sections are.
+    expect(html).toContain(`1444:england:0:${subject}:pedigree`);
+    expect(html).toContain("Ancestry");
+    expect(html).toContain("Descent");
+    // Reaches past parents — which is exactly what the record's own tree
+    // deliberately does not do.
+    expect(html).toContain("Grandparents");
+    for (const a of E.ancestorsOf(env, subject, 4)) {
+      expect(html).toContain(`data-goto="${a.addr.regionKey}:${a.addr.villageIdx}:${a.id}"`);
+    }
+  });
+});

@@ -53,6 +53,18 @@ export const DEATH_DETAIL: Record<Locale, Record<DeathCause, string[]>> = {
       "died of the pestilence in its most sudden form, well at dawn and dead by nightfall",
     ],
     famine: ["died in the great hunger, weakened by failed harvests, of starvation and the fluxes that follow it"],
+    // § the epidemic year: the fallback pool, for a death in an epidemic
+    // that data/epidemics.ts does not name — which in practice means the
+    // crisis fever behind a failed harvest, the commonest killer of a
+    // subsistence crisis and the one contemporaries described most often.
+    // A death inside a NAMED outbreak's window draws that outbreak's own
+    // detail instead and never reaches this.
+    epidemic: [
+      "died of the fever that came behind the hunger, as it always did, when the beggars were on every road",
+      "took the spotted fever that ran through the parish in the dear year, and was dead inside a fortnight",
+      "died of the flux in a year when everyone was weak with want and the sickness went from house to house",
+      "sickened of the camp fever that the vagrants brought with them, and three of that household went the same way",
+    ],
     war: [
       "was killed when soldiers came through the district, burning and taking what they would",
       "died of camp fever on campaign, as most soldiers did — disease killed far more than the sword",
@@ -104,6 +116,12 @@ export const DEATH_DETAIL: Record<Locale, Record<DeathCause, string[]>> = {
       "va morir de la manera més sobtada de la pesta: {{bo/bona}} a trenc d'alba i {{mort/morta}} abans que caigués la nit",
     ],
     famine: ["va morir en la gran fam, {{afeblit/afeblida}} per les collites perdudes, de fam i dels fluxos que solen seguir-la"],
+    epidemic: [
+      "va morir de la febre que venia darrere la fam, com sempre feia, quan hi havia captaires per tots els camins",
+      "va agafar la febre pigallada que corregué per la parròquia l'any car, i en quinze dies ja era {{mort/morta}}",
+      "va morir del flux en un any en què tothom estava feble de necessitat i la malaltia anava de casa en casa",
+      "emmalaltí de la febre de campament que portaven els vagabunds, i tres d'aquella casa se n'anaren igual",
+    ],
     war: [
       "va morir quan uns soldats van passar pel districte, cremant i prenent tot el que volien",
       "va morir de febre de campament en campanya, com la majoria de soldats — la malaltia matava molts més que no pas l'espasa",
@@ -202,6 +220,7 @@ export const CAUSE_LABEL: Record<Locale, Record<DeathCause, string>> = {
   en: {
     plague: "Plague",
     famine: "Famine",
+    epidemic: "Epidemic",
     war: "War",
     infancy: "Infancy",
     childhood: "Childhood disease",
@@ -214,6 +233,7 @@ export const CAUSE_LABEL: Record<Locale, Record<DeathCause, string>> = {
   ca: {
     plague: "Pesta",
     famine: "Fam",
+    epidemic: "Epidèmia",
     war: "Guerra",
     infancy: "Infantesa",
     childhood: "Malaltia infantil",

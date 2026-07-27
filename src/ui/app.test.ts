@@ -217,6 +217,83 @@ describe("app navigation", () => {
     expect(location.hash).toBe("#1444:england:0");
   });
 
+  // § the region route: the last rung of the tree that dead-ended. Every
+  // locator in this world begins `seed:region:…` and there was no page at
+  // `seed:region`, so the region name was the one entity the UI printed
+  // that could not be clicked.
+  it("opens the region from a record, from a village, and from a parish page", async () => {
+    for (const from of ["#1444:england:0:12", "#1444:england:0", "#1444:england:0:parish"]) {
+      await start(from);
+      const btn = document.querySelector<HTMLButtonElement>('[data-goto="region:england"]');
+      expect(btn, from).not.toBeNull();
+      btn!.click();
+      expect(location.hash, from).toBe("#1444:england");
+      expect(document.querySelector(".card .name")?.textContent, from).toBeTruthy();
+    }
+  });
+
+  it("a bare region locator round-trips and lists villages that each open", async () => {
+    await start("#1444:england");
+    const input = document.getElementById("seedbox") as HTMLInputElement;
+    expect(input.value).toBe("1444:england");
+    expect(document.getElementById("locator-error")?.textContent).toBe("");
+    const rows = document.querySelectorAll<HTMLButtonElement>('.reigns [data-goto^="village:"]');
+    expect(rows.length).toBeGreaterThan(10);
+    rows[3].click();
+    expect(location.hash).toMatch(/^#1444:england:\d+$/);
+  });
+
+  it("rejects a region that does not exist rather than opening an empty page", async () => {
+    await start("#1444:atlantis");
+    expect(document.getElementById("locator-error")?.textContent).not.toBe("");
+    expect(location.hash).not.toBe("#1444:atlantis");
+  });
+
+  // § the pedigree: the multi-generation traversal the engine could always
+  // do and nothing ever called.
+  it("opens a pedigree from a record, and its rows open the people in it", async () => {
+    await start("#1444:england:0:12");
+    const open = document.querySelector<HTMLButtonElement>('[data-goto^="pedigree:"]');
+    expect(open).not.toBeNull();
+    open!.click();
+    expect(location.hash).toBe("#1444:england:0:12:pedigree");
+    const rows = document.querySelectorAll<HTMLButtonElement>(".reigns .ryrow[data-goto]");
+    expect(rows.length).toBeGreaterThan(0);
+    rows[0].click();
+    expect(location.hash).toMatch(/^#1444:[a-z]+:\d+:\d+$/);
+  });
+
+  it("rejects a pedigree locator for somebody who is not on the register", async () => {
+    await start("#1444:england:0:999999:pedigree");
+    expect(document.getElementById("locator-error")?.textContent).not.toBe("");
+  });
+
+  // § the year in the locator: the slider was pure DOM state, so you could
+  // drag to 1349, copy the link, and hand somebody a different year.
+  it("puts the slider's year in the URL and reopens on it", async () => {
+    await start("#1444:england:0");
+    const slider = document.getElementById("vyear") as HTMLInputElement;
+    slider.value = "1349";
+    slider.dispatchEvent(new Event("input"));
+    expect(location.hash).toBe("#1444:england:0@1349");
+    expect((document.getElementById("seedbox") as HTMLInputElement).value).toBe("1444:england:0@1349");
+    // And the round trip: a shared link opens standing on that year.
+    await start("#1444:england:0@1349");
+    expect((document.getElementById("vyear") as HTMLInputElement).value).toBe("1349");
+    expect(document.getElementById("vyearout")?.textContent).toBe("1349");
+  });
+
+  it("carries the year on a person's locator too, and ignores a year outside the register", async () => {
+    await start("#1444:england:0:12@1400");
+    expect((document.getElementById("vyear") as HTMLInputElement).value).toBe("1400");
+    expect(location.hash).toBe("#1444:england:0:12@1400");
+    // A wild year falls back to the page's own default rather than opening
+    // on the first year of the register.
+    await start("#1444:england:0@9999");
+    expect(document.getElementById("locator-error")?.textContent).toBe("");
+    expect(Number((document.getElementById("vyear") as HTMLInputElement).value)).toBeGreaterThan(1290);
+  });
+
   // § the parish route: the ecclesiastical tree, which the record used to
   // print as dead text while every other jurisdiction opened a page.
   it("parish, deanery and diocese vitals each open their own page", async () => {
